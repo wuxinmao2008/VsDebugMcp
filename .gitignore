@@ -67,3 +67,11 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+TestResults/
+
+# .NET and Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo

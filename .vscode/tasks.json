@@ -1,0 +1,63 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build: managed",
+			"type": "process",
+			"command": "dotnet",
+			"args": [
+				"build",
+				"${workspaceFolder}/src/VsDebugMcp.Host/VsDebugMcp.Host.csproj"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "build: vsix",
+			"type": "process",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
+			"args": [
+				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
+				"/restore",
+				"/t:Build",
+				"/p:Configuration=Debug",
+				"/m",
+				"/v:minimal"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "build: all",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"build: managed",
+				"build: vsix"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "test: Phase 0A",
+			"type": "shell",
+			"command": "dotnet test '${workspaceFolder}/tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; dotnet test '${workspaceFolder}/tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj'",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "run: host",
+			"type": "process",
+			"command": "dotnet",
+			"args": [
+				"run",
+				"--project",
+				"${workspaceFolder}/src/VsDebugMcp.Host/VsDebugMcp.Host.csproj"
+			],
+			"problemMatcher": []
+		}
+	]
+}

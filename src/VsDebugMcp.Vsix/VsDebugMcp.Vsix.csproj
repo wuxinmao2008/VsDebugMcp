@@ -1,0 +1,14 @@
+
+<Project Sdk="Microsoft.VisualStudio.Sdk.Build">
+  <PropertyGroup>
+    <TargetFrameworks>vs2026_5</TargetFrameworks>
+    <GeneratePkgDefFile>True</GeneratePkgDefFile>
+    <ExtensionType>VSSDK</ExtensionType>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+  </ItemGroup>
+</Project>
