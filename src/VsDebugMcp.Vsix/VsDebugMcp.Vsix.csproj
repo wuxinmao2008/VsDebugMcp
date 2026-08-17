@@ -3,9 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>vs2026_5</TargetFrameworks>
     <GeneratePkgDefFile>True</GeneratePkgDefFile>
-    <!-- Disable automatic deployment during build to avoid requiring the extension to be pre-installed on the machine. -->
-    <DeployExtension>false</DeployExtension>
-    <VsixDeployOnDebug>false</VsixDeployOnDebug>
+    <DeployExtension>true</DeployExtension>
+    <VsixDeployOnDebug>true</VsixDeployOnDebug>
     <ExtensionType>VSSDK</ExtensionType>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

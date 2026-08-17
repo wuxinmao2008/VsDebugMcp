@@ -160,6 +160,25 @@ public class McpToolsTests
         Assert.DoesNotContain(@"C:\source", exception.Message);
     }
 
+    [Fact]
+    public async Task ReturnsBuildOutputAndForwardsOptions()
+    {
+        var expected = new GetOutputWindowLogsResponse
+        {
+            VsInstanceId = "1234",
+            Source = "build",
+            Text = "error C3861"
+        };
+        var service = new FakeBridgeService { OutputLogs = expected };
+        var tools = new McpTools(service);
+
+        var actual = await tools.GetOutputWindowLogsAsync("build", 5000, CancellationToken.None);
+
+        Assert.Same(expected, actual);
+        Assert.Equal("build", service.OutputSource);
+        Assert.Equal(5000, service.OutputMaxChars);
+    }
+
     private sealed class FakeBridgeService : IBridgeService
     {
         public HealthResponse Health { get; init; } = new();
@@ -173,6 +192,8 @@ public class McpToolsTests
         public CancelBuildResponse Cancel { get; init; } = new();
 
         public GetErrorsResponse Errors { get; init; } = new();
+
+        public GetOutputWindowLogsResponse OutputLogs { get; init; } = new();
 
         public string? Configuration { get; private set; }
 
@@ -189,6 +210,10 @@ public class McpToolsTests
         public string? File { get; private set; }
 
         public int? MaxCount { get; private set; }
+
+        public string? OutputSource { get; private set; }
+
+        public int? OutputMaxChars { get; private set; }
 
         public BridgeServiceException? Error { get; init; }
 
@@ -241,6 +266,18 @@ public class McpToolsTests
             File = file;
             MaxCount = maxCount;
             return Error is null ? Task.FromResult(Errors) : Task.FromException<GetErrorsResponse>(Error);
+        }
+
+        public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
+            string? source,
+            int? maxChars,
+            CancellationToken cancellationToken)
+        {
+            OutputSource = source;
+            OutputMaxChars = maxChars;
+            return Error is null
+                ? Task.FromResult(OutputLogs)
+                : Task.FromException<GetOutputWindowLogsResponse>(Error);
         }
     }
 }

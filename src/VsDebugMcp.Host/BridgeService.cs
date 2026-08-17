@@ -28,6 +28,11 @@ public interface IBridgeService
         string? file,
         int? maxCount,
         CancellationToken cancellationToken);
+
+    Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
+        string? source,
+        int? maxChars,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -112,6 +117,20 @@ public sealed class BridgeService : IBridgeService
                     Project = project,
                     File = file,
                     MaxCount = maxCount
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
+        string? source,
+        int? maxChars,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.GetOutputWindowLogsAsync(
+                new GetOutputWindowLogsRequest
+                {
+                    Source = source,
+                    MaxChars = maxChars
                 },
                 cancellationToken),
             cancellationToken);
@@ -220,6 +239,11 @@ public sealed class BridgeServiceException : Exception
             BridgeErrorCodes.DiagnosticsUnavailable => new(
                 exception.Code,
                 "The Visual Studio diagnostics snapshot is unavailable.",
+                exception.Retryable,
+                exception),
+            BridgeErrorCodes.OutputUnavailable => new(
+                exception.Code,
+                "The Visual Studio output window is unavailable.",
                 exception.Retryable,
                 exception),
             _ => new(

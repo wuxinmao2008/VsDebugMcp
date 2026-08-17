@@ -79,6 +79,14 @@ public sealed class BridgeClient : IAsyncDisposable
         CancellationToken cancellationToken) =>
         CallAsync<GetErrorsRequest, GetErrorsResponse>(BridgeMethods.GetErrors, request, cancellationToken);
 
+    public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
+        GetOutputWindowLogsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetOutputWindowLogsRequest, GetOutputWindowLogsResponse>(
+            BridgeMethods.GetOutputWindowLogs,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

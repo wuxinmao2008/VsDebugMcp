@@ -22,6 +22,7 @@ internal sealed class BridgeServer : IDisposable
     private readonly SolutionProjectProvider _solutionProjectProvider;
     private readonly SolutionBuildProvider _solutionBuildProvider;
     private readonly ErrorListProvider _errorListProvider;
+    private readonly OutputWindowProvider _outputWindowProvider;
     private NamedPipeServerStream? _activePipe;
     private Task? _serverTask;
 
@@ -30,6 +31,7 @@ internal sealed class BridgeServer : IDisposable
         _solutionProjectProvider = new SolutionProjectProvider(package);
         _solutionBuildProvider = solutionBuildProvider;
         _errorListProvider = new ErrorListProvider(package);
+        _outputWindowProvider = new OutputWindowProvider(package);
     }
 
     public void Start()
@@ -191,6 +193,8 @@ internal sealed class BridgeServer : IDisposable
                     payload => _solutionBuildProvider.CancelBuildAsync(payload.BuildTaskId, cancellationToken));
             case BridgeMethods.GetErrors:
                 return await HandleDiagnosticsRequestAsync(request, cancellationToken);
+            case BridgeMethods.GetOutputWindowLogs:
+                return await HandleOutputWindowRequestAsync(request, cancellationToken);
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -311,6 +315,43 @@ internal sealed class BridgeServer : IDisposable
         }
     }
 
+    private async Task<(BridgeResponse Response, bool CloseConnection)> HandleOutputWindowRequestAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payload = BridgeJson.Deserialize<GetOutputWindowLogsRequest>(request.PayloadJson ?? string.Empty);
+            var result = await _outputWindowProvider.GetLogsAsync(payload, cancellationToken);
+            return (BridgeResponse.Success(request.RequestId, result), false);
+        }
+        catch (SerializationException)
+        {
+            return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The output window request is invalid.", false), false);
+        }
+        catch (OutputWindowProviderException exception)
+        {
+            var message = exception.Code == BridgeErrorCodes.InvalidRequest
+                ? "The output window request is invalid."
+                : "The Visual Studio output window is unavailable.";
+            return (Failure(request.RequestId, exception.Code, message, exception.Retryable), false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return (
+                Failure(
+                    request.RequestId,
+                    BridgeErrorCodes.OutputUnavailable,
+                    "The Visual Studio output window is unavailable.",
+                    true),
+                false);
+        }
+    }
+
     private static HandshakeResponse CreateHandshake()
     {
         var process = Process.GetCurrentProcess();
@@ -362,6 +403,12 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_errors",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_output_window_logs",
                 Version = "0.1",
                 IsStub = false
             }

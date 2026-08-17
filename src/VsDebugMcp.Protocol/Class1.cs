@@ -18,6 +18,7 @@ public static class BridgeMethods
 	public const string GetBuildStatus = "getBuildStatus";
 	public const string CancelBuild = "cancelBuild";
 	public const string GetErrors = "getErrors";
+	public const string GetOutputWindowLogs = "getOutputWindowLogs";
 	public const string Shutdown = "shutdown";
 }
 
@@ -38,6 +39,7 @@ public static class BridgeErrorCodes
 	public const string BuildStartFailed = "build_start_failed";
 	public const string BuildStateUnavailable = "build_state_unavailable";
 	public const string DiagnosticsUnavailable = "diagnostics_unavailable";
+	public const string OutputUnavailable = "output_unavailable";
 	public const string InternalError = "internal_error";
 }
 

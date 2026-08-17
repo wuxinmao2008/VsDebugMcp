@@ -225,4 +225,29 @@ public class PipeMessageFramingTests
         Assert.Equal(12, actualResponse.Items[0].Line);
         Assert.Equal("CS1002", actualResponse.Items[0].Code);
     }
+
+    [Fact]
+    public void RoundTripsOutputWindowLogsContract()
+    {
+        var request = new GetOutputWindowLogsRequest { Source = "build", MaxChars = 4096 };
+        var response = new GetOutputWindowLogsResponse
+        {
+            VsInstanceId = "1234",
+            Source = "build",
+            CapturedAtUtc = "2026-08-17T09:30:00.0000000Z",
+            TotalChars = 12000,
+            ReturnedChars = 4096,
+            Truncated = true,
+            Text = "error C3861: identifier not found"
+        };
+
+        var actualRequest = BridgeJson.Deserialize<GetOutputWindowLogsRequest>(BridgeJson.Serialize(request));
+        var actualResponse = BridgeJson.Deserialize<GetOutputWindowLogsResponse>(BridgeJson.Serialize(response));
+
+        Assert.Equal("build", actualRequest.Source);
+        Assert.Equal(4096, actualRequest.MaxChars);
+        Assert.True(actualResponse.Truncated);
+        Assert.Equal(4096, actualResponse.ReturnedChars);
+        Assert.Contains("C3861", actualResponse.Text);
+    }
 }

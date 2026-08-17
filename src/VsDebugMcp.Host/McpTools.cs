@@ -104,6 +104,19 @@ public sealed class McpTools
             maxCount,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_get_output_window_logs",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the tail of the current Visual Studio Output window pane. The initial version supports the build pane only.")]
+    public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
+        [Description("Optional output source. The only supported value is build, which is also the default.")] string? source = null,
+        [Description("Optional maximum number of trailing characters from 1 through 500000. Defaults to 20000.")] int? maxChars = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetOutputWindowLogsAsync(source, maxChars, cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

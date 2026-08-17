@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Shell.TableControl;
 using Microsoft.VisualStudio.Shell.TableManager;
 using VsDebugMcp.Protocol;
 
@@ -21,6 +22,8 @@ internal sealed class ErrorListProvider
     private const int MaximumBuildTaskIdLength = 256;
     private const int MaximumProjectLength = 1024;
     private const int MaximumFileLength = 32768;
+    private static readonly TimeSpan SnapshotQuietPeriod = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan SnapshotWaitTimeout = TimeSpan.FromSeconds(2);
     private readonly AsyncPackage _package;
 
     public ErrorListProvider(AsyncPackage package)
@@ -39,26 +42,69 @@ internal sealed class ErrorListProvider
         {
             var componentModel = await _package.GetServiceAsync(typeof(SComponentModel)) as IComponentModel
                 ?? throw new DiagnosticsProviderException();
-            var managerProvider = componentModel.GetService<ITableManagerProvider>()
+            var errorList = componentModel.GetService<IErrorList>()
                 ?? throw new DiagnosticsProviderException();
-            var manager = managerProvider.GetTableManager(StandardTables.ErrorsTable)
-                ?? throw new DiagnosticsProviderException();
+            var tableControl = errorList.TableControl;
+            await tableControl.ForceUpdateAsync();
+            var manager = tableControl.Manager;
             var diagnostics = new List<VisualStudioDiagnostic>();
+            var buildDiagnosticCount = 0;
+            var subscriptions = new List<IDisposable>();
+            var sinks = new List<SnapshotSink>();
 
-            foreach (var source in manager.Sources)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var sink = new SnapshotSink();
-                using (source.Subscribe(sink))
+                foreach (var source in manager.Sources)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var sink = new SnapshotSink();
+                    sinks.Add(sink);
+                    subscriptions.Add(source.Subscribe(sink));
+                }
+
+                await Task.WhenAll(
+                    sinks.Select(sink => sink.WaitForQuiescenceAsync(
+                        SnapshotQuietPeriod,
+                        SnapshotWaitTimeout,
+                        cancellationToken))).ConfigureAwait(false);
+
+                foreach (var sink in sinks)
                 {
                     foreach (var entry in sink.ReadEntries())
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (TryReadBuildDiagnostic(entry, out var diagnostic) && Matches(diagnostic, filters))
+                        if (!TryReadBuildDiagnostic(entry, out var diagnostic))
+                        {
+                            continue;
+                        }
+
+                        buildDiagnosticCount++;
+                        if (Matches(diagnostic, filters))
                         {
                             diagnostics.Add(diagnostic);
                         }
                     }
+                }
+            }
+            finally
+            {
+                foreach (var subscription in subscriptions)
+                {
+                    subscription.Dispose();
+                }
+            }
+
+            if (sinks.Count == 0 || sinks.All(sink => !sink.HasSignal))
+            {
+                throw new DiagnosticsProviderException();
+            }
+
+            if (buildDiagnosticCount == 0)
+            {
+                await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+                if (HasVisibleBuildEntries(tableControl.Entries))
+                {
+                    throw new DiagnosticsProviderException();
                 }
             }
 
@@ -160,11 +206,53 @@ internal sealed class ErrorListProvider
         return true;
     }
 
+    private static bool HasVisibleBuildEntries(IEnumerable<ITableEntryHandle> handles)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        foreach (var handle in handles)
+        {
+            if (handle.TryGetEntry(out var entry) && HasBuildSource(entry))
+            {
+                return true;
+            }
+
+            if (!handle.TryGetSnapshot(out var snapshot, out var index))
+            {
+                continue;
+            }
+
+            snapshot.StartCaching();
+            try
+            {
+                if (HasBuildSource(new SnapshotEntry(snapshot, index)))
+                {
+                    return true;
+                }
+            }
+            finally
+            {
+                snapshot.StopCaching();
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasBuildSource(ITableEntry entry) =>
+        entry.TryGetValue(StandardTableKeyNames.ErrorSource, out var sourceValue) &&
+        TryReadErrorSource(sourceValue, out var source) &&
+        (source & ErrorSource.Build) != 0;
+
     private static bool TryReadErrorSource(object? value, out ErrorSource source)
     {
         if (value is ErrorSource typed)
         {
             source = typed;
+            return true;
+        }
+
+        if (value is string text && Enum.TryParse(text, true, out source))
+        {
             return true;
         }
 
@@ -301,26 +389,50 @@ internal sealed class ErrorListProvider
 
     private sealed class SnapshotSink : ITableDataSink
     {
+        private readonly object _sync = new();
         private readonly List<object> _items = new();
+        private bool _isStable;
+        private long _lastChangeTicks;
+        private int _hasSignal;
 
-        public bool IsStable { get; set; }
+        public bool HasSignal => Volatile.Read(ref _hasSignal) != 0;
+
+        public bool IsStable
+        {
+            get => Volatile.Read(ref _isStable);
+            set
+            {
+                Volatile.Write(ref _isStable, value);
+                MarkChanged();
+            }
+        }
 
         public void AddEntries(IReadOnlyList<ITableEntry> entries, bool removeAllEntries)
         {
-            if (removeAllEntries)
+            lock (_sync)
             {
-                RemoveAllEntries();
+                if (removeAllEntries)
+                {
+                    _items.RemoveAll(item => item is ITableEntry);
+                }
+
+                _items.AddRange(entries);
             }
 
-            _items.AddRange(entries);
+            MarkChanged();
         }
 
         public void RemoveEntries(IReadOnlyList<ITableEntry> entries)
         {
-            foreach (var entry in entries)
+            lock (_sync)
             {
-                _items.Remove(entry);
+                foreach (var entry in entries)
+                {
+                    _items.Remove(entry);
+                }
             }
+
+            MarkChanged();
         }
 
         public void ReplaceEntries(IReadOnlyList<ITableEntry> oldEntries, IReadOnlyList<ITableEntry> newEntries)
@@ -329,21 +441,50 @@ internal sealed class ErrorListProvider
             AddEntries(newEntries, false);
         }
 
-        public void RemoveAllEntries() => _items.RemoveAll(item => item is ITableEntry);
+        public void RemoveAllEntries()
+        {
+            lock (_sync)
+            {
+                _items.RemoveAll(item => item is ITableEntry);
+            }
+
+            MarkChanged();
+        }
 
         public void AddSnapshot(ITableEntriesSnapshot snapshot, bool removeAllSnapshots)
         {
-            if (removeAllSnapshots)
+            lock (_sync)
             {
-                RemoveAllSnapshots();
+                if (removeAllSnapshots)
+                {
+                    _items.RemoveAll(item => item is ITableEntriesSnapshot);
+                }
+
+                _items.Add(snapshot);
             }
 
-            _items.Add(snapshot);
+            MarkChanged();
         }
 
-        public void RemoveSnapshot(ITableEntriesSnapshot snapshot) => _items.Remove(snapshot);
+        public void RemoveSnapshot(ITableEntriesSnapshot snapshot)
+        {
+            lock (_sync)
+            {
+                _items.Remove(snapshot);
+            }
 
-        public void RemoveAllSnapshots() => _items.RemoveAll(item => item is ITableEntriesSnapshot);
+            MarkChanged();
+        }
+
+        public void RemoveAllSnapshots()
+        {
+            lock (_sync)
+            {
+                _items.RemoveAll(item => item is ITableEntriesSnapshot);
+            }
+
+            MarkChanged();
+        }
 
         public void ReplaceSnapshot(ITableEntriesSnapshot oldSnapshot, ITableEntriesSnapshot newSnapshot)
         {
@@ -352,15 +493,28 @@ internal sealed class ErrorListProvider
 
         public void AddFactory(ITableEntriesSnapshotFactory factory, bool removeAllFactories)
         {
-            if (removeAllFactories)
+            lock (_sync)
             {
-                RemoveAllFactories();
+                if (removeAllFactories)
+                {
+                    _items.RemoveAll(item => item is ITableEntriesSnapshotFactory);
+                }
+
+                _items.Add(factory);
             }
 
-            _items.Add(factory);
+            MarkChanged();
         }
 
-        public void RemoveFactory(ITableEntriesSnapshotFactory factory) => _items.Remove(factory);
+        public void RemoveFactory(ITableEntriesSnapshotFactory factory)
+        {
+            lock (_sync)
+            {
+                _items.Remove(factory);
+            }
+
+            MarkChanged();
+        }
 
         public void ReplaceFactory(ITableEntriesSnapshotFactory oldFactory, ITableEntriesSnapshotFactory newFactory)
         {
@@ -369,13 +523,28 @@ internal sealed class ErrorListProvider
 
         public void FactorySnapshotChanged(ITableEntriesSnapshotFactory factory)
         {
+            MarkChanged();
         }
 
-        public void RemoveAllFactories() => _items.RemoveAll(item => item is ITableEntriesSnapshotFactory);
+        public void RemoveAllFactories()
+        {
+            lock (_sync)
+            {
+                _items.RemoveAll(item => item is ITableEntriesSnapshotFactory);
+            }
+
+            MarkChanged();
+        }
 
         public IEnumerable<ITableEntry> ReadEntries()
         {
-            foreach (var item in _items)
+            List<object> items;
+            lock (_sync)
+            {
+                items = new List<object>(_items);
+            }
+
+            foreach (var item in items)
             {
                 if (item is ITableEntry entry)
                 {
@@ -406,17 +575,47 @@ internal sealed class ErrorListProvider
             }
         }
 
+        public async Task WaitForQuiescenceAsync(
+            TimeSpan quietPeriod,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            var startedAt = DateTime.UtcNow;
+            while (DateTime.UtcNow - startedAt < timeout)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Volatile.Read(ref _hasSignal) != 0 &&
+                    DateTime.UtcNow.Ticks - Volatile.Read(ref _lastChangeTicks) >= quietPeriod.Ticks)
+                {
+                    return;
+                }
+
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         private void ReplaceItem(object oldItem, object newItem)
         {
-            var index = _items.IndexOf(oldItem);
-            if (index >= 0)
+            lock (_sync)
             {
-                _items[index] = newItem;
+                var index = _items.IndexOf(oldItem);
+                if (index >= 0)
+                {
+                    _items[index] = newItem;
+                }
+                else
+                {
+                    _items.Add(newItem);
+                }
             }
-            else
-            {
-                _items.Add(newItem);
-            }
+
+            MarkChanged();
+        }
+
+        private void MarkChanged()
+        {
+            Volatile.Write(ref _lastChangeTicks, DateTime.UtcNow.Ticks);
+            Volatile.Write(ref _hasSignal, 1);
         }
     }
 

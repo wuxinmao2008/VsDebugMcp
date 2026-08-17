@@ -296,3 +296,38 @@ public sealed class VisualStudioDiagnostic
     [DataMember(Name = "buildTool", Order = 8)]
     public string BuildTool { get; set; } = string.Empty;
 }
+
+[DataContract]
+public sealed class GetOutputWindowLogsRequest
+{
+    [DataMember(Name = "source", Order = 1, EmitDefaultValue = false)]
+    public string? Source { get; set; }
+
+    [DataMember(Name = "maxChars", Order = 2, EmitDefaultValue = false)]
+    public int? MaxChars { get; set; }
+}
+
+[DataContract]
+public sealed class GetOutputWindowLogsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "source", Order = 2)]
+    public string Source { get; set; } = string.Empty;
+
+    [DataMember(Name = "capturedAtUtc", Order = 3)]
+    public string CapturedAtUtc { get; set; } = string.Empty;
+
+    [DataMember(Name = "totalChars", Order = 4)]
+    public int TotalChars { get; set; }
+
+    [DataMember(Name = "returnedChars", Order = 5)]
+    public int ReturnedChars { get; set; }
+
+    [DataMember(Name = "truncated", Order = 6)]
+    public bool Truncated { get; set; }
+
+    [DataMember(Name = "text", Order = 7)]
+    public string Text { get; set; } = string.Empty;
+}

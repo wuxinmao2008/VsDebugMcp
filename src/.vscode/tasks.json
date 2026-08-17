@@ -27,6 +27,22 @@
 			"problemMatcher": "$msCompile"
 		},
 		{
+			"label": "deploy: vsix",
+			"type": "process",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
+			"args": [
+				"${workspaceFolder}/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
+				"/restore",
+				"/t:Build;DeployVsixExtensionFiles",
+				"/p:Configuration=Debug",
+				"/p:DeployExtension=true",
+				"/m:1",
+				"/nr:false",
+				"/v:minimal"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
 			"label": "build: all",
 			"dependsOrder": "sequence",
 			"dependsOn": [

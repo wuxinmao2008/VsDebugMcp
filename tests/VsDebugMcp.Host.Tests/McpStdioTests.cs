@@ -57,6 +57,7 @@ public class McpStdioTests
                 "vs_capabilities",
                 "vs_get_build_status",
                 "vs_get_errors",
+                "vs_get_output_window_logs",
                 "vs_get_projects_in_solution",
                 "vs_health",
                 "vs_run_build"
@@ -86,6 +87,10 @@ public class McpStdioTests
         var annotations = getErrors.GetProperty("annotations");
         Assert.True(annotations.GetProperty("readOnlyHint").GetBoolean());
         Assert.True(annotations.GetProperty("idempotentHint").GetBoolean());
+        var getOutput = tools.Single(tool => tool.GetProperty("name").GetString() == "vs_get_output_window_logs");
+        var outputProperties = getOutput.GetProperty("inputSchema").GetProperty("properties");
+        Assert.True(outputProperties.TryGetProperty("source", out _));
+        Assert.True(outputProperties.TryGetProperty("maxChars", out _));
 
         process.StandardInput.Close();
         await process.WaitForExitAsync(cancellation.Token);
