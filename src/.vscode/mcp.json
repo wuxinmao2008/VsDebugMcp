@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "vs-debug-mcp": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-build",
+        "--project",
+        "${workspaceFolder}/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
+        "--",
+        "--mcp"
+      ]
+    }
+  }
+}
