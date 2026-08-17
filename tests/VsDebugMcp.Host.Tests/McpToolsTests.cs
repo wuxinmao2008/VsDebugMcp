@@ -64,6 +64,32 @@ public class McpToolsTests
     }
 
     [Fact]
+    public async Task RunsQueriesAndCancelsBuildThroughBridgeService()
+    {
+        var build = new BuildTaskResponse
+        {
+            BuildTaskId = "build-1",
+            State = BuildStates.Running,
+            Configuration = "Release",
+            Platform = "x64"
+        };
+        var cancel = new CancelBuildResponse { Accepted = true, Build = build };
+        var service = new FakeBridgeService { Build = build, Cancel = cancel };
+        var tools = new McpTools(service);
+
+        var started = await tools.RunBuildAsync("Release", "x64", CancellationToken.None);
+        var status = await tools.GetBuildStatusAsync("build-1", CancellationToken.None);
+        var cancelled = await tools.CancelBuildAsync("build-1", CancellationToken.None);
+
+        Assert.Same(build, started);
+        Assert.Same(build, status);
+        Assert.Same(cancel, cancelled);
+        Assert.Equal("Release", service.Configuration);
+        Assert.Equal("x64", service.Platform);
+        Assert.Equal("build-1", service.BuildTaskId);
+    }
+
+    [Fact]
     public async Task ExposesOnlySanitizedBridgeError()
     {
         var tools = new McpTools(
@@ -91,6 +117,16 @@ public class McpToolsTests
 
         public GetProjectsInSolutionResponse Projects { get; init; } = new();
 
+        public BuildTaskResponse Build { get; init; } = new();
+
+        public CancelBuildResponse Cancel { get; init; } = new();
+
+        public string? Configuration { get; private set; }
+
+        public string? Platform { get; private set; }
+
+        public string? BuildTaskId { get; private set; }
+
         public BridgeServiceException? Error { get; init; }
 
         public Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken) =>
@@ -101,5 +137,31 @@ public class McpToolsTests
 
         public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
             Error is null ? Task.FromResult(Projects) : Task.FromException<GetProjectsInSolutionResponse>(Error);
+
+        public Task<BuildTaskResponse> RunBuildAsync(
+            string? configuration,
+            string? platform,
+            CancellationToken cancellationToken)
+        {
+            Configuration = configuration;
+            Platform = platform;
+            return Error is null ? Task.FromResult(Build) : Task.FromException<BuildTaskResponse>(Error);
+        }
+
+        public Task<BuildTaskResponse> GetBuildStatusAsync(
+            string buildTaskId,
+            CancellationToken cancellationToken)
+        {
+            BuildTaskId = buildTaskId;
+            return Error is null ? Task.FromResult(Build) : Task.FromException<BuildTaskResponse>(Error);
+        }
+
+        public Task<CancelBuildResponse> CancelBuildAsync(
+            string buildTaskId,
+            CancellationToken cancellationToken)
+        {
+            BuildTaskId = buildTaskId;
+            return Error is null ? Task.FromResult(Cancel) : Task.FromException<CancelBuildResponse>(Error);
+        }
     }
 }

@@ -14,6 +14,9 @@ public static class BridgeMethods
 	public const string Health = "health";
 	public const string Capabilities = "capabilities";
 	public const string GetProjectsInSolution = "getProjectsInSolution";
+	public const string RunBuild = "runBuild";
+	public const string GetBuildStatus = "getBuildStatus";
+	public const string CancelBuild = "cancelBuild";
 	public const string Shutdown = "shutdown";
 }
 
@@ -25,7 +28,25 @@ public static class BridgeErrorCodes
 	public const string Timeout = "timeout";
 	public const string Cancelled = "cancelled";
 	public const string SolutionStateUnavailable = "solution_state_unavailable";
+	public const string SolutionNotOpen = "solution_not_open";
+	public const string BuildInProgress = "build_in_progress";
+	public const string InvalidBuildConfiguration = "invalid_build_configuration";
+	public const string BuildTaskNotFound = "build_task_not_found";
+	public const string BuildNotActive = "build_not_active";
+	public const string BuildCancelNotSupported = "build_cancel_not_supported";
+	public const string BuildStartFailed = "build_start_failed";
+	public const string BuildStateUnavailable = "build_state_unavailable";
 	public const string InternalError = "internal_error";
+}
+
+public static class BuildStates
+{
+	public const string Starting = "starting";
+	public const string Running = "running";
+	public const string Cancelling = "cancelling";
+	public const string Succeeded = "succeeded";
+	public const string Failed = "failed";
+	public const string Cancelled = "cancelled";
 }
 
 [DataContract]

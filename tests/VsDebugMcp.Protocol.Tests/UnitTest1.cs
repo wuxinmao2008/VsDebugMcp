@@ -128,4 +128,53 @@ public class PipeMessageFramingTests
         Assert.Empty(actual.Projects);
         Assert.Empty(actual.Warnings);
     }
+
+    [Fact]
+    public void RoundTripsBuildTaskContract()
+    {
+        var expected = new BuildTaskResponse
+        {
+            BuildTaskId = "build-1",
+            VsInstanceId = "1234",
+            State = BuildStates.Succeeded,
+            Configuration = "Release",
+            Platform = "x64",
+            RequestedAtUtc = "2026-08-17T06:00:00.0000000Z",
+            StartedAtUtc = "2026-08-17T06:00:01.0000000Z",
+            CompletedAtUtc = "2026-08-17T06:00:10.0000000Z",
+            Succeeded = true
+        };
+
+        var json = BridgeJson.Serialize(expected);
+        var actual = BridgeJson.Deserialize<BuildTaskResponse>(json);
+
+        Assert.Equal("build-1", actual.BuildTaskId);
+        Assert.Equal(BuildStates.Succeeded, actual.State);
+        Assert.True(actual.Succeeded);
+        Assert.Equal("x64", actual.Platform);
+    }
+
+    [Fact]
+    public void RoundTripsOptionalBuildRequestAndCancelResponse()
+    {
+        var request = BridgeJson.Deserialize<RunBuildRequest>(BridgeJson.Serialize(new RunBuildRequest()));
+        var expected = new CancelBuildResponse
+        {
+            Accepted = true,
+            Build = new BuildTaskResponse
+            {
+                BuildTaskId = "build-1",
+                State = BuildStates.Cancelling,
+                CancelRequested = true
+            }
+        };
+
+        var actual = BridgeJson.Deserialize<CancelBuildResponse>(BridgeJson.Serialize(expected));
+
+        Assert.Null(request.Configuration);
+        Assert.Null(request.Platform);
+        Assert.True(actual.Accepted);
+        Assert.True(actual.Build.CancelRequested);
+        Assert.Equal(BuildStates.Cancelling, actual.Build.State);
+    }
 }

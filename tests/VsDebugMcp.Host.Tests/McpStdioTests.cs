@@ -51,7 +51,26 @@ public class McpStdioTests
             .OrderBy(name => name)
             .ToArray();
 
-        Assert.Equal(["vs_capabilities", "vs_get_projects_in_solution", "vs_health"], names);
+        Assert.Equal(
+            [
+                "vs_cancel_build",
+                "vs_capabilities",
+                "vs_get_build_status",
+                "vs_get_projects_in_solution",
+                "vs_health",
+                "vs_run_build"
+            ],
+            names);
+
+        var tools = toolsResponse.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray();
+        var runBuild = tools.Single(tool => tool.GetProperty("name").GetString() == "vs_run_build");
+        var runProperties = runBuild.GetProperty("inputSchema").GetProperty("properties");
+        Assert.True(runProperties.TryGetProperty("configuration", out _));
+        Assert.True(runProperties.TryGetProperty("platform", out _));
+        var getStatus = tools.Single(tool => tool.GetProperty("name").GetString() == "vs_get_build_status");
+        Assert.Contains(
+            "buildTaskId",
+            getStatus.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(value => value.GetString()));
 
         process.StandardInput.Close();
         await process.WaitForExitAsync(cancellation.Token);

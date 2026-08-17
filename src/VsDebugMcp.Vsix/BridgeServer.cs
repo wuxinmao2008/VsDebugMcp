@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
@@ -19,12 +20,14 @@ internal sealed class BridgeServer : IDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _sync = new();
     private readonly SolutionProjectProvider _solutionProjectProvider;
+    private readonly SolutionBuildProvider _solutionBuildProvider;
     private NamedPipeServerStream? _activePipe;
     private Task? _serverTask;
 
-    public BridgeServer(AsyncPackage package)
+    public BridgeServer(AsyncPackage package, SolutionBuildProvider solutionBuildProvider)
     {
         _solutionProjectProvider = new SolutionProjectProvider(package);
+        _solutionBuildProvider = solutionBuildProvider;
     }
 
     public void Start()
@@ -172,6 +175,18 @@ internal sealed class BridgeServer : IDisposable
                             true),
                         false);
                 }
+            case BridgeMethods.RunBuild:
+                return await HandleBuildRequestAsync<RunBuildRequest, BuildTaskResponse>(
+                    request,
+                    payload => _solutionBuildProvider.RunBuildAsync(payload, cancellationToken));
+            case BridgeMethods.GetBuildStatus:
+                return HandleBuildRequest<GetBuildStatusRequest, BuildTaskResponse>(
+                    request,
+                    payload => _solutionBuildProvider.GetBuildStatus(payload.BuildTaskId));
+            case BridgeMethods.CancelBuild:
+                return await HandleBuildRequestAsync<CancelBuildRequest, CancelBuildResponse>(
+                    request,
+                    payload => _solutionBuildProvider.CancelBuildAsync(payload.BuildTaskId, cancellationToken));
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -180,6 +195,80 @@ internal sealed class BridgeServer : IDisposable
                     false);
         }
     }
+
+    private static (BridgeResponse Response, bool CloseConnection) HandleBuildRequest<TRequest, TResponse>(
+        BridgeRequest request,
+        Func<TRequest, TResponse> action)
+    {
+        try
+        {
+            var payload = BridgeJson.Deserialize<TRequest>(request.PayloadJson ?? string.Empty);
+            return (BridgeResponse.Success(request.RequestId, action(payload)), false);
+        }
+        catch (SerializationException)
+        {
+            return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The build request is invalid.", false), false);
+        }
+        catch (BuildProviderException exception)
+        {
+            return (Failure(request.RequestId, exception.Code, GetBuildErrorMessage(exception.Code), exception.Retryable), false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return (
+                Failure(
+                    request.RequestId,
+                    BridgeErrorCodes.BuildStateUnavailable,
+                    GetBuildErrorMessage(BridgeErrorCodes.BuildStateUnavailable),
+                    true),
+                false);
+        }
+    }
+
+    private static async Task<(BridgeResponse Response, bool CloseConnection)> HandleBuildRequestAsync<TRequest, TResponse>(
+        BridgeRequest request,
+        Func<TRequest, Task<TResponse>> action)
+    {
+        try
+        {
+            var payload = BridgeJson.Deserialize<TRequest>(request.PayloadJson ?? string.Empty);
+            return (BridgeResponse.Success(request.RequestId, await action(payload)), false);
+        }
+        catch (SerializationException)
+        {
+            return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The build request is invalid.", false), false);
+        }
+        catch (BuildProviderException exception)
+        {
+            return (Failure(request.RequestId, exception.Code, GetBuildErrorMessage(exception.Code), exception.Retryable), false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return (
+                Failure(
+                    request.RequestId,
+                    BridgeErrorCodes.BuildStateUnavailable,
+                    GetBuildErrorMessage(BridgeErrorCodes.BuildStateUnavailable),
+                    true),
+                false);
+        }
+    }
+
+    private static string GetBuildErrorMessage(string code) => code switch
+    {
+        BridgeErrorCodes.SolutionNotOpen => "No Visual Studio solution is open.",
+        BridgeErrorCodes.BuildInProgress => "A Visual Studio build is already in progress.",
+        BridgeErrorCodes.InvalidBuildConfiguration => "The requested solution configuration or platform is invalid.",
+        BridgeErrorCodes.BuildTaskNotFound => "The build task was not found.",
+        BridgeErrorCodes.BuildNotActive => "The build task is not active.",
+        BridgeErrorCodes.BuildCancelNotSupported => "The active Visual Studio build cannot be cancelled.",
+        BridgeErrorCodes.BuildStartFailed => "Visual Studio could not start the build.",
+        _ => "The Visual Studio build state is unavailable."
+    };
 
     private static HandshakeResponse CreateHandshake()
     {
@@ -208,6 +297,24 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_projects_in_solution",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_run_build",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_build_status",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_cancel_build",
                 Version = "0.1",
                 IsStub = false
             }

@@ -156,3 +156,71 @@ public sealed class BridgeWarning
     [DataMember(Name = "projectId", Order = 3, EmitDefaultValue = false)]
     public string? ProjectId { get; set; }
 }
+
+[DataContract]
+public sealed class RunBuildRequest
+{
+    [DataMember(Name = "configuration", Order = 1, EmitDefaultValue = false)]
+    public string? Configuration { get; set; }
+
+    [DataMember(Name = "platform", Order = 2, EmitDefaultValue = false)]
+    public string? Platform { get; set; }
+}
+
+[DataContract]
+public sealed class GetBuildStatusRequest
+{
+    [DataMember(Name = "buildTaskId", Order = 1)]
+    public string BuildTaskId { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class CancelBuildRequest
+{
+    [DataMember(Name = "buildTaskId", Order = 1)]
+    public string BuildTaskId { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class BuildTaskResponse
+{
+    [DataMember(Name = "buildTaskId", Order = 1)]
+    public string BuildTaskId { get; set; } = string.Empty;
+
+    [DataMember(Name = "vsInstanceId", Order = 2)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "state", Order = 3)]
+    public string State { get; set; } = BuildStates.Starting;
+
+    [DataMember(Name = "configuration", Order = 4)]
+    public string Configuration { get; set; } = string.Empty;
+
+    [DataMember(Name = "platform", Order = 5)]
+    public string Platform { get; set; } = string.Empty;
+
+    [DataMember(Name = "requestedAtUtc", Order = 6)]
+    public string RequestedAtUtc { get; set; } = string.Empty;
+
+    [DataMember(Name = "startedAtUtc", Order = 7, EmitDefaultValue = false)]
+    public string? StartedAtUtc { get; set; }
+
+    [DataMember(Name = "completedAtUtc", Order = 8, EmitDefaultValue = false)]
+    public string? CompletedAtUtc { get; set; }
+
+    [DataMember(Name = "succeeded", Order = 9, EmitDefaultValue = false)]
+    public bool? Succeeded { get; set; }
+
+    [DataMember(Name = "cancelRequested", Order = 10)]
+    public bool CancelRequested { get; set; }
+}
+
+[DataContract]
+public sealed class CancelBuildResponse
+{
+    [DataMember(Name = "accepted", Order = 1)]
+    public bool Accepted { get; set; }
+
+    [DataMember(Name = "build", Order = 2)]
+    public BuildTaskResponse Build { get; set; } = new();
+}

@@ -15,20 +15,26 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
 {
     public const string PackageGuidString = "e34c6f9d-54f1-4947-a2c4-9538e401bba9";
     private BridgeServer? _bridgeServer;
+    private SolutionBuildProvider? _solutionBuildProvider;
 
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress).ConfigureAwait(false);
-        _bridgeServer = new BridgeServer(this);
+        _solutionBuildProvider = new SolutionBuildProvider(this);
+        await _solutionBuildProvider.InitializeAsync(cancellationToken);
+        _bridgeServer = new BridgeServer(this, _solutionBuildProvider);
         _bridgeServer.Start();
     }
 
     protected override void Dispose(bool disposing)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
         if (disposing)
         {
             _bridgeServer?.Dispose();
             _bridgeServer = null;
+            _solutionBuildProvider?.Dispose();
+            _solutionBuildProvider = null;
         }
 
         base.Dispose(disposing);

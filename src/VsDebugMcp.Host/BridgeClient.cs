@@ -53,6 +53,27 @@ public sealed class BridgeClient : IAsyncDisposable
             new object(),
             cancellationToken);
 
+    public Task<BuildTaskResponse> RunBuildAsync(
+        RunBuildRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<RunBuildRequest, BuildTaskResponse>(BridgeMethods.RunBuild, request, cancellationToken);
+
+    public Task<BuildTaskResponse> GetBuildStatusAsync(
+        string buildTaskId,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetBuildStatusRequest, BuildTaskResponse>(
+            BridgeMethods.GetBuildStatus,
+            new GetBuildStatusRequest { BuildTaskId = buildTaskId },
+            cancellationToken);
+
+    public Task<CancelBuildResponse> CancelBuildAsync(
+        string buildTaskId,
+        CancellationToken cancellationToken) =>
+        CallAsync<CancelBuildRequest, CancelBuildResponse>(
+            BridgeMethods.CancelBuild,
+            new CancelBuildRequest { BuildTaskId = buildTaskId },
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

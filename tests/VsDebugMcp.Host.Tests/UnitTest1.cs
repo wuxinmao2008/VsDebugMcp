@@ -94,4 +94,73 @@ public class BridgeClientTests
         Assert.Equal("Example.Project", result.Projects[0].Name);
         await serverTask;
     }
+
+    [Fact]
+    public async Task RunsQueriesAndCancelsBuildAgainstPipeServer()
+    {
+        var pipeName = $"VsDebugMcp.Tests.{Guid.NewGuid():N}";
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var server = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(cancellation.Token);
+
+            var runRequest = await PipeMessageFraming.ReadAsync<BridgeRequest>(server, cancellation.Token);
+            Assert.Equal(BridgeMethods.RunBuild, runRequest.Method);
+            var runPayload = BridgeJson.Deserialize<RunBuildRequest>(runRequest.PayloadJson!);
+            Assert.Equal("Release", runPayload.Configuration);
+            Assert.Equal("x64", runPayload.Platform);
+            await PipeMessageFraming.WriteAsync(
+                server,
+                BridgeResponse.Success(runRequest.RequestId, CreateBuild(BuildStates.Running)),
+                cancellation.Token);
+
+            var statusRequest = await PipeMessageFraming.ReadAsync<BridgeRequest>(server, cancellation.Token);
+            Assert.Equal(BridgeMethods.GetBuildStatus, statusRequest.Method);
+            Assert.Equal("build-1", BridgeJson.Deserialize<GetBuildStatusRequest>(statusRequest.PayloadJson!).BuildTaskId);
+            await PipeMessageFraming.WriteAsync(
+                server,
+                BridgeResponse.Success(statusRequest.RequestId, CreateBuild(BuildStates.Running)),
+                cancellation.Token);
+
+            var cancelRequest = await PipeMessageFraming.ReadAsync<BridgeRequest>(server, cancellation.Token);
+            Assert.Equal(BridgeMethods.CancelBuild, cancelRequest.Method);
+            Assert.Equal("build-1", BridgeJson.Deserialize<CancelBuildRequest>(cancelRequest.PayloadJson!).BuildTaskId);
+            await PipeMessageFraming.WriteAsync(
+                server,
+                BridgeResponse.Success(
+                    cancelRequest.RequestId,
+                    new CancelBuildResponse { Accepted = true, Build = CreateBuild(BuildStates.Cancelling) }),
+                cancellation.Token);
+        }, cancellation.Token);
+
+        await using var client = new BridgeClient(pipeName);
+        await client.ConnectAsync(TimeSpan.FromSeconds(2), cancellation.Token);
+        var started = await client.RunBuildAsync(
+            new RunBuildRequest { Configuration = "Release", Platform = "x64" },
+            cancellation.Token);
+        var status = await client.GetBuildStatusAsync(started.BuildTaskId, cancellation.Token);
+        var cancelled = await client.CancelBuildAsync(started.BuildTaskId, cancellation.Token);
+
+        Assert.Equal(BuildStates.Running, status.State);
+        Assert.True(cancelled.Accepted);
+        Assert.Equal(BuildStates.Cancelling, cancelled.Build.State);
+        await serverTask;
+    }
+
+    private static BuildTaskResponse CreateBuild(string state) => new()
+    {
+        BuildTaskId = "build-1",
+        VsInstanceId = "1234",
+        State = state,
+        Configuration = "Release",
+        Platform = "x64",
+        RequestedAtUtc = "2026-08-17T06:00:00.0000000Z"
+    };
 }

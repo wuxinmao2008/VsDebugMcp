@@ -11,6 +11,15 @@ public interface IBridgeService
     Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken);
 
     Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken);
+
+    Task<BuildTaskResponse> RunBuildAsync(
+        string? configuration,
+        string? platform,
+        CancellationToken cancellationToken);
+
+    Task<BuildTaskResponse> GetBuildStatusAsync(string buildTaskId, CancellationToken cancellationToken);
+
+    Task<CancelBuildResponse> CancelBuildAsync(string buildTaskId, CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -49,6 +58,34 @@ public sealed class BridgeService : IBridgeService
     public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
         ExecuteAsync(
             client => client.GetProjectsInSolutionAsync(cancellationToken),
+            cancellationToken);
+
+    public Task<BuildTaskResponse> RunBuildAsync(
+        string? configuration,
+        string? platform,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.RunBuildAsync(
+                new RunBuildRequest
+                {
+                    Configuration = configuration,
+                    Platform = platform
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<BuildTaskResponse> GetBuildStatusAsync(
+        string buildTaskId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.GetBuildStatusAsync(buildTaskId, cancellationToken),
+            cancellationToken);
+
+    public Task<CancelBuildResponse> CancelBuildAsync(
+        string buildTaskId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.CancelBuildAsync(buildTaskId, cancellationToken),
             cancellationToken);
 
     private async Task<T> ExecuteAsync<T>(
@@ -138,10 +175,27 @@ public sealed class BridgeServiceException : Exception
                 "The Visual Studio solution state is unavailable.",
                 exception.Retryable,
                 exception),
+            BridgeErrorCodes.SolutionNotOpen => BuildError(exception, "No Visual Studio solution is open."),
+            BridgeErrorCodes.BuildInProgress => BuildError(exception, "A Visual Studio build is already in progress."),
+            BridgeErrorCodes.InvalidBuildConfiguration => BuildError(
+                exception,
+                "The requested solution configuration or platform is invalid."),
+            BridgeErrorCodes.BuildTaskNotFound => BuildError(exception, "The build task was not found."),
+            BridgeErrorCodes.BuildNotActive => BuildError(exception, "The build task is not active."),
+            BridgeErrorCodes.BuildCancelNotSupported => BuildError(
+                exception,
+                "The active Visual Studio build cannot be cancelled."),
+            BridgeErrorCodes.BuildStartFailed => BuildError(exception, "Visual Studio could not start the build."),
+            BridgeErrorCodes.BuildStateUnavailable => BuildError(
+                exception,
+                "The Visual Studio build state is unavailable."),
             _ => new(
                 BridgeErrorCodes.InternalError,
                 "The Visual Studio bridge request failed.",
                 false,
                 exception)
         };
+
+    private static BridgeServiceException BuildError(BridgeRpcException exception, string message) =>
+        new(exception.Code, message, exception.Retryable, exception);
 }
