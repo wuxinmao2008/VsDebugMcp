@@ -2,7 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/VsDebugMcp.Host/VsDebugMcp.Host.csproj" />
     <Project Path="src/VsDebugMcp.Protocol/VsDebugMcp.Protocol.csproj" />
-    <Project Path="src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj" />
+    <Project Path="src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj">
+      <Deploy />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj" />

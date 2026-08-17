@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>vs2026_5</TargetFrameworks>
     <GeneratePkgDefFile>True</GeneratePkgDefFile>
+    <DeployExtension>true</DeployExtension>
+    <VsixDeployOnDebug>true</VsixDeployOnDebug>
     <ExtensionType>VSSDK</ExtensionType>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
