@@ -1,0 +1,102 @@
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace VsDebugMcp.Host.Tests;
+
+public class McpStdioTests
+{
+    [Fact]
+    public async Task ListsOnlyPhaseZeroToolsOverStdio()
+    {
+        var hostDll = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VsDebugMcp.Host",
+            "bin",
+            "Debug",
+            "net8.0",
+            "VsDebugMcp.Host.dll");
+        Assert.True(File.Exists(hostDll), $"Host output not found: {hostDll}");
+
+        using var process = Process.Start(
+            new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"\"{hostDll}\" --mcp",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }) ?? throw new InvalidOperationException("Could not start the MCP host.");
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await WriteMessageAsync(
+            process,
+            """
+            {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"VsDebugMcp.Tests","version":"1.0"}}}
+            """);
+        using var initialize = await ReadResponseAsync(process, 1, cancellation.Token);
+        Assert.Equal("2.0", initialize.RootElement.GetProperty("jsonrpc").GetString());
+
+        await WriteMessageAsync(process, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        await WriteMessageAsync(process, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
+        using var toolsResponse = await ReadResponseAsync(process, 2, cancellation.Token);
+        var names = toolsResponse.RootElement
+            .GetProperty("result")
+            .GetProperty("tools")
+            .EnumerateArray()
+            .Select(tool => tool.GetProperty("name").GetString())
+            .OrderBy(name => name)
+            .ToArray();
+
+        Assert.Equal(["vs_capabilities", "vs_health"], names);
+
+        process.StandardInput.Close();
+        await process.WaitForExitAsync(cancellation.Token);
+        Assert.Equal(0, process.ExitCode);
+        await stderrTask;
+    }
+
+    private static async Task WriteMessageAsync(Process process, string json)
+    {
+        await process.StandardInput.WriteLineAsync(json.ReplaceLineEndings(string.Empty));
+        await process.StandardInput.FlushAsync();
+    }
+
+    private static async Task<JsonDocument> ReadResponseAsync(
+        Process process,
+        int expectedId,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var line = await process.StandardOutput.ReadLineAsync(cancellationToken);
+            if (line is null)
+            {
+                throw new EndOfStreamException("The MCP host closed stdout before returning a response.");
+            }
+
+            var document = JsonDocument.Parse(line);
+            if (document.RootElement.TryGetProperty("id", out var id) && id.GetInt32() == expectedId)
+            {
+                return document;
+            }
+
+            document.Dispose();
+        }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "VsDebugMcp.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName
+            ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
+    }
+}

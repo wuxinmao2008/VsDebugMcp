@@ -1,7 +1,27 @@
-﻿using VsDebugMcp.Host;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using VsDebugMcp.Host;
 using VsDebugMcp.Protocol;
 
-var pipeName = GetOption(args, "--pipe") ?? PipeNames.ForCurrentUser();
+VsHostOptions options;
+try
+{
+	options = HostCommandLine.Parse(args);
+}
+catch (ArgumentException exception)
+{
+	Console.Error.WriteLine(exception.Message);
+	PrintUsage(Console.Error);
+	return 2;
+}
+
+if (options.Mode == HostMode.Help)
+{
+	PrintUsage(Console.Out);
+	return 0;
+}
+
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -9,50 +29,60 @@ Console.CancelKeyPress += (_, eventArgs) =>
 	cancellation.Cancel();
 };
 
-try
+return options.Mode == HostMode.Smoke
+	? await RunSmokeAsync(options, cancellation.Token)
+	: await RunMcpAsync(options, cancellation.Token);
+
+static async Task<int> RunMcpAsync(VsHostOptions options, CancellationToken cancellationToken)
 {
-	await using var client = new BridgeClient(pipeName);
-	await client.ConnectAsync(TimeSpan.FromSeconds(5), cancellation.Token);
+	var builder = Host.CreateApplicationBuilder();
+	builder.Logging.ClearProviders();
+	builder.Logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
 
-	var handshake = await client.HandshakeAsync(cancellation.Token);
-	Console.WriteLine($"Connected to VS {handshake.VisualStudioVersion} (PID {handshake.VisualStudioProcessId}).");
+	var tools = new McpTools(new BridgeService(options));
+	builder.Services
+		.AddMcpServer()
+		.WithStdioServerTransport()
+		.WithTools<McpTools>(tools);
 
-	var health = await client.GetHealthAsync(cancellation.Token);
-	Console.WriteLine($"Bridge health: {health.Status} at {health.UtcTimestamp}.");
+	await builder.Build().RunAsync(cancellationToken);
+	return 0;
+}
 
-	var capabilities = await client.GetCapabilitiesAsync(cancellation.Token);
-	foreach (var capability in capabilities.Capabilities)
+static async Task<int> RunSmokeAsync(VsHostOptions options, CancellationToken cancellationToken)
+{
+	try
 	{
-		Console.WriteLine($"Capability: {capability.Name} v{capability.Version} (stub={capability.IsStub}).");
-	}
-}
-catch (OperationCanceledException)
-{
-	Console.Error.WriteLine("Operation cancelled.");
-	return 2;
-}
-catch (BridgeRpcException exception)
-{
-	Console.Error.WriteLine($"{exception.Code}: {exception.Message}");
-	return 1;
-}
-catch (Exception exception)
-{
-	Console.Error.WriteLine($"{BridgeErrorCodes.BridgeUnavailable}: {exception.Message}");
-	return 1;
-}
+		var service = new BridgeService(options);
+		var health = await service.GetHealthAsync(cancellationToken);
+		Console.WriteLine($"Bridge health: {health.Status} at {health.UtcTimestamp}.");
 
-return 0;
-
-static string? GetOption(string[] arguments, string name)
-{
-	for (var index = 0; index < arguments.Length - 1; index++)
-	{
-		if (string.Equals(arguments[index], name, StringComparison.OrdinalIgnoreCase))
+		var capabilities = await service.GetCapabilitiesAsync(cancellationToken);
+		Console.WriteLine(
+			$"Connected to VS {capabilities.VisualStudioVersion} (PID {capabilities.VisualStudioProcessId}).");
+		foreach (var capability in capabilities.Capabilities)
 		{
-			return arguments[index + 1];
+			Console.WriteLine($"Capability: {capability.Name} v{capability.Version} (stub={capability.IsStub}).");
 		}
-	}
 
-	return null;
+		return 0;
+	}
+	catch (OperationCanceledException)
+	{
+		Console.Error.WriteLine("Operation cancelled.");
+		return 2;
+	}
+	catch (BridgeServiceException exception)
+	{
+		Console.Error.WriteLine($"{exception.Code}: {exception.Message}");
+		return 1;
+	}
+	catch (Exception)
+	{
+		Console.Error.WriteLine($"{BridgeErrorCodes.InternalError}: The host request failed.");
+		return 1;
+	}
 }
+
+static void PrintUsage(TextWriter writer) => writer.WriteLine(
+	"Usage: VsDebugMcp.Host [--mcp|--smoke] [--pipe <name>] [--connect-timeout-seconds <1-30>]");
