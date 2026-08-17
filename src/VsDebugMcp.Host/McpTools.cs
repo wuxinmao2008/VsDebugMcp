@@ -82,6 +82,28 @@ public sealed class McpTools
         CancellationToken cancellationToken) =>
         InvokeAsync(() => _bridgeService.CancelBuildAsync(buildTaskId, cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_get_errors",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the current unfiltered Visual Studio Error Table snapshot for explicit build diagnostics. The optional build task ID is echoed only and does not select historical diagnostics.")]
+    public Task<GetErrorsResponse> GetErrorsAsync(
+        [Description("Optional build task ID to echo in the response; it is not validated or used to select diagnostics.")] string? buildTaskId = null,
+        [Description("Optional severities: error, warning, or message. Defaults to error and warning.")] IReadOnlyList<string>? severities = null,
+        [Description("Optional case-insensitive exact project name filter.")] string? project = null,
+        [Description("Optional full path or case-insensitive path suffix filter without glob syntax.")] string? file = null,
+        [Description("Optional maximum result count from 1 through 1000. Defaults to 200.")] int? maxCount = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetErrorsAsync(
+            buildTaskId,
+            severities,
+            project,
+            file,
+            maxCount,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

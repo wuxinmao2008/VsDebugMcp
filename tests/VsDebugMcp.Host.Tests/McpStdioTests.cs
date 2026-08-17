@@ -56,6 +56,7 @@ public class McpStdioTests
                 "vs_cancel_build",
                 "vs_capabilities",
                 "vs_get_build_status",
+                "vs_get_errors",
                 "vs_get_projects_in_solution",
                 "vs_health",
                 "vs_run_build"
@@ -71,6 +72,20 @@ public class McpStdioTests
         Assert.Contains(
             "buildTaskId",
             getStatus.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+        var getErrors = tools.Single(tool => tool.GetProperty("name").GetString() == "vs_get_errors");
+        var errorProperties = getErrors.GetProperty("inputSchema").GetProperty("properties");
+        Assert.True(errorProperties.TryGetProperty("buildTaskId", out _));
+        Assert.True(errorProperties.TryGetProperty("severities", out _));
+        Assert.True(errorProperties.TryGetProperty("project", out _));
+        Assert.True(errorProperties.TryGetProperty("file", out _));
+        Assert.True(errorProperties.TryGetProperty("maxCount", out _));
+        if (getErrors.GetProperty("inputSchema").TryGetProperty("required", out var requiredErrors))
+        {
+            Assert.Empty(requiredErrors.EnumerateArray());
+        }
+        var annotations = getErrors.GetProperty("annotations");
+        Assert.True(annotations.GetProperty("readOnlyHint").GetBoolean());
+        Assert.True(annotations.GetProperty("idempotentHint").GetBoolean());
 
         process.StandardInput.Close();
         await process.WaitForExitAsync(cancellation.Token);

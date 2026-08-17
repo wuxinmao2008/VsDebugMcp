@@ -177,4 +177,52 @@ public class PipeMessageFramingTests
         Assert.True(actual.Build.CancelRequested);
         Assert.Equal(BuildStates.Cancelling, actual.Build.State);
     }
+
+    [Fact]
+    public void RoundTripsDiagnosticsRequestAndResponse()
+    {
+        var request = new GetErrorsRequest
+        {
+            BuildTaskId = "build-1",
+            Severities = ["error", "warning"],
+            Project = "Example.Project",
+            File = @"src\Program.cs",
+            MaxCount = 25
+        };
+        var response = new GetErrorsResponse
+        {
+            VsInstanceId = "1234",
+            BuildTaskId = "build-1",
+            SnapshotAtUtc = "2026-08-17T08:00:00.0000000Z",
+            TotalCount = 2,
+            ReturnedCount = 1,
+            Truncated = true,
+            Items =
+            {
+                new VisualStudioDiagnostic
+                {
+                    Severity = "error",
+                    Code = "CS1002",
+                    Message = "; expected",
+                    Project = "Example.Project",
+                    FilePath = @"C:\source\Example\src\Program.cs",
+                    Line = 12,
+                    Column = 8,
+                    BuildTool = "C#"
+                }
+            }
+        };
+
+        var actualRequest = BridgeJson.Deserialize<GetErrorsRequest>(BridgeJson.Serialize(request));
+        var actualResponse = BridgeJson.Deserialize<GetErrorsResponse>(BridgeJson.Serialize(response));
+
+        Assert.Equal("build-1", actualRequest.BuildTaskId);
+        Assert.Equal(["error", "warning"], actualRequest.Severities);
+        Assert.Equal(25, actualRequest.MaxCount);
+        Assert.True(actualResponse.Truncated);
+        Assert.Equal(2, actualResponse.TotalCount);
+        Assert.Single(actualResponse.Items);
+        Assert.Equal(12, actualResponse.Items[0].Line);
+        Assert.Equal("CS1002", actualResponse.Items[0].Code);
+    }
 }

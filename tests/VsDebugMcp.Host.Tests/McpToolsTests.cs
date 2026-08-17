@@ -109,6 +109,57 @@ public class McpToolsTests
         Assert.DoesNotContain("sensitive internal path", exception.Message);
     }
 
+    [Fact]
+    public async Task ReturnsBuildDiagnosticsAndForwardsFilters()
+    {
+        var expected = new GetErrorsResponse
+        {
+            VsInstanceId = "1234",
+            BuildTaskId = "not-a-real-build",
+            TotalCount = 1,
+            ReturnedCount = 1,
+            Items = { new VisualStudioDiagnostic { Severity = "warning", Code = "C4996" } }
+        };
+        var service = new FakeBridgeService { Errors = expected };
+        var tools = new McpTools(service);
+
+        var actual = await tools.GetErrorsAsync(
+            "not-a-real-build",
+            ["warning"],
+            "Example.Project",
+            @"src\main.cpp",
+            10,
+            CancellationToken.None);
+
+        Assert.Same(expected, actual);
+        Assert.Equal("not-a-real-build", service.DiagnosticsBuildTaskId);
+        Assert.Equal(["warning"], service.Severities);
+        Assert.Equal("Example.Project", service.Project);
+        Assert.Equal(@"src\main.cpp", service.File);
+        Assert.Equal(10, service.MaxCount);
+    }
+
+    [Fact]
+    public async Task SanitizesDiagnosticsUnavailableError()
+    {
+        var tools = new McpTools(
+            new FakeBridgeService
+            {
+                Error = new BridgeServiceException(
+                    BridgeErrorCodes.DiagnosticsUnavailable,
+                    "The Visual Studio diagnostics snapshot is unavailable.",
+                    true,
+                    new InvalidOperationException(@"sensitive C:\source\file.cpp"))
+            });
+
+        var exception = await Assert.ThrowsAsync<McpException>(
+            () => tools.GetErrorsAsync(null, null, null, null, null, CancellationToken.None));
+
+        Assert.Contains(BridgeErrorCodes.DiagnosticsUnavailable, exception.Message);
+        Assert.DoesNotContain("sensitive", exception.Message);
+        Assert.DoesNotContain(@"C:\source", exception.Message);
+    }
+
     private sealed class FakeBridgeService : IBridgeService
     {
         public HealthResponse Health { get; init; } = new();
@@ -121,11 +172,23 @@ public class McpToolsTests
 
         public CancelBuildResponse Cancel { get; init; } = new();
 
+        public GetErrorsResponse Errors { get; init; } = new();
+
         public string? Configuration { get; private set; }
 
         public string? Platform { get; private set; }
 
         public string? BuildTaskId { get; private set; }
+
+        public string? DiagnosticsBuildTaskId { get; private set; }
+
+        public IReadOnlyList<string>? Severities { get; private set; }
+
+        public string? Project { get; private set; }
+
+        public string? File { get; private set; }
+
+        public int? MaxCount { get; private set; }
 
         public BridgeServiceException? Error { get; init; }
 
@@ -162,6 +225,22 @@ public class McpToolsTests
         {
             BuildTaskId = buildTaskId;
             return Error is null ? Task.FromResult(Cancel) : Task.FromException<CancelBuildResponse>(Error);
+        }
+
+        public Task<GetErrorsResponse> GetErrorsAsync(
+            string? buildTaskId,
+            IReadOnlyList<string>? severities,
+            string? project,
+            string? file,
+            int? maxCount,
+            CancellationToken cancellationToken)
+        {
+            DiagnosticsBuildTaskId = buildTaskId;
+            Severities = severities;
+            Project = project;
+            File = file;
+            MaxCount = maxCount;
+            return Error is null ? Task.FromResult(Errors) : Task.FromException<GetErrorsResponse>(Error);
         }
     }
 }

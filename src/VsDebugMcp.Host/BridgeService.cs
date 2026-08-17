@@ -20,6 +20,14 @@ public interface IBridgeService
     Task<BuildTaskResponse> GetBuildStatusAsync(string buildTaskId, CancellationToken cancellationToken);
 
     Task<CancelBuildResponse> CancelBuildAsync(string buildTaskId, CancellationToken cancellationToken);
+
+    Task<GetErrorsResponse> GetErrorsAsync(
+        string? buildTaskId,
+        IReadOnlyList<string>? severities,
+        string? project,
+        string? file,
+        int? maxCount,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -86,6 +94,26 @@ public sealed class BridgeService : IBridgeService
         CancellationToken cancellationToken) =>
         ExecuteAsync(
             client => client.CancelBuildAsync(buildTaskId, cancellationToken),
+            cancellationToken);
+
+    public Task<GetErrorsResponse> GetErrorsAsync(
+        string? buildTaskId,
+        IReadOnlyList<string>? severities,
+        string? project,
+        string? file,
+        int? maxCount,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.GetErrorsAsync(
+                new GetErrorsRequest
+                {
+                    BuildTaskId = buildTaskId,
+                    Severities = severities?.ToList(),
+                    Project = project,
+                    File = file,
+                    MaxCount = maxCount
+                },
+                cancellationToken),
             cancellationToken);
 
     private async Task<T> ExecuteAsync<T>(
@@ -189,6 +217,11 @@ public sealed class BridgeServiceException : Exception
             BridgeErrorCodes.BuildStateUnavailable => BuildError(
                 exception,
                 "The Visual Studio build state is unavailable."),
+            BridgeErrorCodes.DiagnosticsUnavailable => new(
+                exception.Code,
+                "The Visual Studio diagnostics snapshot is unavailable.",
+                exception.Retryable,
+                exception),
             _ => new(
                 BridgeErrorCodes.InternalError,
                 "The Visual Studio bridge request failed.",

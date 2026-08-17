@@ -224,3 +224,75 @@ public sealed class CancelBuildResponse
     [DataMember(Name = "build", Order = 2)]
     public BuildTaskResponse Build { get; set; } = new();
 }
+
+[DataContract]
+public sealed class GetErrorsRequest
+{
+    [DataMember(Name = "buildTaskId", Order = 1, EmitDefaultValue = false)]
+    public string? BuildTaskId { get; set; }
+
+    [DataMember(Name = "severities", Order = 2, EmitDefaultValue = false)]
+    public List<string>? Severities { get; set; }
+
+    [DataMember(Name = "project", Order = 3, EmitDefaultValue = false)]
+    public string? Project { get; set; }
+
+    [DataMember(Name = "file", Order = 4, EmitDefaultValue = false)]
+    public string? File { get; set; }
+
+    [DataMember(Name = "maxCount", Order = 5, EmitDefaultValue = false)]
+    public int? MaxCount { get; set; }
+}
+
+[DataContract]
+public sealed class GetErrorsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "buildTaskId", Order = 2, EmitDefaultValue = false)]
+    public string? BuildTaskId { get; set; }
+
+    [DataMember(Name = "snapshotAtUtc", Order = 3)]
+    public string SnapshotAtUtc { get; set; } = string.Empty;
+
+    [DataMember(Name = "totalCount", Order = 4)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "returnedCount", Order = 5)]
+    public int ReturnedCount { get; set; }
+
+    [DataMember(Name = "truncated", Order = 6)]
+    public bool Truncated { get; set; }
+
+    [DataMember(Name = "items", Order = 7)]
+    public List<VisualStudioDiagnostic> Items { get; set; } = new();
+}
+
+[DataContract]
+public sealed class VisualStudioDiagnostic
+{
+    [DataMember(Name = "severity", Order = 1)]
+    public string Severity { get; set; } = string.Empty;
+
+    [DataMember(Name = "code", Order = 2)]
+    public string Code { get; set; } = string.Empty;
+
+    [DataMember(Name = "message", Order = 3)]
+    public string Message { get; set; } = string.Empty;
+
+    [DataMember(Name = "project", Order = 4)]
+    public string Project { get; set; } = string.Empty;
+
+    [DataMember(Name = "filePath", Order = 5)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "line", Order = 6, EmitDefaultValue = false)]
+    public int? Line { get; set; }
+
+    [DataMember(Name = "column", Order = 7, EmitDefaultValue = false)]
+    public int? Column { get; set; }
+
+    [DataMember(Name = "buildTool", Order = 8)]
+    public string BuildTool { get; set; } = string.Empty;
+}

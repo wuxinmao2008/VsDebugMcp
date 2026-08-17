@@ -154,6 +154,65 @@ public class BridgeClientTests
         await serverTask;
     }
 
+    [Fact]
+    public async Task GetsBuildDiagnosticsAgainstPipeServer()
+    {
+        var pipeName = $"VsDebugMcp.Tests.{Guid.NewGuid():N}";
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var server = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(cancellation.Token);
+            var request = await PipeMessageFraming.ReadAsync<BridgeRequest>(server, cancellation.Token);
+            Assert.Equal(BridgeMethods.GetErrors, request.Method);
+            var payload = BridgeJson.Deserialize<GetErrorsRequest>(request.PayloadJson!);
+            Assert.Equal("build-any", payload.BuildTaskId);
+            Assert.Equal(["error"], payload.Severities);
+            Assert.Equal("Example.Project", payload.Project);
+            Assert.Equal(@"src\Program.cs", payload.File);
+            Assert.Equal(10, payload.MaxCount);
+
+            await PipeMessageFraming.WriteAsync(
+                server,
+                BridgeResponse.Success(
+                    request.RequestId,
+                    new GetErrorsResponse
+                    {
+                        VsInstanceId = "1234",
+                        BuildTaskId = payload.BuildTaskId,
+                        SnapshotAtUtc = "2026-08-17T08:00:00.0000000Z",
+                        TotalCount = 1,
+                        ReturnedCount = 1,
+                        Items = { new VisualStudioDiagnostic { Severity = "error", Code = "CS1002" } }
+                    }),
+                cancellation.Token);
+        }, cancellation.Token);
+
+        await using var client = new BridgeClient(pipeName);
+        await client.ConnectAsync(TimeSpan.FromSeconds(2), cancellation.Token);
+        var result = await client.GetErrorsAsync(
+            new GetErrorsRequest
+            {
+                BuildTaskId = "build-any",
+                Severities = ["error"],
+                Project = "Example.Project",
+                File = @"src\Program.cs",
+                MaxCount = 10
+            },
+            cancellation.Token);
+
+        Assert.Equal("build-any", result.BuildTaskId);
+        Assert.Single(result.Items);
+        Assert.Equal("CS1002", result.Items[0].Code);
+        await serverTask;
+    }
+
     private static BuildTaskResponse CreateBuild(string state) => new()
     {
         BuildTaskId = "build-1",
