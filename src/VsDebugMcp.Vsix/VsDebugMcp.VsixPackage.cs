@@ -19,7 +19,7 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress).ConfigureAwait(false);
-        _bridgeServer = new BridgeServer();
+        _bridgeServer = new BridgeServer(this);
         _bridgeServer.Start();
     }
 

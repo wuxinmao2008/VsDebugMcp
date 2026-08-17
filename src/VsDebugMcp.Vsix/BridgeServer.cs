@@ -18,8 +18,14 @@ internal sealed class BridgeServer : IDisposable
     private const string LogSource = "VsDebugMcp";
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _sync = new();
+    private readonly SolutionProjectProvider _solutionProjectProvider;
     private NamedPipeServerStream? _activePipe;
     private Task? _serverTask;
+
+    public BridgeServer(AsyncPackage package)
+    {
+        _solutionProjectProvider = new SolutionProjectProvider(package);
+    }
 
     public void Start()
     {
@@ -75,7 +81,7 @@ internal sealed class BridgeServer : IDisposable
         }
     }
 
-    private static async Task ProcessConnectionAsync(NamedPipeServerStream pipe, CancellationToken cancellationToken)
+    private async Task ProcessConnectionAsync(NamedPipeServerStream pipe, CancellationToken cancellationToken)
     {
         while (pipe.IsConnected && !cancellationToken.IsCancellationRequested)
         {
@@ -95,7 +101,8 @@ internal sealed class BridgeServer : IDisposable
             }
 
             var stopwatch = Stopwatch.StartNew();
-            var response = HandleRequest(request, out var closeConnection);
+            var handled = await HandleRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = handled.Response;
             await PipeMessageFraming.WriteAsync(pipe, response, cancellationToken).ConfigureAwait(false);
             stopwatch.Stop();
 
@@ -104,49 +111,73 @@ internal sealed class BridgeServer : IDisposable
                 LogSource,
                 $"method={request.Method};requestId={request.RequestId};elapsedMs={stopwatch.ElapsedMilliseconds};result={result}");
 
-            if (closeConnection)
+            if (handled.CloseConnection)
             {
                 break;
             }
         }
     }
 
-    private static BridgeResponse HandleRequest(BridgeRequest request, out bool closeConnection)
+    private async Task<(BridgeResponse Response, bool CloseConnection)> HandleRequestAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
     {
-        closeConnection = false;
         if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.Method))
         {
-            return Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "Request ID and method are required.", false);
+            return (
+                Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "Request ID and method are required.", false),
+                false);
         }
 
         if (!string.Equals(request.ProtocolVersion, BridgeProtocol.Version, StringComparison.Ordinal))
         {
-            return Failure(
-                request.RequestId,
-                BridgeErrorCodes.ProtocolMismatch,
-                $"Protocol {request.ProtocolVersion} is not supported.",
+            return (
+                Failure(
+                    request.RequestId,
+                    BridgeErrorCodes.ProtocolMismatch,
+                    $"Protocol {request.ProtocolVersion} is not supported.",
+                    false),
                 false);
         }
 
         switch (request.Method)
         {
             case BridgeMethods.Handshake:
-                return BridgeResponse.Success(request.RequestId, CreateHandshake());
+                return (BridgeResponse.Success(request.RequestId, CreateHandshake()), false);
             case BridgeMethods.Health:
-                return BridgeResponse.Success(
-                    request.RequestId,
-                    new HealthResponse
-                    {
-                        Status = "ok",
-                        UtcTimestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
-                    });
+                return (
+                    BridgeResponse.Success(
+                        request.RequestId,
+                        new HealthResponse
+                        {
+                            Status = "ok",
+                            UtcTimestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+                        }),
+                    false);
             case BridgeMethods.Capabilities:
-                return BridgeResponse.Success(request.RequestId, CreateCapabilities());
+                return (BridgeResponse.Success(request.RequestId, CreateCapabilities()), false);
+            case BridgeMethods.GetProjectsInSolution:
+                try
+                {
+                    var result = await _solutionProjectProvider.GetProjectsAsync(cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SolutionStateUnavailableException)
+                {
+                    return (
+                        Failure(
+                            request.RequestId,
+                            BridgeErrorCodes.SolutionStateUnavailable,
+                            "The Visual Studio solution state is unavailable.",
+                            true),
+                        false);
+                }
             case BridgeMethods.Shutdown:
-                closeConnection = true;
-                return BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true });
+                return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
-                return Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "Unknown bridge method.", false);
+                return (
+                    Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "Unknown bridge method.", false),
+                    false);
         }
     }
 
@@ -173,6 +204,12 @@ internal sealed class BridgeServer : IDisposable
                 Name = "phase0.ipc",
                 Version = "0.1",
                 IsStub = true
+            },
+            new()
+            {
+                Name = "vs_get_projects_in_solution",
+                Version = "0.1",
+                IsStub = false
             }
         }
     };

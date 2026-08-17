@@ -48,6 +48,22 @@ public class McpToolsTests
     }
 
     [Fact]
+    public async Task ReturnsProjectsFromBridgeService()
+    {
+        var expected = new GetProjectsInSolutionResponse
+        {
+            VsInstanceId = "1234",
+            Solution = new SolutionInfo { IsOpen = true, Name = "Example", ProjectCount = 1 },
+            Projects = { new SolutionProjectInfo { Id = "project-1", Name = "Example.Project" } }
+        };
+        var tools = new McpTools(new FakeBridgeService { Projects = expected });
+
+        var actual = await tools.GetProjectsInSolutionAsync(CancellationToken.None);
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
     public async Task ExposesOnlySanitizedBridgeError()
     {
         var tools = new McpTools(
@@ -73,6 +89,8 @@ public class McpToolsTests
 
         public VsCapabilitiesResult Capabilities { get; init; } = new();
 
+        public GetProjectsInSolutionResponse Projects { get; init; } = new();
+
         public BridgeServiceException? Error { get; init; }
 
         public Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken) =>
@@ -80,5 +98,8 @@ public class McpToolsTests
 
         public Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
             Error is null ? Task.FromResult(Capabilities) : Task.FromException<VsCapabilitiesResult>(Error);
+
+        public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
+            Error is null ? Task.FromResult(Projects) : Task.FromException<GetProjectsInSolutionResponse>(Error);
     }
 }

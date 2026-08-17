@@ -6,7 +6,7 @@ namespace VsDebugMcp.Host.Tests;
 public class McpStdioTests
 {
     [Fact]
-    public async Task ListsOnlyPhaseZeroToolsOverStdio()
+    public async Task ListsAvailableToolsOverStdio()
     {
         var hostDll = Path.Combine(
             FindRepositoryRoot(),
@@ -51,7 +51,7 @@ public class McpStdioTests
             .OrderBy(name => name)
             .ToArray();
 
-        Assert.Equal(["vs_capabilities", "vs_health"], names);
+        Assert.Equal(["vs_capabilities", "vs_get_projects_in_solution", "vs_health"], names);
 
         process.StandardInput.Close();
         await process.WaitForExitAsync(cancellation.Token);

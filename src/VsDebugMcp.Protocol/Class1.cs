@@ -13,6 +13,7 @@ public static class BridgeMethods
 	public const string Handshake = "handshake";
 	public const string Health = "health";
 	public const string Capabilities = "capabilities";
+	public const string GetProjectsInSolution = "getProjectsInSolution";
 	public const string Shutdown = "shutdown";
 }
 
@@ -23,6 +24,7 @@ public static class BridgeErrorCodes
 	public const string InvalidRequest = "invalid_request";
 	public const string Timeout = "timeout";
 	public const string Cancelled = "cancelled";
+	public const string SolutionStateUnavailable = "solution_state_unavailable";
 	public const string InternalError = "internal_error";
 }
 

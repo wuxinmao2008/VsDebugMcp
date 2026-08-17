@@ -77,3 +77,82 @@ public sealed class ShutdownResponse
     [DataMember(Name = "accepted", Order = 1)]
     public bool Accepted { get; set; }
 }
+
+[DataContract]
+public sealed class GetProjectsInSolutionResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "solution", Order = 2)]
+    public SolutionInfo Solution { get; set; } = new();
+
+    [DataMember(Name = "projects", Order = 3)]
+    public List<SolutionProjectInfo> Projects { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class SolutionInfo
+{
+    [DataMember(Name = "isOpen", Order = 1)]
+    public bool IsOpen { get; set; }
+
+    [DataMember(Name = "name", Order = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "filePath", Order = 3)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "directory", Order = 4)]
+    public string Directory { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectCount", Order = 5)]
+    public int ProjectCount { get; set; }
+}
+
+[DataContract]
+public sealed class SolutionProjectInfo
+{
+    [DataMember(Name = "id", Order = 1)]
+    public string Id { get; set; } = string.Empty;
+
+    [DataMember(Name = "name", Order = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectFilePath", Order = 3)]
+    public string ProjectFilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectDirectory", Order = 4)]
+    public string ProjectDirectory { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectGuid", Order = 5)]
+    public string ProjectGuid { get; set; } = string.Empty;
+
+    [DataMember(Name = "typeGuid", Order = 6)]
+    public string TypeGuid { get; set; } = string.Empty;
+
+    [DataMember(Name = "kind", Order = 7)]
+    public string Kind { get; set; } = "project";
+
+    [DataMember(Name = "isLoaded", Order = 8)]
+    public bool IsLoaded { get; set; } = true;
+
+    [DataMember(Name = "isUnsupported", Order = 9)]
+    public bool IsUnsupported { get; set; }
+}
+
+[DataContract]
+public sealed class BridgeWarning
+{
+    [DataMember(Name = "code", Order = 1)]
+    public string Code { get; set; } = string.Empty;
+
+    [DataMember(Name = "message", Order = 2)]
+    public string Message { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectId", Order = 3, EmitDefaultValue = false)]
+    public string? ProjectId { get; set; }
+}

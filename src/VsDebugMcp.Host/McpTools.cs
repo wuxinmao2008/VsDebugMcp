@@ -35,6 +35,16 @@ public sealed class McpTools
     public Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
         InvokeAsync(() => _bridgeService.GetCapabilitiesAsync(cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_get_projects_in_solution",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns loaded projects in the currently open Visual Studio solution, excluding solution folders and unloaded projects.")]
+    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
+        InvokeAsync(() => _bridgeService.GetProjectsInSolutionAsync(cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

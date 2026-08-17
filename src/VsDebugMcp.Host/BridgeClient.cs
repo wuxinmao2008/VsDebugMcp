@@ -47,6 +47,12 @@ public sealed class BridgeClient : IAsyncDisposable
     public Task<CapabilitiesResponse> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
         CallAsync<object, CapabilitiesResponse>(BridgeMethods.Capabilities, new object(), cancellationToken);
 
+    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
+        CallAsync<object, GetProjectsInSolutionResponse>(
+            BridgeMethods.GetProjectsInSolution,
+            new object(),
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

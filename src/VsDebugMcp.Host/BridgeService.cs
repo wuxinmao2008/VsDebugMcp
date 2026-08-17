@@ -9,6 +9,8 @@ public interface IBridgeService
     Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken);
 
     Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken);
+
+    Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -42,6 +44,11 @@ public sealed class BridgeService : IBridgeService
                     Capabilities = capabilities.Capabilities
                 };
             },
+            cancellationToken);
+
+    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            client => client.GetProjectsInSolutionAsync(cancellationToken),
             cancellationToken);
 
     private async Task<T> ExecuteAsync<T>(
@@ -125,6 +132,11 @@ public sealed class BridgeServiceException : Exception
                 exception.Code,
                 "The Visual Studio bridge request was cancelled.",
                 true,
+                exception),
+            BridgeErrorCodes.SolutionStateUnavailable => new(
+                exception.Code,
+                "The Visual Studio solution state is unavailable.",
+                exception.Retryable,
                 exception),
             _ => new(
                 BridgeErrorCodes.InternalError,

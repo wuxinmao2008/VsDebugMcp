@@ -55,4 +55,43 @@ public class BridgeClientTests
         Assert.Equal(BridgeErrorCodes.BridgeUnavailable, exception.Code);
         Assert.True(exception.Retryable);
     }
+
+    [Fact]
+    public async Task GetsProjectsInSolutionAgainstPipeServer()
+    {
+        var pipeName = $"VsDebugMcp.Tests.{Guid.NewGuid():N}";
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var server = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(cancellation.Token);
+            var request = await PipeMessageFraming.ReadAsync<BridgeRequest>(server, cancellation.Token);
+            Assert.Equal(BridgeMethods.GetProjectsInSolution, request.Method);
+
+            var response = BridgeResponse.Success(
+                request.RequestId,
+                new GetProjectsInSolutionResponse
+                {
+                    VsInstanceId = "1234",
+                    Solution = new SolutionInfo { IsOpen = true, Name = "Example", ProjectCount = 1 },
+                    Projects = { new SolutionProjectInfo { Id = "project-1", Name = "Example.Project" } }
+                });
+            await PipeMessageFraming.WriteAsync(server, response, cancellation.Token);
+        }, cancellation.Token);
+
+        await using var client = new BridgeClient(pipeName);
+        await client.ConnectAsync(TimeSpan.FromSeconds(2), cancellation.Token);
+        var result = await client.GetProjectsInSolutionAsync(cancellation.Token);
+
+        Assert.True(result.Solution.IsOpen);
+        Assert.Single(result.Projects);
+        Assert.Equal("Example.Project", result.Projects[0].Name);
+        await serverTask;
+    }
 }
