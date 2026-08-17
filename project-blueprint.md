@@ -3,10 +3,81 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 2026 / VS 18.x 提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：制定项目整体技术选型、架构与分阶段蓝图。
+- 阶段：Phase 0 已完成，Phase 1 最小 IDE 闭环实施中；项目、构建生命周期和 Build Output 已完成在线验收。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 能力范围：构建/编译、启动/附加调试与断点、错误列表/输出窗口、测试发现与测试运行、代码搜索/文件读取/补丁编辑。
 - 运行边界：第一阶段仅本机使用，优先 `Named Pipe` 或 `localhost + 短期 token`，不做远程开放。
+
+## 实施进度（2026-08-17）
+
+### 已完成并在线验收
+
+- Phase 0A：Console Host ↔ Named Pipe ↔ VSIX Bridge。
+- Phase 0B：标准 MCP stdio Host，基于官方 C# MCP SDK。
+- `vs_health`
+- `vs_capabilities`
+- `vs_get_projects_in_solution`
+- `vs_run_build`
+- `vs_get_build_status`
+- `vs_cancel_build`
+- `vs_get_output_window_logs`
+
+当前在线链路：
+
+```text
+MCP Client
+  -> VsDebugMcp.Host (.NET 8 / stdio)
+  -> Named Pipe
+  -> VSIX Bridge
+  -> Visual Studio 18.9 Experimental Instance
+```
+
+已验证的构建行为：
+
+- `Debug|x64`、`Release|x64` solution build。
+- 异步状态：`starting → running → succeeded/failed/cancelled`。
+- 同一实例只允许一个活动构建。
+- 支持取消、并发拒绝、旧 handle 拒绝和非法配置拒绝。
+- Build task 状态由 VSIX 持有，不依赖短 Named Pipe 连接生命周期。
+
+已验证的 Build Output 行为：
+
+- 通过 EnvDTE 按 `BuildOutputPane_guid` 读取“输出 → 生成”窗格，不依赖本地化显示名称。
+- `vs_get_output_window_logs(source="build")` 在线返回 Qt/MSBuild 和 MSVC 原始输出。
+- 在线样本返回 `4428` 字符，包含 `C2039`、`C2065`、`C2355` 等编译错误和最终构建汇总。
+- `maxChars=200` 时正确返回尾部文本，并设置 `truncated=true`。
+
+### 已实现但尚未完成验收
+
+- `vs_get_errors`
+  - 已完成 Protocol、Bridge、Host、MCP tool 和基础过滤实现。
+  - 语义保持为当前 Error Table、仅 `ErrorSource.Build`、忽略 UI 筛选、不保存历史。
+  - 当前 Qt/C++ 工程的编译错误可见于 Build Output，但通过公开 Error Table source 路径仍返回空集合。
+  - 不允许静默降级为解析 Build Output；公开 API 无法可靠提供数据时应返回 `diagnostics_unavailable`。
+  - Build Output 已通过独立工具解决 agent 获取原始编译信息的当前需求，但 `vs_get_errors` 仍属于未完成项。
+
+### 当前 MCP capability
+
+1. `phase0.ipc`（保留的 stub capability）
+2. `vs_get_projects_in_solution`
+3. `vs_run_build`
+4. `vs_get_build_status`
+5. `vs_cancel_build`
+6. `vs_get_errors`
+7. `vs_get_output_window_logs`
+
+`vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
+
+### 自动化和部署状态
+
+- Protocol tests 最近一次完整运行：`8/8` 通过。
+- Host tests 最近一次完整运行：`16/16` 通过。
+- 后续已增加 Build Output DTO、tool forwarding 和 tool discovery 测试；最新完整 managed test run 待执行。
+- VSIX 已使用 VS 18 MSBuild 成功编译。
+- 已新增独立 VS Code 任务：
+  - `build: vsix`：只构建，不部署。
+  - `deploy: vsix`：执行 `Build;DeployVsixExtensionFiles` 并显式启用部署。
+- 已在线确认编译 DLL 与 Exp 安装副本 SHA-256 一致，解决了“构建成功但安装目录未更新”的问题。
 
 ## 核心依据
 
@@ -157,6 +228,8 @@ MCP Client / Agent
 
 目标：证明 MCP Host 能和 VSIX Bridge 通信。
 
+状态：**已完成**。
+
 任务：
 
 1. 创建 OOP MCP Host，暴露 `vs_capabilities` 和 health/version 工具。
@@ -176,15 +249,17 @@ MCP Client / Agent
 
 目标：让 agent 完成“看项目 → 构建 → 看错误 → 读文件/搜索”的闭环。
 
+状态：**进行中**。
+
 任务：
 
-1. `vs_get_projects_in_solution`
-2. `vs_get_files_in_project`
-3. `vs_run_build`
-4. `vs_get_errors`
-5. `vs_get_output_window_logs`
-6. `vs_read_file`
-7. `vs_file_search`
+1. ✅ `vs_get_projects_in_solution`
+2. ⬜ `vs_get_files_in_project`
+3. ✅ `vs_run_build`
+4. 🔶 `vs_get_errors`：已实现，Qt/C++ Error Table 在线验收未通过。
+5. ✅ `vs_get_output_window_logs`
+6. ⬜ `vs_read_file`
+7. ⬜ `vs_file_search`
 
 验收：
 
@@ -329,10 +404,11 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 
 ## 下一步
 
-建议下一步进入 Phase 0 POC 设计：
-
-1. 设计仓库项目结构。
-2. 明确 OOP MCP Host 与 VSIX Bridge 的 IPC 协议。
-3. 选择第一个最小工具：`vs_capabilities`。
-4. 选择第二个工具：`vs_get_projects_in_solution`。
-5. 建立错误模型和安全策略骨架。
+1. 由用户运行最新 managed tests，覆盖新增的 Build Output DTO、Bridge RPC 和 MCP tool schema。
+2. 将 `vs_get_errors` 的空集合误判收紧为稳定的 `diagnostics_unavailable`，继续研究 Qt/C++ Error List 的公开数据源，不使用输出解析 fallback。
+3. 继续 Phase 1 低风险工具，优先顺序：
+  - `vs_get_files_in_project`
+  - `vs_read_file`
+  - `vs_file_search`
+4. 为 Build Output 增加可选的 build handle/起始偏移关联，避免当前窗格包含多次历史构建内容。
+5. Phase 1 最小闭环完成后，再进入 Debugger POC。

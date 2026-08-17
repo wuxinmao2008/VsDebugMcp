@@ -116,6 +116,8 @@ Use the following workflow whenever a change affects the VSIX Bridge, MCP tool d
 
 1. The agent reads the current implementation, modifies the code, and runs non-deployment diagnostics and automated tests where possible.
 2. Treat compilation, VSIX deployment, Visual Studio startup, and MCP tool discovery as separate states. A successful compile does not prove that the running Visual Studio instance loaded the new extension.
+  - `build: vsix` compiles and packages only.
+  - `deploy: vsix` runs `Build;DeployVsixExtensionFiles` and is the task used for manual Experimental Instance deployment.
 3. Before a manual reload is required, use a user-facing question popup. State exactly which actions are needed:
   - close the relevant Visual Studio or experimental instance;
   - rebuild and deploy the VSIX;
