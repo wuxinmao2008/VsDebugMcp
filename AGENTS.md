@@ -110,6 +110,31 @@ Initial debugger candidates:
 - Keep changes focused; do not refactor unrelated code.
 - Validate builds/tests after meaningful code changes when a runnable project exists.
 
+## VSIX Deployment and Online Acceptance Workflow
+
+Use the following workflow whenever a change affects the VSIX Bridge, MCP tool definitions, shared Protocol assembly, or any code loaded by a running Visual Studio instance:
+
+1. The agent reads the current implementation, modifies the code, and runs non-deployment diagnostics and automated tests where possible.
+2. Treat compilation, VSIX deployment, Visual Studio startup, and MCP tool discovery as separate states. A successful compile does not prove that the running Visual Studio instance loaded the new extension.
+3. Before a manual reload is required, use a user-facing question popup. State exactly which actions are needed:
+  - close the relevant Visual Studio or experimental instance;
+  - rebuild and deploy the VSIX;
+  - restart the intended instance;
+  - open the solution required for acceptance;
+  - reload the MCP Host/client when tool definitions changed.
+4. Do not autonomously close or restart Visual Studio, deploy the VSIX, or launch the experimental instance when the user is expected to perform those steps. Wait for explicit confirmation that deployment and startup are complete.
+5. Visual Studio must be closed before replacing deployed extension assemblies. File-lock deployment failures can leave zero-byte or partially extracted manifests in the experimental extension directory.
+6. If deployment reports `VSSDK1081`, `FindInstalledExtension`, an invalid manifest, or a locked extension assembly, distinguish source/build output from the installed copy. Inspect the experimental extension directory, identify the damaged deployment, and ask the user to clean and redeploy it rather than repeatedly rebuilding.
+7. After the user confirms deployment, perform online acceptance through the registered MCP tools:
+  - call `vs_health`;
+  - call `vs_capabilities` and confirm the expected capabilities are present with `isStub=false`;
+  - verify the intended `vsInstanceId` and Visual Studio process;
+  - call the newly implemented tools against the solution opened by the user;
+  - verify success, failure, cancellation, concurrency, handle retention, and stable error paths that belong to the current phase.
+8. Prefer the registered MCP tools over ad hoc stdio scripts once the client has discovered the new tool definitions.
+9. Report automated-test results separately from live acceptance results. Include the actual configuration/platform, task handles, terminal state, and any acceptance gap that still requires user setup.
+10. Do not mark a live capability complete solely because unit tests or VSIX packaging passed. Completion requires evidence from the full path: MCP client → Host → Named Pipe → deployed VSIX → Visual Studio service.
+
 ## User Workflow Preference
 
 The user prefers planning and design to be preserved in repository Markdown files before major implementation steps. Keep project decisions traceable in existing design documents when the user requests documentation updates.
