@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="VsDebugMcp.Bridge.6ed802ff-0a17-4495-8da4-be5e7b9cfabc" Version="0.1.0" Language="en-US" Publisher="VsDebugMcp" />
+    <Identity Id="VsDebugMcp.Bridge.6ed802ff-0a17-4495-8da4-be5e7b9cfabc" Version="0.1.1.0" Language="en-US" Publisher="WuXinmao" />
     <DisplayName>VsDebugMcp Bridge</DisplayName>
-    <Description>Local Visual Studio bridge for the VsDebugMcp Phase 0A IPC prototype.</Description>
+    <Description>Local Visual Studio bridge for the VsDebugMcp MCP integration.</Description>
   </Metadata>
   <Installation ExtensionType="VSSDK">
-    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="|%CurrentProject%;GetInstallationTargetVersion|" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14,)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.14,)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.14,)" />
   </Installation>
   <Dependencies>
     <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.5,)" />
   </Dependencies>
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="|%CurrentProject%;GetPrerequisiteTargetVersion|" DisplayName="Visual Studio core editor" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.14,)" DisplayName="Visual Studio core editor" />
   </Prerequisites>
 </PackageManifest>

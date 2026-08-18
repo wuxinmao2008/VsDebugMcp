@@ -10,6 +10,11 @@
     <Nullable>enable</Nullable>
     <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DeployExtension>false</DeployExtension>
+    <DeployVSTemplates>false</DeployVSTemplates>
+    <RegisterOutputPackage>false</RegisterOutputPackage>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
   </ItemGroup>
