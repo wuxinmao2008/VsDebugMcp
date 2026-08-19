@@ -25,10 +25,12 @@ internal sealed class ErrorListProvider
     private static readonly TimeSpan SnapshotQuietPeriod = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan SnapshotWaitTimeout = TimeSpan.FromSeconds(2);
     private readonly AsyncPackage _package;
+    private readonly string _vsInstanceId;
 
-    public ErrorListProvider(AsyncPackage package)
+    public ErrorListProvider(AsyncPackage package, string vsInstanceId)
     {
         _package = package;
+        _vsInstanceId = vsInstanceId;
     }
 
     public async Task<GetErrorsResponse> GetErrorsAsync(
@@ -111,7 +113,7 @@ internal sealed class ErrorListProvider
             var returned = diagnostics.Take(filters.MaxCount).ToList();
             return new GetErrorsResponse
             {
-                VsInstanceId = Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+                VsInstanceId = _vsInstanceId,
                 BuildTaskId = request.BuildTaskId,
                 SnapshotAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 TotalCount = diagnostics.Count,

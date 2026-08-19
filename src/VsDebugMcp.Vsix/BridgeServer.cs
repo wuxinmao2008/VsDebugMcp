@@ -19,19 +19,24 @@ internal sealed class BridgeServer : IDisposable
     private const string LogSource = "VsDebugMcp";
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _sync = new();
+    private readonly HashSet<NamedPipeServerStream> _activePipes = new();
+    private readonly VisualStudioInstanceContext _instance;
     private readonly SolutionProjectProvider _solutionProjectProvider;
     private readonly SolutionBuildProvider _solutionBuildProvider;
     private readonly ErrorListProvider _errorListProvider;
     private readonly OutputWindowProvider _outputWindowProvider;
-    private NamedPipeServerStream? _activePipe;
     private Task? _serverTask;
 
-    public BridgeServer(AsyncPackage package, SolutionBuildProvider solutionBuildProvider)
+    public BridgeServer(
+        AsyncPackage package,
+        SolutionBuildProvider solutionBuildProvider,
+        VisualStudioInstanceContext instance)
     {
-        _solutionProjectProvider = new SolutionProjectProvider(package);
+        _instance = instance;
+        _solutionProjectProvider = new SolutionProjectProvider(package, instance.VsInstanceId);
         _solutionBuildProvider = solutionBuildProvider;
-        _errorListProvider = new ErrorListProvider(package);
-        _outputWindowProvider = new OutputWindowProvider(package);
+        _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
+        _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
     }
 
     public void Start()
@@ -44,8 +49,12 @@ internal sealed class BridgeServer : IDisposable
         _shutdown.Cancel();
         lock (_sync)
         {
-            _activePipe?.Dispose();
-            _activePipe = null;
+            foreach (var pipe in _activePipes)
+            {
+                pipe.Dispose();
+            }
+
+            _activePipes.Clear();
         }
 
         _shutdown.Dispose();
@@ -57,14 +66,14 @@ internal sealed class BridgeServer : IDisposable
         {
             try
             {
-                using var pipe = CreatePipe();
+                var pipe = CreatePipe();
                 lock (_sync)
                 {
-                    _activePipe = pipe;
+                    _activePipes.Add(pipe);
                 }
 
                 await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-                await ProcessConnectionAsync(pipe, cancellationToken).ConfigureAwait(false);
+                _ = ProcessConnectionAndDisposeAsync(pipe, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -78,13 +87,32 @@ internal sealed class BridgeServer : IDisposable
             {
                 ActivityLog.LogError(LogSource, BridgeErrorCodes.InternalError);
             }
-            finally
+        }
+    }
+
+    private async Task ProcessConnectionAndDisposeAsync(
+        NamedPipeServerStream pipe,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ProcessConnectionAsync(pipe, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            ActivityLog.LogError(LogSource, BridgeErrorCodes.InternalError);
+        }
+        finally
+        {
+            lock (_sync)
             {
-                lock (_sync)
-                {
-                    _activePipe = null;
-                }
+                _activePipes.Remove(pipe);
             }
+
+            pipe.Dispose();
         }
     }
 
@@ -352,7 +380,7 @@ internal sealed class BridgeServer : IDisposable
         }
     }
 
-    private static HandshakeResponse CreateHandshake()
+    private HandshakeResponse CreateHandshake()
     {
         var process = Process.GetCurrentProcess();
         return new HandshakeResponse
@@ -360,7 +388,7 @@ internal sealed class BridgeServer : IDisposable
             BridgeVersion = GetBridgeVersion(),
             VisualStudioVersion = GetVisualStudioVersion(process),
             VisualStudioProcessId = process.Id,
-            VsInstanceId = process.Id.ToString(CultureInfo.InvariantCulture)
+            VsInstanceId = _instance.VsInstanceId
         };
     }
 
@@ -440,7 +468,7 @@ internal sealed class BridgeServer : IDisposable
                 Retryable = retryable
             });
 
-    private static NamedPipeServerStream CreatePipe()
+    private NamedPipeServerStream CreatePipe()
     {
         var user = WindowsIdentity.GetCurrent().User
             ?? throw new InvalidOperationException("The current Windows user SID is unavailable.");
@@ -453,9 +481,9 @@ internal sealed class BridgeServer : IDisposable
                 AccessControlType.Allow));
 
         return new NamedPipeServerStream(
-            PipeNames.ForCurrentUser(),
+            _instance.BridgePipeName,
             PipeDirection.InOut,
-            1,
+            8,
             PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous,
             64 * 1024,

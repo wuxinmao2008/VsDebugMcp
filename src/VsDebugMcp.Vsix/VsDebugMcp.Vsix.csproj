@@ -8,6 +8,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
+    <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
+    <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>
@@ -22,4 +24,13 @@
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
   </ItemGroup>
+  <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">
+    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained true --output &quot;$(HostPublishDirectory)&quot;" />
+    <ItemGroup>
+      <Content Include="$(HostPublishDirectory)**\*" Exclude="$(HostPublishDirectory)**\*.pdb">
+        <IncludeInVSIX>true</IncludeInVSIX>
+        <VSIXSubPath>Host\%(RecursiveDir)</VSIXSubPath>
+      </Content>
+    </ItemGroup>
+  </Target>
 </Project>

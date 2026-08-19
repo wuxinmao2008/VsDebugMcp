@@ -15,10 +15,12 @@ internal sealed class OutputWindowProvider
     private const int DefaultMaxChars = 20000;
     private const int MaximumMaxChars = 500000;
     private readonly AsyncPackage _package;
+    private readonly string _vsInstanceId;
 
-    public OutputWindowProvider(AsyncPackage package)
+    public OutputWindowProvider(AsyncPackage package, string vsInstanceId)
     {
         _package = package;
+        _vsInstanceId = vsInstanceId;
     }
 
     public async Task<GetOutputWindowLogsResponse> GetLogsAsync(
@@ -28,7 +30,7 @@ internal sealed class OutputWindowProvider
         var requestedSource = request.Source;
         var source = string.IsNullOrWhiteSpace(requestedSource)
             ? "build"
-            : requestedSource.Trim().ToLowerInvariant();
+            : requestedSource!.Trim().ToLowerInvariant();
         var maxChars = request.MaxChars ?? DefaultMaxChars;
         if (source != "build" || maxChars < 1 || maxChars > MaximumMaxChars)
         {
@@ -44,7 +46,7 @@ internal sealed class OutputWindowProvider
             var returnedText = text.Length > maxChars ? text.Substring(text.Length - maxChars) : text;
             return new GetOutputWindowLogsResponse
             {
-                VsInstanceId = System.Diagnostics.Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+                VsInstanceId = _vsInstanceId,
                 Source = source,
                 CapturedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 TotalChars = text.Length,

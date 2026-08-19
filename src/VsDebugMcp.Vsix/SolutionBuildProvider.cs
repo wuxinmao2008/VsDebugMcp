@@ -15,6 +15,7 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 {
 	private const int MaxConfigurationValueLength = 256;
 	private readonly AsyncPackage _package;
+	private readonly string _vsInstanceId;
 	private readonly object _sync = new();
 	private IVsSolutionBuildManager2? _buildManager;
 	private DTE2? _dte;
@@ -22,9 +23,10 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 	private BuildTaskResponse? _build;
 	private bool _disposed;
 
-	public SolutionBuildProvider(AsyncPackage package)
+	public SolutionBuildProvider(AsyncPackage package, string vsInstanceId)
 	{
 		_package = package;
+		_vsInstanceId = vsInstanceId;
 	}
 
 	public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -73,7 +75,7 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		var build = new BuildTaskResponse
 		{
 			BuildTaskId = Guid.NewGuid().ToString("N"),
-			VsInstanceId = System.Diagnostics.Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+			VsInstanceId = _vsInstanceId,
 			State = BuildStates.Starting,
 			Configuration = configuration.Name,
 			Platform = configuration.PlatformName,

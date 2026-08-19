@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using VsDebugMcp.Protocol;
 
 namespace VsDebugMcp_Vsix;
 
@@ -16,14 +17,29 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
     public const string PackageGuidString = "e34c6f9d-54f1-4947-a2c4-9538e401bba9";
     private BridgeServer? _bridgeServer;
     private SolutionBuildProvider? _solutionBuildProvider;
+    private HostRegistrationManager? _hostRegistrationManager;
 
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress).ConfigureAwait(false);
-        _solutionBuildProvider = new SolutionBuildProvider(this);
+        var instance = VisualStudioInstanceContext.Create(this);
+        _solutionBuildProvider = new SolutionBuildProvider(this, instance.VsInstanceId);
         await _solutionBuildProvider.InitializeAsync(cancellationToken);
-        _bridgeServer = new BridgeServer(this, _solutionBuildProvider);
+        _bridgeServer = new BridgeServer(this, _solutionBuildProvider, instance);
         _bridgeServer.Start();
+        _hostRegistrationManager = new HostRegistrationManager(instance);
+        try
+        {
+            await _hostRegistrationManager.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            ActivityLog.LogError("VsDebugMcp", BridgeErrorCodes.RegistrationFailed);
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -31,6 +47,8 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
         ThreadHelper.ThrowIfNotOnUIThread();
         if (disposing)
         {
+            _hostRegistrationManager?.Dispose();
+            _hostRegistrationManager = null;
             _bridgeServer?.Dispose();
             _bridgeServer = null;
             _solutionBuildProvider?.Dispose();

@@ -15,10 +15,12 @@ internal sealed class SolutionProjectProvider
 {
 	private static readonly Guid SolutionFolderTypeGuid = new("66A26720-8FB5-11D2-AA7E-00C04F688DDE");
 	private readonly AsyncPackage _package;
+	private readonly string _vsInstanceId;
 
-	public SolutionProjectProvider(AsyncPackage package)
+	public SolutionProjectProvider(AsyncPackage package, string vsInstanceId)
 	{
 		_package = package;
+		_vsInstanceId = vsInstanceId;
 	}
 
 	public async Task<GetProjectsInSolutionResponse> GetProjectsAsync(CancellationToken cancellationToken)
@@ -31,7 +33,7 @@ internal sealed class SolutionProjectProvider
 		{
 			var response = new GetProjectsInSolutionResponse
 			{
-				VsInstanceId = ProcessId.ToString(CultureInfo.InvariantCulture),
+				VsInstanceId = _vsInstanceId,
 				Solution = ReadSolutionInfo(solution)
 			};
 
@@ -97,8 +99,6 @@ internal sealed class SolutionProjectProvider
 			throw new SolutionStateUnavailableException(exception);
 		}
 	}
-
-	private static int ProcessId => System.Diagnostics.Process.GetCurrentProcess().Id;
 
 	private static SolutionInfo ReadSolutionInfo(IVsSolution solution)
 	{
