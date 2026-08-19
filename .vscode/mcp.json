@@ -2,7 +2,8 @@
   "servers": {
     "vs-debug-mcp": {
       "type": "http",
-      "url": "pipe:%5C%5C.%5Cpipe%5CVsDebugMcp.Host.v1"
+      "url": "http://127.0.0.1:43259"
     }
-  }
+  },
+  "inputs": []
 }

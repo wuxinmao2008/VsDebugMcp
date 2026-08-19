@@ -80,34 +80,6 @@
 				"isDefault": true
 			},
 			"problemMatcher": "$msCompile"
-		},
-		{
-			"label": "run: host smoke",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"run",
-				"--project",
-				"${workspaceFolder}/src/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
-				"--",
-				"--smoke"
-			],
-			"problemMatcher": []
-		},
-		{
-			"label": "run: host mcp",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"run",
-				"--no-build",
-				"--project",
-				"${workspaceFolder}/src/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
-				"--",
-				"--mcp"
-			],
-			"isBackground": true,
-			"problemMatcher": []
 		}
 	]
 }

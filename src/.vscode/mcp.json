@@ -1,16 +1,9 @@
 {
   "servers": {
     "vs-debug-mcp": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--no-build",
-        "--project",
-        "${workspaceFolder}/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
-        "--",
-        "--mcp"
-      ]
+      "type": "http",
+      "url": "http://127.0.0.1:43259"
     }
-  }
+  },
+  "inputs": []
 }

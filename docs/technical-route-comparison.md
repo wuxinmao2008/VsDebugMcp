@@ -124,13 +124,13 @@
 - 对本项目意义：独立 MCP Server 可作为快速验证或 fallback，但若目标是完整 IDE 能力，仍可能需要 VSIX bridge。
 - 推荐把独立 MCP server 视为“host/transport 层”，而不是唯一访问 VS 的实现层。
 
-## 已批准的安装与传输演进（2026-08-18）
+## 已批准的安装与传输架构（2026-08-19）
 
 保留 Hybrid 的进程边界，但改变 Host 的分发和客户端 transport：
 
 ```text
 VS Code
-  -> Streamable HTTP over current-user Windows Named Pipe
+  -> Streamable HTTP at http://127.0.0.1:43259
   -> one shared OOP Host per Windows user
   -> vsInstanceId router
   -> per-instance Named Pipe RPC
@@ -139,12 +139,15 @@ VS Code
 
 - Host 仍是独立进程，不在 `devenv.exe` 中承载 MCP server。
 - Host 以 `win-x64` self-contained 产物随 VSIX 安装，由 VSIX 确保启动；不依赖 Visual Studio 私有 runtime。
-- VS Code 使用固定 `pipe:///pipe/...` MCP 配置，不需要单独安装或定位 Host，也不需要开放 localhost TCP 端口。
+- VS Code 使用固定 `http://127.0.0.1:43259` MCP 配置，不需要 command、Host 路径、输入项或动态端口发现。
 - Host 到 VSIX 的现有自定义 RPC 保留，但 pipe 名改为实例级；同一用户的多个 VS 实例由共享 Host 发现和路由。
 - 单实例时工具可省略 `vsInstanceId`，多实例时必须显式指定；新增实例列表和条件查找工具。
-- stdio transport 仅作为迁移期开发和自动化回归入口保留。
+- VSIX 使用当前用户 ACL Host 控制 pipe 完成注册、5 秒心跳和注销；15 秒无心跳时 Host 清理实例。
+- 最后一个实例移除后 Host 立即退出，下次 VSIX 加载时自动恢复。
+- 不保留 MCP stdio、MCP Named Pipe HTTP、动态端口或兼容开关。
+- 固定端口被未知进程占用时安全失败并记录诊断，不终止进程、不选择备用端口。
 
-实施前置闸门是验证 VS Code MCP client、C# MCP SDK Streamable HTTP 与 ASP.NET Core Kestrel Named Pipe transport 的完整往返；闸门未通过前不展开多实例和打包改造。
+Host 以 `win-x64` self-contained 产物随 VSIX 安装，由 VSIX 探测并确保启动；ASP.NET Core/Kestrel 不进入 `devenv.exe`。
 
 ### 来源
 

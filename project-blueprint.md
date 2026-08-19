@@ -6,16 +6,27 @@
 - 阶段：Phase 0 已完成，Phase 1 最小 IDE 闭环实施中；项目、构建生命周期和 Build Output 已完成在线验收。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 能力范围：构建/编译、启动/附加调试与断点、错误列表/输出窗口、测试发现与测试运行、代码搜索/文件读取/补丁编辑。
-- 运行边界：仅本机使用；VS Code 到共享 Host 使用当前用户 ACL 保护的 Windows Named Pipe HTTP，Host 到 VSIX Bridge 继续使用实例级 Named Pipe RPC，不开放 TCP 或远程访问。
+- 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43259` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
 - 部署形态：仅发布 `win-x64` self-contained Host，随 VSIX 安装并由 VSIX 确保启动，不依赖 Visual Studio 私有运行时或单独安装 Host。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-08-17）
+## 实施进度（2026-08-19）
+
+### 固定 HTTP 共享 Host 重构
+
+- Host 已改为仅监听 IPv4 loopback `127.0.0.1:43259` 的无状态 Streamable HTTP MCP 服务。
+- 已删除 MCP stdio、MCP Named Pipe HTTP、手工 smoke 启动入口和对应 VS Code 任务。
+- 已增加当前用户 Host 单例、Host 控制 pipe、实例注册表、`vs_list_instances`、`vs_find_instances` 和按 `vsInstanceId` 路由。
+- 每个 VS 实例使用 PID + process start time 派生会话 ID，并监听独立 Bridge pipe。
+- VSIX 已实现 Host 探测、自动启动、注册、每 5 秒心跳和有界注销；15 秒无心跳清理僵尸实例。
+- 最后一个实例注销或超时清理后 Host 立即退出。
+- Host 已按 `win-x64` self-contained 发布并包含在 VSIX 的 `Host/` 目录。
+- managed 与 VSIX Debug package 已构建通过；生成的 VSIX 已确认包含 `VsDebugMcp.Host.exe`。部署和完整在线验收尚未执行。
 
 ### 已完成并在线验收
 
 - Phase 0A：Console Host ↔ Named Pipe ↔ VSIX Bridge。
-- Phase 0B：标准 MCP stdio Host，基于官方 C# MCP SDK。
+- Phase 0B：标准 MCP Host 与工具发现，基于官方 C# MCP SDK。
 - `vs_health`
 - `vs_capabilities`
 - `vs_get_projects_in_solution`
@@ -24,21 +35,21 @@
 - `vs_cancel_build`
 - `vs_get_output_window_logs`
 
-当前在线链路：
+上一次已完成在线验收的链路：
 
 ```text
 MCP Client
-  -> VsDebugMcp.Host (.NET 8 / stdio)
+  -> VsDebugMcp.Host (.NET 8)
   -> Named Pipe
   -> VSIX Bridge
   -> Visual Studio 18.9 Experimental Instance
 ```
 
-已批准的目标链路：
+当前实现、待部署验收的目标链路：
 
 ```text
 VS Code / MCP Client
-  -> Streamable HTTP over current-user Windows Named Pipe
+  -> Streamable HTTP at 127.0.0.1:43259
   -> shared VsDebugMcp.Host (OOP / win-x64 self-contained)
   -> instance registry and vsInstanceId routing
   -> per-instance Named Pipe RPC
@@ -46,7 +57,7 @@ VS Code / MCP Client
   -> Visual Studio 18.x instance
 ```
 
-迁移期间保留 stdio 模式用于开发和回归测试，但安装后的默认接入不再要求 VS Code 直接启动 Host。
+VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径。
 
 已验证的构建行为：
 
@@ -113,7 +124,7 @@ VS Code / MCP Client
 | VS Bridge | VSIX Bridge | 负责访问当前 VS 实例、解决方案、调试器、输出窗口等 IDE 状态。 |
 | 高层 VS 能力 | `VisualStudio.Extensibility` | 适合项目、构建、启动等较现代 API。 |
 | 深层 VS 能力 | VSSDK / COM services | 用于调试器、错误列表、输出窗口等深层能力。 |
-| MCP Client Transport | Streamable HTTP over Windows Named Pipe | VS Code 只需固定 pipe URL；当前用户 ACL；无 TCP 端口冲突。 |
+| MCP Client Transport | Streamable HTTP over IPv4 loopback | VS Code 只需固定 `http://127.0.0.1:43259`；不需要 command、Host 路径或动态端口发现。 |
 | Host ↔ VSIX IPC | 每实例独立 Named Pipe RPC | 保留现有协议与进程隔离，同时支持多个 VS 实例。 |
 | Host 部署 | VSIX 内置 `win-x64` self-contained | 用户无需单独安装 Host 或 .NET Runtime。 |
 | VSIX 项目形态 | SDK-style VSIX | 适配 VS 18.x，项目结构更现代。 |
@@ -123,7 +134,7 @@ VS Code / MCP Client
 
 ```text
 MCP Client / Agent
-  └─ Streamable HTTP over user-scoped Windows Named Pipe
+  └─ Streamable HTTP at 127.0.0.1:43259
     └─ shared VsMcpHost (OOP / self-contained .NET)
           ├─ ToolRegistry
           ├─ CapabilityDiscovery
@@ -151,7 +162,8 @@ MCP Client / Agent
 - 每个 VSIX 使用 `PID + process start time` 生成会话级 `vsInstanceId`，并注册实例级 Bridge pipe。
 - 新增 `vs_list_instances` 与 `vs_find_instances`；查找支持实例 ID、PID、solution 名称和完整路径。
 - 只有一个活动实例时，实例绑定工具允许省略 `vsInstanceId`；存在多个实例时必须显式指定，禁止依赖 MCP transport session 保存默认实例。
-- 最后一个 VS 实例注销后，Host 等待 30 秒并再次确认无实例，再优雅退出。
+- VSIX 每 5 秒发送心跳；Host 在 15 秒无心跳后移除僵尸实例。
+- 最后一个 VS 实例注销或超时清理后，Host 立即优雅退出；下次 VSIX 加载时重新启动。
 - VSIX 配置页首版提供启用、自动启动和日志级别设置，并显示 Host、pipe URL、实例列表和连接诊断；不允许修改 Host 路径、pipe 名或 ACL。
 
 ## Provider 分层

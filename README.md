@@ -1,64 +1,92 @@
 # VsDebugMcp
 
-Visual Studio 2026 / VS 18.x MCP bridge prototype. Phase 0B exposes the validated local VSIX Bridge through a standard MCP stdio Host.
+Visual Studio 2026 / VS 18.x MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
 
-## Current scope
+## Architecture
 
-- `handshake`
-- `health`
-- `capabilities`
-- `shutdown`
-- Length-prefixed JSON framing
-- Current-user Named Pipe ACL
-- Structured bridge errors
-- Single Visual Studio instance
-- MCP stdio transport
+```text
+VS Code / MCP client
+	-> Streamable HTTP at http://127.0.0.1:43259
+	-> one shared VsDebugMcp.Host per Windows user
+	-> vsInstanceId registry and router
+	-> per-instance current-user Named Pipe RPC
+	-> Visual Studio VSIX Bridge
+```
+
+The VSIX packages a `win-x64` self-contained Host and ensures that it is running when Visual Studio loads. MCP clients do not launch the Host or need its installation path.
+
+Each Visual Studio process registers a session identity derived from its PID and process start time. Tools may omit `vsInstanceId` when one instance is registered; when multiple instances are registered, callers must select one explicitly.
+
+## Current capabilities
+
 - `vs_health`
 - `vs_capabilities`
-- `--smoke` diagnostics mode
+- `vs_list_instances`
+- `vs_find_instances`
+- `vs_get_projects_in_solution`
+- `vs_run_build`
+- `vs_get_build_status`
+- `vs_cancel_build`
+- `vs_get_errors`
+- `vs_get_output_window_logs`
 
-Project APIs, build control, test control, debugger control and file editing are not implemented yet.
+Debugger control, tests, file editing and remote access are not included yet.
 
 ## Projects
 
-- `src/VsDebugMcp.Protocol` — shared IPC contracts, framing and error model; targets `net8.0` and `netstandard2.0`.
-- `src/VsDebugMcp.Host` — .NET 8 MCP stdio Host, smoke runner and Named Pipe client.
-- `src/VsDebugMcp.Vsix` — SDK-style VSSDK Bridge and Named Pipe server for VS 18.5+.
-- `tests/VsDebugMcp.Protocol.Tests` — protocol and framing tests.
-- `tests/VsDebugMcp.Host.Tests` — Host client, MCP tools and stdio integration tests.
+- `src/VsDebugMcp.Protocol` — shared IPC contracts, framing, instance identity and error model; targets `net8.0` and `netstandard2.0`.
+- `src/VsDebugMcp.Host` — self-contained .NET 8 Streamable HTTP MCP Host, instance registry and Named Pipe Bridge client.
+- `src/VsDebugMcp.Vsix` — SDK-style VSSDK Bridge, Host launcher and Visual Studio instance registrar.
 
-## Build and test
+## VS Code configuration
+
+```json
+{
+	"servers": {
+		"vs-debug-mcp": {
+			"type": "http",
+			"url": "http://127.0.0.1:43259"
+		}
+	},
+	"inputs": []
+}
+```
+
+The Host listens only on IPv4 loopback. If port `43259` is occupied, startup fails safely and does not select another port or terminate the occupying process.
+
+## Lifecycle
+
+- A loaded VSIX probes the current-user Host control pipe.
+- If no compatible Host is running, the VSIX starts the packaged Host.
+- Every Visual Studio instance has an independent Bridge pipe.
+- The VSIX sends a heartbeat every 5 seconds.
+- The Host removes an instance after 15 seconds without a heartbeat.
+- The Host exits immediately after the final registered instance is removed.
+
+## Build
 
 Use the VS Code tasks:
 
-- `build: all`
-- `test: Phase 0B`
+- `build: managed`
 - `build: vsix`
-- `run: host smoke`
-- `run: host mcp`
+- `build: vsix: release`
+- `build: all`
+- `deploy: vsix`
 
-The VSIX project must be built with the Visual Studio 18 MSBuild installation because `Microsoft.VisualStudio.SDK.Build` is installed under Visual Studio rather than the standalone .NET SDK.
+The VSIX project must be built with the Visual Studio 18 MSBuild installation. Its build publishes the Host as `win-x64` self-contained and embeds it under `Host/` in the VSIX package.
 
-The generated package is located under `src/VsDebugMcp.Vsix/bin/Debug/vs2026_5/`.
+Ordinary builds do not deploy the extension. Deployment requires closing the relevant Visual Studio instance and running `deploy: vsix` explicitly.
 
-## Experimental instance validation
+## Validation status
 
-1. Open `VsDebugMcp.slnx` in Visual Studio 2026.
-2. Set `VsDebugMcp.Vsix` as the startup project.
-3. Start debugging to launch the Visual Studio experimental instance.
-4. Wait for the experimental instance to finish loading the extension.
-5. Run the `run: host smoke` task from this workspace.
-6. Confirm that the Host reports the Visual Studio version, Bridge health and the `phase0.ipc` stub capability.
-7. Close the experimental instance and confirm that a later Host invocation reports `bridge_unavailable` instead of hanging.
+The fixed HTTP/shared Host source builds successfully, and the generated VSIX contains the self-contained Host. Live acceptance still requires deploying the VSIX, restarting the intended Visual Studio instance and validating the complete MCP client → HTTP Host → instance router → Named Pipe → VSIX → Visual Studio path.
 
-## VS Code MCP validation
+## Security and privacy
 
-The workspace MCP configuration is stored in `.vscode/mcp.json` under the server name `vs-debug-mcp`.
+- MCP HTTP is bound only to `127.0.0.1:43259`.
+- Host control and Bridge pipes are restricted to the current Windows user.
+- Remote access is not supported.
+- The Host does not terminate unknown processes during port conflicts.
+- Logs must not include request payloads, credentials, environment variables or raw Visual Studio Copilot logs.
 
-1. Build the managed projects.
-2. Start the Visual Studio experimental instance with the Bridge enabled.
-3. Start `vs-debug-mcp` from the VS Code MCP server view.
-4. Confirm that `vs_health` and `vs_capabilities` are listed.
-5. Call both tools and verify the connected Visual Studio metadata.
-
-The project targets `vs2026_5`. The VSSDK project currently pins the public `Microsoft.VisualStudio.Sdk` package to `17.14.40265` because the VS 18 template's default preview package is not available from the configured public NuGet sources.
+The project targets `vs2026_5`. The VSIX currently pins `Microsoft.VisualStudio.Sdk` to `17.14.40265` while building with Visual Studio 18 MSBuild.

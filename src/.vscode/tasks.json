@@ -58,40 +58,12 @@
 		{
 			"label": "test: Phase 0B",
 			"type": "shell",
-			"command": "dotnet test '${workspaceFolder}/tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; dotnet test '${workspaceFolder}/../tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj'",
+			"command": "dotnet test '${workspaceFolder}/../tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; dotnet test '${workspaceFolder}/../tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj'",
 			"group": {
 				"kind": "test",
 				"isDefault": true
 			},
 			"problemMatcher": "$msCompile"
-		},
-		{
-			"label": "run: host smoke",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"run",
-				"--project",
-				"${workspaceFolder}/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
-				"--",
-				"--smoke"
-			],
-			"problemMatcher": []
-		},
-		{
-			"label": "run: host mcp",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"run",
-				"--no-build",
-				"--project",
-				"${workspaceFolder}/VsDebugMcp.Host/VsDebugMcp.Host.csproj",
-				"--",
-				"--mcp"
-			],
-			"isBackground": true,
-			"problemMatcher": []
 		}
 	]
 }
