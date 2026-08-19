@@ -56,6 +56,17 @@ public sealed class VisualStudioInstanceRegistryTests
         Assert.True(result.ShouldStop);
     }
 
+    [Fact]
+    public void HostSingleInstanceCanBeReacquiredAfterDispose()
+    {
+        var instance = HostSingleInstance.Acquire();
+        Assert.True(instance.Acquired);
+        instance.Dispose();
+
+        using var next = HostSingleInstance.Acquire();
+        Assert.True(next.Acquired);
+    }
+
     private static VisualStudioInstanceRegistry CreateRegistry() =>
         new(new VsHostOptions(), () => { });
 

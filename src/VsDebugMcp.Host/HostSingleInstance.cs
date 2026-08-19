@@ -4,11 +4,11 @@ namespace VsDebugMcp.Host;
 
 public sealed class HostSingleInstance : IDisposable
 {
-    private readonly Mutex? _mutex;
+    private readonly Semaphore? _semaphore;
 
-    private HostSingleInstance(Mutex? mutex, bool acquired)
+    private HostSingleInstance(Semaphore semaphore, bool acquired)
     {
-        _mutex = mutex;
+        _semaphore = semaphore;
         Acquired = acquired;
     }
 
@@ -16,19 +16,20 @@ public sealed class HostSingleInstance : IDisposable
 
     public static HostSingleInstance Acquire()
     {
-        var mutex = new Mutex(true, $@"Local\{PipeNames.ForHostControl()}.Mutex", out var createdNew);
-        return createdNew
-            ? new HostSingleInstance(mutex, true)
-            : new HostSingleInstance(mutex, false);
+        var semaphore = new Semaphore(
+            1,
+            1,
+            $@"Local\{PipeNames.ForHostControl()}.Semaphore");
+        return new HostSingleInstance(semaphore, semaphore.WaitOne(0));
     }
 
     public void Dispose()
     {
         if (Acquired)
         {
-            _mutex?.ReleaseMutex();
+            _semaphore?.Release();
         }
 
-        _mutex?.Dispose();
+        _semaphore?.Dispose();
     }
 }
