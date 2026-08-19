@@ -1,129 +1,85 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Runtime.Versioning;
 using VsDebugMcp.Host;
-using VsDebugMcp.Protocol;
 
-VsHostOptions options;
-try
+if (!OperatingSystem.IsWindows())
 {
-	options = HostCommandLine.Parse(args);
-}
-catch (ArgumentException exception)
-{
-	Console.Error.WriteLine(exception.Message);
-	PrintUsage(Console.Error);
+	Console.Error.WriteLine("VsDebugMcp.Host supports Windows only.");
 	return 2;
 }
 
-if (options.Mode == HostMode.Help)
+if (args.Length != 0)
 {
-	PrintUsage(Console.Out);
+	Console.Error.WriteLine("VsDebugMcp.Host does not accept command-line transport options.");
+	return 2;
+}
+
+using var singleInstance = HostSingleInstance.Acquire();
+if (!singleInstance.Acquired)
+{
 	return 0;
 }
 
-using var cancellation = new CancellationTokenSource();
+using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
 	eventArgs.Cancel = true;
-	cancellation.Cancel();
+	shutdown.Cancel();
 };
 
-if (options.Mode == HostMode.Http && !OperatingSystem.IsWindows())
+var options = new VsHostOptions();
+var registry = new VisualStudioInstanceRegistry(options, shutdown.Cancel);
+var controlServer = new HostControlServer(options, registry, shutdown.Cancel);
+var tools = new McpTools(new BridgeService(options, registry));
+
+var builder = WebApplication.CreateBuilder();
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
+builder.Configuration["AllowedHosts"] = "127.0.0.1";
+builder.WebHost.ConfigureKestrel(serverOptions =>
 {
-	Console.Error.WriteLine("Named Pipe HTTP transport is supported only on Windows.");
-	return 2;
-}
-
-return options.Mode switch
-{
-	HostMode.Smoke => await RunSmokeAsync(options, cancellation.Token),
-	HostMode.Http => await RunHttpAsync(options, cancellation.Token),
-	_ => await RunMcpAsync(options, cancellation.Token)
-};
-
-static async Task<int> RunMcpAsync(VsHostOptions options, CancellationToken cancellationToken)
-{
-	var builder = Host.CreateApplicationBuilder();
-	builder.Logging.ClearProviders();
-	builder.Logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
-
-	var tools = new McpTools(new BridgeService(options));
-	builder.Services
-		.AddMcpServer()
-		.WithStdioServerTransport()
-		.WithTools<McpTools>(tools);
-
-	await builder.Build().RunAsync(cancellationToken);
-	return 0;
-}
-
-[SupportedOSPlatform("windows")]
-static async Task<int> RunHttpAsync(VsHostOptions options, CancellationToken cancellationToken)
-{
-	var builder = WebApplication.CreateBuilder();
-	builder.Logging.ClearProviders();
-	builder.Logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
-	builder.WebHost.ConfigureKestrel(serverOptions =>
+	serverOptions.Listen(IPAddress.Loopback, VsHostOptions.HttpPort, listenOptions =>
 	{
-		serverOptions.ListenNamedPipe(options.McpPipeName, listenOptions =>
-		{
-			listenOptions.Protocols = HttpProtocols.Http1;
-		});
+		listenOptions.Protocols = HttpProtocols.Http1;
 	});
-	builder.WebHost.UseNamedPipes(namedPipeOptions => namedPipeOptions.CurrentUserOnly = true);
+});
+builder.Services
+	.AddMcpServer()
+	.WithHttpTransport(httpOptions => httpOptions.Stateless = true)
+	.WithTools<McpTools>(tools);
 
-	var tools = new McpTools(new BridgeService(options));
-	builder.Services
-		.AddMcpServer()
-		.WithHttpTransport(httpOptions => httpOptions.Stateless = true)
-		.WithTools<McpTools>(tools);
+var app = builder.Build();
+app.MapMcp();
 
-	var app = builder.Build();
-	app.MapMcp();
-	await app.RunAsync(cancellationToken);
+var controlTask = controlServer.RunAsync(shutdown.Token);
+var monitorTask = registry.MonitorAsync(shutdown.Token);
+
+try
+{
+	await app.RunAsync(shutdown.Token);
 	return 0;
 }
-
-static async Task<int> RunSmokeAsync(VsHostOptions options, CancellationToken cancellationToken)
+catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 {
+	return 0;
+}
+catch (IOException)
+{
+	Console.Error.WriteLine("host_port_unavailable: 127.0.0.1:43259 is unavailable.");
+	return 1;
+}
+finally
+{
+	shutdown.Cancel();
 	try
 	{
-		var service = new BridgeService(options);
-		var health = await service.GetHealthAsync(cancellationToken);
-		Console.WriteLine($"Bridge health: {health.Status} at {health.UtcTimestamp}.");
-
-		var capabilities = await service.GetCapabilitiesAsync(cancellationToken);
-		Console.WriteLine(
-			$"Connected to VS {capabilities.VisualStudioVersion} (PID {capabilities.VisualStudioProcessId}).");
-		foreach (var capability in capabilities.Capabilities)
-		{
-			Console.WriteLine($"Capability: {capability.Name} v{capability.Version} (stub={capability.IsStub}).");
-		}
-
-		return 0;
+		await Task.WhenAll(controlTask, monitorTask);
 	}
 	catch (OperationCanceledException)
 	{
-		Console.Error.WriteLine("Operation cancelled.");
-		return 2;
-	}
-	catch (BridgeServiceException exception)
-	{
-		Console.Error.WriteLine($"{exception.Code}: {exception.Message}");
-		return 1;
-	}
-	catch (Exception)
-	{
-		Console.Error.WriteLine($"{BridgeErrorCodes.InternalError}: The host request failed.");
-		return 1;
 	}
 }
-
-static void PrintUsage(TextWriter writer) => writer.WriteLine(
-	"Usage: VsDebugMcp.Host [--mcp|--http|--smoke] [--pipe <name>] [--mcp-pipe <name>] [--connect-timeout-seconds <1-30>]");

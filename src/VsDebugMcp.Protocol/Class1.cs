@@ -4,12 +4,16 @@ namespace VsDebugMcp.Protocol;
 
 public static class BridgeProtocol
 {
-	public const string Version = "1.0";
+	public const string Version = "2.0";
 	public const int MaxMessageBytes = 1024 * 1024;
 }
 
 public static class BridgeMethods
 {
+	public const string HostStatus = "hostStatus";
+	public const string RegisterInstance = "registerInstance";
+	public const string HeartbeatInstance = "heartbeatInstance";
+	public const string UnregisterInstance = "unregisterInstance";
 	public const string Handshake = "handshake";
 	public const string Health = "health";
 	public const string Capabilities = "capabilities";
@@ -26,6 +30,10 @@ public static class BridgeErrorCodes
 {
 	public const string ProtocolMismatch = "protocol_mismatch";
 	public const string BridgeUnavailable = "bridge_unavailable";
+	public const string InstanceNotFound = "instance_not_found";
+	public const string AmbiguousInstance = "ambiguous_instance";
+	public const string RegistrationFailed = "registration_failed";
+	public const string HostPortUnavailable = "host_port_unavailable";
 	public const string InvalidRequest = "invalid_request";
 	public const string Timeout = "timeout";
 	public const string Cancelled = "cancelled";

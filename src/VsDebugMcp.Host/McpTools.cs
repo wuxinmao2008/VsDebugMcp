@@ -22,8 +22,10 @@ public sealed class McpTools
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Checks whether the local Visual Studio bridge is available and healthy.")]
-    public Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.GetHealthAsync(cancellationToken));
+    public Task<VsHealthResult> GetHealthAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetHealthAsync(vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_capabilities",
@@ -32,8 +34,32 @@ public sealed class McpTools
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns the connected Visual Studio instance metadata and currently available bridge capabilities.")]
-    public Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.GetCapabilitiesAsync(cancellationToken));
+    public Task<VsCapabilitiesResult> GetCapabilitiesAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetCapabilitiesAsync(vsInstanceId, cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_list_instances",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Lists Visual Studio instances currently registered with the shared Host.")]
+    public Task<VsInstancesResult> ListInstancesAsync(CancellationToken cancellationToken) =>
+        InvokeAsync(() => _bridgeService.ListInstancesAsync(cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_find_instances",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Finds registered Visual Studio instances by instance ID, process ID, solution name, or solution path.")]
+    public Task<VsInstancesResult> FindInstancesAsync(
+        [Description("Optional case-insensitive search text. Omit it to return all registered instances.")] string? query = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.FindInstancesAsync(query, cancellationToken));
 
     [McpServerTool(
         Name = "vs_get_projects_in_solution",
@@ -42,8 +68,10 @@ public sealed class McpTools
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns loaded projects in the currently open Visual Studio solution, excluding solution folders and unloaded projects.")]
-    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.GetProjectsInSolutionAsync(cancellationToken));
+    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetProjectsInSolutionAsync(vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_run_build",
@@ -55,8 +83,9 @@ public sealed class McpTools
     public Task<BuildTaskResponse> RunBuildAsync(
         [Description("Optional solution configuration name, such as Debug or Release.")] string? configuration,
         [Description("Optional solution platform name, such as Any CPU or x64.")] string? platform,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
         CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.RunBuildAsync(configuration, platform, cancellationToken));
+        InvokeAsync(() => _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_get_build_status",
@@ -67,8 +96,9 @@ public sealed class McpTools
     [Description("Returns the current state of the most recently retained Visual Studio build task.")]
     public Task<BuildTaskResponse> GetBuildStatusAsync(
         [Description("The build task ID returned by vs_run_build.")] string buildTaskId,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
         CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.GetBuildStatusAsync(buildTaskId, cancellationToken));
+        InvokeAsync(() => _bridgeService.GetBuildStatusAsync(buildTaskId, vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_cancel_build",
@@ -79,8 +109,9 @@ public sealed class McpTools
     [Description("Requests cancellation of the active Visual Studio build task.")]
     public Task<CancelBuildResponse> CancelBuildAsync(
         [Description("The active build task ID returned by vs_run_build.")] string buildTaskId,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
         CancellationToken cancellationToken) =>
-        InvokeAsync(() => _bridgeService.CancelBuildAsync(buildTaskId, cancellationToken));
+        InvokeAsync(() => _bridgeService.CancelBuildAsync(buildTaskId, vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_get_errors",
@@ -95,6 +126,7 @@ public sealed class McpTools
         [Description("Optional case-insensitive exact project name filter.")] string? project = null,
         [Description("Optional full path or case-insensitive path suffix filter without glob syntax.")] string? file = null,
         [Description("Optional maximum result count from 1 through 1000. Defaults to 200.")] int? maxCount = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.GetErrorsAsync(
             buildTaskId,
@@ -102,6 +134,7 @@ public sealed class McpTools
             project,
             file,
             maxCount,
+            vsInstanceId,
             cancellationToken));
 
     [McpServerTool(
@@ -114,8 +147,9 @@ public sealed class McpTools
     public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
         [Description("Optional output source. The only supported value is build, which is also the default.")] string? source = null,
         [Description("Optional maximum number of trailing characters from 1 through 500000. Defaults to 20000.")] int? maxChars = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
-        InvokeAsync(() => _bridgeService.GetOutputWindowLogsAsync(source, maxChars, cancellationToken));
+        InvokeAsync(() => _bridgeService.GetOutputWindowLogsAsync(source, maxChars, vsInstanceId, cancellationToken));
 
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {

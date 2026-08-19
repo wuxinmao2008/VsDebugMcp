@@ -5,19 +5,32 @@ namespace VsDebugMcp.Protocol;
 
 public static class PipeNames
 {
-    public static string ForCurrentUser()
+    public static string ForHostControl() => $"VsDebugMcp.Host.Control.v2.{GetCurrentUserSuffix()}";
+
+    public static string ForVisualStudioInstance(string vsInstanceId)
     {
-        return $"VsDebugMcp.Bridge.v1.{GetCurrentUserSuffix()}";
+        if (string.IsNullOrWhiteSpace(vsInstanceId))
+        {
+            throw new ArgumentException("A Visual Studio instance ID is required.", nameof(vsInstanceId));
+        }
+
+        var suffix = Sanitize(vsInstanceId);
+        if (string.IsNullOrEmpty(suffix))
+        {
+            throw new ArgumentException("The Visual Studio instance ID contains no valid pipe name characters.", nameof(vsInstanceId));
+        }
+
+        return $"VsDebugMcp.Bridge.v2.{GetCurrentUserSuffix()}.{suffix}";
     }
-
-
-    public static string ForMcpHost() => "VsDebugMcp.Host.v1";
 
     private static string GetCurrentUserSuffix()
     {
-        var user = new string(Environment.UserName
-            .Where(character => char.IsLetterOrDigit(character) || character == '-' || character == '_')
-            .ToArray());
+        var user = Sanitize(Environment.UserName);
         return string.IsNullOrEmpty(user) ? "user" : user;
     }
+
+    private static string Sanitize(string value) => new(value
+        .Where(character => char.IsLetterOrDigit(character) || character == '-' || character == '_')
+        .Take(96)
+        .ToArray());
 }

@@ -331,3 +331,92 @@ public sealed class GetOutputWindowLogsResponse
     [DataMember(Name = "text", Order = 7)]
     public string Text { get; set; } = string.Empty;
 }
+
+[DataContract]
+public sealed class VisualStudioInstanceDescriptor
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "visualStudioProcessId", Order = 2)]
+    public int VisualStudioProcessId { get; set; }
+
+    [DataMember(Name = "processStartTimeUtcTicks", Order = 3)]
+    public long ProcessStartTimeUtcTicks { get; set; }
+
+    [DataMember(Name = "visualStudioVersion", Order = 4)]
+    public string VisualStudioVersion { get; set; } = string.Empty;
+
+    [DataMember(Name = "solutionName", Order = 5)]
+    public string SolutionName { get; set; } = string.Empty;
+
+    [DataMember(Name = "solutionFilePath", Order = 6)]
+    public string SolutionFilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "bridgePipeName", Order = 7)]
+    public string BridgePipeName { get; set; } = string.Empty;
+
+    [DataMember(Name = "registeredAtUtc", Order = 8)]
+    public string RegisteredAtUtc { get; set; } = string.Empty;
+
+    [DataMember(Name = "lastHeartbeatUtc", Order = 9)]
+    public string LastHeartbeatUtc { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class HostStatusResponse
+{
+    [DataMember(Name = "hostVersion", Order = 1)]
+    public string HostVersion { get; set; } = string.Empty;
+
+    [DataMember(Name = "protocolVersion", Order = 2)]
+    public string ProtocolVersion { get; set; } = BridgeProtocol.Version;
+
+    [DataMember(Name = "instances", Order = 3)]
+    public List<VisualStudioInstanceDescriptor> Instances { get; set; } = new();
+}
+
+[DataContract]
+public sealed class RegisterInstanceRequest
+{
+    [DataMember(Name = "instance", Order = 1)]
+    public VisualStudioInstanceDescriptor Instance { get; set; } = new();
+}
+
+[DataContract]
+public sealed class RegisterInstanceResponse
+{
+    [DataMember(Name = "accepted", Order = 1)]
+    public bool Accepted { get; set; }
+
+    [DataMember(Name = "heartbeatIntervalSeconds", Order = 2)]
+    public int HeartbeatIntervalSeconds { get; set; }
+}
+
+[DataContract]
+public sealed class HeartbeatInstanceRequest
+{
+    [DataMember(Name = "instance", Order = 1)]
+    public VisualStudioInstanceDescriptor Instance { get; set; } = new();
+}
+
+[DataContract]
+public sealed class HeartbeatInstanceResponse
+{
+    [DataMember(Name = "accepted", Order = 1)]
+    public bool Accepted { get; set; }
+}
+
+[DataContract]
+public sealed class UnregisterInstanceRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class UnregisterInstanceResponse
+{
+    [DataMember(Name = "removed", Order = 1)]
+    public bool Removed { get; set; }
+}

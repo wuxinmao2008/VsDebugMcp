@@ -6,20 +6,33 @@ namespace VsDebugMcp.Host;
 
 public interface IBridgeService
 {
-    Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken);
+    Task<VsHealthResult> GetHealthAsync(string? vsInstanceId, CancellationToken cancellationToken);
 
-    Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken);
+    Task<VsCapabilitiesResult> GetCapabilitiesAsync(string? vsInstanceId, CancellationToken cancellationToken);
 
-    Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken);
+    Task<VsInstancesResult> ListInstancesAsync(CancellationToken cancellationToken);
+
+    Task<VsInstancesResult> FindInstancesAsync(string? query, CancellationToken cancellationToken);
+
+    Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 
     Task<BuildTaskResponse> RunBuildAsync(
         string? configuration,
         string? platform,
+        string? vsInstanceId,
         CancellationToken cancellationToken);
 
-    Task<BuildTaskResponse> GetBuildStatusAsync(string buildTaskId, CancellationToken cancellationToken);
+    Task<BuildTaskResponse> GetBuildStatusAsync(
+        string buildTaskId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 
-    Task<CancelBuildResponse> CancelBuildAsync(string buildTaskId, CancellationToken cancellationToken);
+    Task<CancelBuildResponse> CancelBuildAsync(
+        string buildTaskId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 
     Task<GetErrorsResponse> GetErrorsAsync(
         string? buildTaskId,
@@ -27,30 +40,51 @@ public interface IBridgeService
         string? project,
         string? file,
         int? maxCount,
+        string? vsInstanceId,
         CancellationToken cancellationToken);
 
     Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
         string? source,
         int? maxChars,
+        string? vsInstanceId,
         CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
 {
     private readonly VsHostOptions _options;
+    private readonly VisualStudioInstanceRegistry _registry;
 
-    public BridgeService(VsHostOptions options)
+    public BridgeService(VsHostOptions options, VisualStudioInstanceRegistry registry)
     {
         _options = options;
+        _registry = registry;
     }
 
-    public Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken) =>
-        ExecuteAsync(
+    public async Task<VsHealthResult> GetHealthAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var selected = _registry.Resolve(vsInstanceId);
+        var health = await ExecuteAsync(
+            selected,
             client => client.GetHealthAsync(cancellationToken),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return new VsHealthResult
+        {
+            HostVersion = typeof(BridgeService).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            UtcTimestamp = DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            InstanceCount = _registry.List().Count,
+            SelectedInstance = selected,
+            Bridge = health
+        };
+    }
 
-    public Task<VsCapabilitiesResult> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
+    public Task<VsCapabilitiesResult> GetCapabilitiesAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             async client =>
             {
                 var handshake = await client.HandshakeAsync(cancellationToken).ConfigureAwait(false);
@@ -68,16 +102,27 @@ public sealed class BridgeService : IBridgeService
             },
             cancellationToken);
 
-    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(CancellationToken cancellationToken) =>
+    public Task<VsInstancesResult> ListInstancesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(new VsInstancesResult { Instances = _registry.List() });
+
+    public Task<VsInstancesResult> FindInstancesAsync(string? query, CancellationToken cancellationToken) =>
+        Task.FromResult(new VsInstancesResult { Instances = _registry.Find(query) });
+
+    public Task<GetProjectsInSolutionResponse> GetProjectsInSolutionAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.GetProjectsInSolutionAsync(cancellationToken),
             cancellationToken);
 
     public Task<BuildTaskResponse> RunBuildAsync(
         string? configuration,
         string? platform,
+        string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.RunBuildAsync(
                 new RunBuildRequest
                 {
@@ -89,15 +134,19 @@ public sealed class BridgeService : IBridgeService
 
     public Task<BuildTaskResponse> GetBuildStatusAsync(
         string buildTaskId,
+        string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.GetBuildStatusAsync(buildTaskId, cancellationToken),
             cancellationToken);
 
     public Task<CancelBuildResponse> CancelBuildAsync(
         string buildTaskId,
+        string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.CancelBuildAsync(buildTaskId, cancellationToken),
             cancellationToken);
 
@@ -107,8 +156,10 @@ public sealed class BridgeService : IBridgeService
         string? project,
         string? file,
         int? maxCount,
+        string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.GetErrorsAsync(
                 new GetErrorsRequest
                 {
@@ -124,8 +175,10 @@ public sealed class BridgeService : IBridgeService
     public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
         string? source,
         int? maxChars,
+        string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
             client => client.GetOutputWindowLogsAsync(
                 new GetOutputWindowLogsRequest
                 {
@@ -136,12 +189,13 @@ public sealed class BridgeService : IBridgeService
             cancellationToken);
 
     private async Task<T> ExecuteAsync<T>(
+        VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
         CancellationToken cancellationToken)
     {
         try
         {
-            await using var client = new BridgeClient(_options.PipeName);
+            await using var client = new BridgeClient(instance.BridgePipeName);
             await client.ConnectAsync(_options.ConnectTimeout, cancellationToken).ConfigureAwait(false);
             return await action(client).ConfigureAwait(false);
         }
@@ -196,6 +250,16 @@ public sealed class BridgeServiceException : Exception
                 exception.Code,
                 "The Visual Studio bridge is unavailable.",
                 true,
+                exception),
+            BridgeErrorCodes.InstanceNotFound => new(
+                exception.Code,
+                "The requested Visual Studio instance is not registered.",
+                true,
+                exception),
+            BridgeErrorCodes.AmbiguousInstance => new(
+                exception.Code,
+                "Multiple Visual Studio instances are registered; specify vsInstanceId.",
+                false,
                 exception),
             BridgeErrorCodes.ProtocolMismatch => new(
                 exception.Code,
