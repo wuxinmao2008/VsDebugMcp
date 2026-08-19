@@ -6,8 +6,4 @@
       <Deploy />
     </Project>
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj" />
-    <Project Path="tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj" />
-  </Folder>
 </Solution>
