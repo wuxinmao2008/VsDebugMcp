@@ -130,7 +130,7 @@
 
 ```text
 VS Code
-  -> Streamable HTTP at http://127.0.0.1:43259
+  -> Streamable HTTP at http://127.0.0.1:43260
   -> one shared OOP Host per Windows user
   -> vsInstanceId router
   -> per-instance Named Pipe RPC
@@ -139,7 +139,7 @@ VS Code
 
 - Host 仍是独立进程，不在 `devenv.exe` 中承载 MCP server。
 - Host 以 `win-x64` self-contained 产物随 VSIX 安装，由 VSIX 确保启动；不依赖 Visual Studio 私有 runtime。
-- VS Code 使用固定 `http://127.0.0.1:43259` MCP 配置，不需要 command、Host 路径、输入项或动态端口发现。
+- VS Code 使用固定 `http://127.0.0.1:43260` MCP 配置，不需要 command、Host 路径、输入项或动态端口发现。
 - Host 到 VSIX 的现有自定义 RPC 保留，但 pipe 名改为实例级；同一用户的多个 VS 实例由共享 Host 发现和路由。
 - 单实例时工具可省略 `vsInstanceId`，多实例时必须显式指定；新增实例列表和条件查找工具。
 - VSIX 使用当前用户 ACL Host 控制 pipe 完成注册、5 秒心跳和注销；15 秒无心跳时 Host 清理实例。

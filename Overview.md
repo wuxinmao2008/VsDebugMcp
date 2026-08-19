@@ -11,7 +11,7 @@ VsDebugMcp Bridge connects MCP-compatible clients to local Visual Studio 2026 / 
 - Read Visual Studio Error Table diagnostics
 - Read build output from the Visual Studio Output window
 - Communicate locally through an authenticated Named Pipe
-- Serve MCP clients at the fixed local URL `http://127.0.0.1:43259`
+- Serve MCP clients at the fixed local URL `http://127.0.0.1:43260`
 - Automatically start the packaged self-contained Host when the VSIX loads
 - Route tools to multiple Visual Studio instances through `vsInstanceId`
 
@@ -25,7 +25,7 @@ The VSIX provides the Visual Studio-side bridge and packages the Host. The MCP c
 
 1. Install the VsDebugMcp Bridge VSIX.
 2. Restart Visual Studio.
-3. Configure the MCP client with `http://127.0.0.1:43259` and `type: http`.
+3. Configure the MCP client with `http://127.0.0.1:43260` and `type: http`.
 4. Open a Visual Studio solution and verify `vs_health`, `vs_list_instances` and `vs_capabilities`.
 
 ## Requirements
@@ -36,7 +36,7 @@ The VSIX provides the Visual Studio-side bridge and packages the Host. The MCP c
 
 ## Security and Privacy
 
-VsDebugMcp Bridge is intended for local-only use. MCP HTTP listens only on `127.0.0.1:43259`; Host control and Visual Studio Bridge communication use Named Pipes protected by current-user access control. The extension does not provide remote Visual Studio access.
+VsDebugMcp Bridge is intended for local-only use. MCP HTTP listens only on `127.0.0.1:43260`; Host control and Visual Studio Bridge communication use Named Pipes protected by current-user access control. The extension does not provide remote Visual Studio access.
 
 Each VSIX sends a heartbeat every 5 seconds. The Host removes an instance after 15 seconds without a heartbeat and exits immediately when no registered Visual Studio instances remain.
 

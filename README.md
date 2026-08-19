@@ -6,7 +6,7 @@ Visual Studio 2026 / VS 18.x MCP integration using a shared out-of-process Host 
 
 ```text
 VS Code / MCP client
-	-> Streamable HTTP at http://127.0.0.1:43259
+	-> Streamable HTTP at http://127.0.0.1:43260
 	-> one shared VsDebugMcp.Host per Windows user
 	-> vsInstanceId registry and router
 	-> per-instance current-user Named Pipe RPC
@@ -45,14 +45,14 @@ Debugger control, tests, file editing and remote access are not included yet.
 	"servers": {
 		"vs-debug-mcp": {
 			"type": "http",
-			"url": "http://127.0.0.1:43259"
+			"url": "http://127.0.0.1:43260"
 		}
 	},
 	"inputs": []
 }
 ```
 
-The Host listens only on IPv4 loopback. If port `43259` is occupied, startup fails safely and does not select another port or terminate the occupying process.
+The Host listens only on IPv4 loopback. If port `43260` is occupied, startup fails safely and does not select another port or terminate the occupying process.
 
 ## Lifecycle
 
@@ -83,7 +83,7 @@ The fixed HTTP/shared Host source builds successfully, and the generated VSIX co
 
 ## Security and privacy
 
-- MCP HTTP is bound only to `127.0.0.1:43259`.
+- MCP HTTP is bound only to `127.0.0.1:43260`.
 - Host control and Bridge pipes are restricted to the current Windows user.
 - Remote access is not supported.
 - The Host does not terminate unknown processes during port conflicts.

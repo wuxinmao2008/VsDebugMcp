@@ -4,7 +4,7 @@ namespace VsDebugMcp.Host;
 
 public sealed class VsHostOptions
 {
-    public const int HttpPort = 43259;
+    public const int HttpPort = 43260;
 
     public string ControlPipeName { get; init; } = PipeNames.ForHostControl();
 

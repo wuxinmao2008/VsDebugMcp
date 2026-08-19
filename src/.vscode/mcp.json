@@ -2,7 +2,7 @@
   "servers": {
     "vs-debug-mcp": {
       "type": "http",
-      "url": "http://127.0.0.1:43259"
+      "url": "http://127.0.0.1:43260"
     }
   },
   "inputs": []

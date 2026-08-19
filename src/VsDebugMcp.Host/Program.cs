@@ -73,7 +73,7 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 }
 catch (IOException)
 {
-	Console.Error.WriteLine("host_port_unavailable: 127.0.0.1:43259 is unavailable.");
+	Console.Error.WriteLine("host_port_unavailable: 127.0.0.1:43260 is unavailable.");
 	return 1;
 }
 finally
