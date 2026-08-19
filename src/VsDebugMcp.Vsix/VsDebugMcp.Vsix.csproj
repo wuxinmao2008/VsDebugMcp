@@ -3,15 +3,19 @@
   <PropertyGroup>
     <TargetFrameworks>vs2026_5</TargetFrameworks>
     <GeneratePkgDefFile>True</GeneratePkgDefFile>
-    <DeployExtension>true</DeployExtension>
-    <VsixDeployOnDebug>true</VsixDeployOnDebug>
+    <DeployExtension>false</DeployExtension>
     <ExtensionType>VSSDK</ExtensionType>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <VsixDeployOnDebug>true</VsixDeployOnDebug>
+    <DebuggerFlavor>VsixDebugger</DebuggerFlavor>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DeployExtension>false</DeployExtension>
+    <VsixDeployOnDebug>false</VsixDeployOnDebug>
     <DeployVSTemplates>false</DeployVSTemplates>
     <RegisterOutputPackage>false</RegisterOutputPackage>
   </PropertyGroup>

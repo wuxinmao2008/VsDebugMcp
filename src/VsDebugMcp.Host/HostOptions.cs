@@ -5,6 +5,7 @@ namespace VsDebugMcp.Host;
 public enum HostMode
 {
     Mcp,
+    Http,
     Smoke,
     Help
 }
@@ -14,6 +15,8 @@ public sealed class VsHostOptions
     public HostMode Mode { get; init; } = HostMode.Mcp;
 
     public string PipeName { get; init; } = PipeNames.ForCurrentUser();
+
+    public string McpPipeName { get; init; } = PipeNames.ForMcpHost();
 
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(3);
 }
@@ -25,6 +28,7 @@ public static class HostCommandLine
         var mode = HostMode.Mcp;
         var modeSpecified = false;
         var pipeName = PipeNames.ForCurrentUser();
+        var mcpPipeName = PipeNames.ForMcpHost();
         var connectTimeout = TimeSpan.FromSeconds(3);
 
         for (var index = 0; index < args.Length; index++)
@@ -33,6 +37,9 @@ public static class HostCommandLine
             {
                 case "--mcp":
                     SetMode(HostMode.Mcp);
+                    break;
+                case "--http":
+                    SetMode(HostMode.Http);
                     break;
                 case "--smoke":
                     SetMode(HostMode.Smoke);
@@ -43,6 +50,9 @@ public static class HostCommandLine
                     break;
                 case "--pipe":
                     pipeName = ReadValue(args, ref index, "--pipe");
+                    break;
+                case "--mcp-pipe":
+                    mcpPipeName = ReadValue(args, ref index, "--mcp-pipe");
                     break;
                 case "--connect-timeout-seconds":
                     var value = ReadValue(args, ref index, "--connect-timeout-seconds");
@@ -62,6 +72,7 @@ public static class HostCommandLine
         {
             Mode = mode,
             PipeName = pipeName,
+            McpPipeName = mcpPipeName,
             ConnectTimeout = connectTimeout
         };
 

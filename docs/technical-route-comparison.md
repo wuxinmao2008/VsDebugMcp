@@ -124,6 +124,28 @@
 - 对本项目意义：独立 MCP Server 可作为快速验证或 fallback，但若目标是完整 IDE 能力，仍可能需要 VSIX bridge。
 - 推荐把独立 MCP server 视为“host/transport 层”，而不是唯一访问 VS 的实现层。
 
+## 已批准的安装与传输演进（2026-08-18）
+
+保留 Hybrid 的进程边界，但改变 Host 的分发和客户端 transport：
+
+```text
+VS Code
+  -> Streamable HTTP over current-user Windows Named Pipe
+  -> one shared OOP Host per Windows user
+  -> vsInstanceId router
+  -> per-instance Named Pipe RPC
+  -> VSIX Bridge in each Visual Studio instance
+```
+
+- Host 仍是独立进程，不在 `devenv.exe` 中承载 MCP server。
+- Host 以 `win-x64` self-contained 产物随 VSIX 安装，由 VSIX 确保启动；不依赖 Visual Studio 私有 runtime。
+- VS Code 使用固定 `pipe:///pipe/...` MCP 配置，不需要单独安装或定位 Host，也不需要开放 localhost TCP 端口。
+- Host 到 VSIX 的现有自定义 RPC 保留，但 pipe 名改为实例级；同一用户的多个 VS 实例由共享 Host 发现和路由。
+- 单实例时工具可省略 `vsInstanceId`，多实例时必须显式指定；新增实例列表和条件查找工具。
+- stdio transport 仅作为迁移期开发和自动化回归入口保留。
+
+实施前置闸门是验证 VS Code MCP client、C# MCP SDK Streamable HTTP 与 ASP.NET Core Kestrel Named Pipe transport 的完整往返；闸门未通过前不展开多实例和打包改造。
+
 ### 来源
 
 - https://learn.microsoft.com/en-us/dotnet/api/envdte.debugger.break?view=visualstudiosdk-2022

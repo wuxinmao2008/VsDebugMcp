@@ -5,6 +5,12 @@ namespace VsDebugMcp.Protocol.Tests;
 public class PipeMessageFramingTests
 {
     [Fact]
+    public void UsesFixedMcpHostPipeName()
+    {
+        Assert.Equal("VsDebugMcp.Host.v1", PipeNames.ForMcpHost());
+    }
+
+    [Fact]
     public async Task RoundTripsBridgeRequest()
     {
         var expected = new BridgeRequest

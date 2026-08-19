@@ -6,7 +6,9 @@
 - 阶段：Phase 0 已完成，Phase 1 最小 IDE 闭环实施中；项目、构建生命周期和 Build Output 已完成在线验收。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 能力范围：构建/编译、启动/附加调试与断点、错误列表/输出窗口、测试发现与测试运行、代码搜索/文件读取/补丁编辑。
-- 运行边界：第一阶段仅本机使用，优先 `Named Pipe` 或 `localhost + 短期 token`，不做远程开放。
+- 运行边界：仅本机使用；VS Code 到共享 Host 使用当前用户 ACL 保护的 Windows Named Pipe HTTP，Host 到 VSIX Bridge 继续使用实例级 Named Pipe RPC，不开放 TCP 或远程访问。
+- 部署形态：仅发布 `win-x64` self-contained Host，随 VSIX 安装并由 VSIX 确保启动，不依赖 Visual Studio 私有运行时或单独安装 Host。
+- 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
 ## 实施进度（2026-08-17）
 
@@ -31,6 +33,20 @@ MCP Client
   -> VSIX Bridge
   -> Visual Studio 18.9 Experimental Instance
 ```
+
+已批准的目标链路：
+
+```text
+VS Code / MCP Client
+  -> Streamable HTTP over current-user Windows Named Pipe
+  -> shared VsDebugMcp.Host (OOP / win-x64 self-contained)
+  -> instance registry and vsInstanceId routing
+  -> per-instance Named Pipe RPC
+  -> Visual Studio VSIX Bridge
+  -> Visual Studio 18.x instance
+```
+
+迁移期间保留 stdio 模式用于开发和回归测试，但安装后的默认接入不再要求 VS Code 直接启动 Host。
 
 已验证的构建行为：
 
@@ -97,7 +113,9 @@ MCP Client
 | VS Bridge | VSIX Bridge | 负责访问当前 VS 实例、解决方案、调试器、输出窗口等 IDE 状态。 |
 | 高层 VS 能力 | `VisualStudio.Extensibility` | 适合项目、构建、启动等较现代 API。 |
 | 深层 VS 能力 | VSSDK / COM services | 用于调试器、错误列表、输出窗口等深层能力。 |
-| IPC | Named Pipe 优先，localhost + token 备选 | 本机安全、低暴露面。 |
+| MCP Client Transport | Streamable HTTP over Windows Named Pipe | VS Code 只需固定 pipe URL；当前用户 ACL；无 TCP 端口冲突。 |
+| Host ↔ VSIX IPC | 每实例独立 Named Pipe RPC | 保留现有协议与进程隔离，同时支持多个 VS 实例。 |
+| Host 部署 | VSIX 内置 `win-x64` self-contained | 用户无需单独安装 Host 或 .NET Runtime。 |
 | VSIX 项目形态 | SDK-style VSIX | 适配 VS 18.x，项目结构更现代。 |
 | 安全模型 | 工具分级 + 确认 + 审计 + 脱敏 | 覆盖表达式求值、attach、写文件、命令执行等风险。 |
 
@@ -105,15 +123,17 @@ MCP Client
 
 ```text
 MCP Client / Agent
-  └─ MCP Transport
-      └─ VsMcpHost (OOP / standalone .NET)
+  └─ Streamable HTTP over user-scoped Windows Named Pipe
+    └─ shared VsMcpHost (OOP / self-contained .NET)
           ├─ ToolRegistry
           ├─ CapabilityDiscovery
+      ├─ VisualStudioInstanceRegistry
+      ├─ BridgeRouter
           ├─ SessionHandleStore
           ├─ PolicyAndAudit
-          └─ VsBridgeClient
-              └─ Named Pipe / local authenticated IPC
-                  └─ Visual Studio VSIX Bridge
+      └─ VsBridgeClient per vsInstanceId
+        └─ per-instance Named Pipe RPC
+          └─ Visual Studio VSIX Bridge instance
                       ├─ ExtensibilityProvider
                       ├─ VssdkProvider
                       ├─ BuildProvider
@@ -124,6 +144,15 @@ MCP Client / Agent
                       ├─ ProjectProvider
                       └─ FileSearchProvider
 ```
+
+## 共享 Host 与多实例规则
+
+- Host 按当前 Windows 用户保持单例，由任意已启用的 VSIX 实例确保启动。
+- 每个 VSIX 使用 `PID + process start time` 生成会话级 `vsInstanceId`，并注册实例级 Bridge pipe。
+- 新增 `vs_list_instances` 与 `vs_find_instances`；查找支持实例 ID、PID、solution 名称和完整路径。
+- 只有一个活动实例时，实例绑定工具允许省略 `vsInstanceId`；存在多个实例时必须显式指定，禁止依赖 MCP transport session 保存默认实例。
+- 最后一个 VS 实例注销后，Host 等待 30 秒并再次确认无实例，再优雅退出。
+- VSIX 配置页首版提供启用、自动启动和日志级别设置，并显示 Host、pipe URL、实例列表和连接诊断；不允许修改 Host 路径、pipe 名或 ACL。
 
 ## Provider 分层
 

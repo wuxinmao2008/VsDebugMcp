@@ -20,6 +20,7 @@
 				"/restore",
 				"/t:Build",
 				"/p:Configuration=Debug",
+				"/p:DeployExtension=false",
 				"/m:1",
 				"/nr:false",
 				"/v:minimal"

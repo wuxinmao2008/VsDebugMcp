@@ -23,6 +23,15 @@ public class HostCommandLineTests
     }
 
     [Fact]
+    public void ParsesHttpMcpPipe()
+    {
+        var options = HostCommandLine.Parse(["--http", "--mcp-pipe", "test-mcp-pipe"]);
+
+        Assert.Equal(HostMode.Http, options.Mode);
+        Assert.Equal("test-mcp-pipe", options.McpPipeName);
+    }
+
+    [Fact]
     public void RejectsConflictingModes()
     {
         Assert.Throws<ArgumentException>(() => HostCommandLine.Parse(["--mcp", "--smoke"]));

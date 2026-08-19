@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.IO.Pipes;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace VsDebugMcp.Host.Tests;
@@ -98,10 +101,141 @@ public class McpStdioTests
         await stderrTask;
     }
 
+    [Fact]
+    public async Task ListsAvailableToolsOverNamedPipeHttp()
+    {
+        var hostDll = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VsDebugMcp.Host",
+            "bin",
+            "Debug",
+            "net8.0",
+            "VsDebugMcp.Host.dll");
+        Assert.True(File.Exists(hostDll), $"Host output not found: {hostDll}");
+
+        var pipeName = $"VsDebugMcp.Tests.{Guid.NewGuid():N}";
+        using var process = Process.Start(
+            new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"\"{hostDll}\" --http --mcp-pipe {pipeName}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }) ?? throw new InvalidOperationException("Could not start the MCP host.");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var handler = new SocketsHttpHandler
+        {
+            ConnectCallback = async (_, cancellationToken) =>
+            {
+                var pipe = new NamedPipeClientStream(
+                    ".",
+                    pipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                await pipe.ConnectAsync(cancellationToken);
+                return pipe;
+            }
+        };
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+
+        try
+        {
+            using var initialize = await PostMcpAsync(
+                client,
+                """
+                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"VsDebugMcp.Tests","version":"1.0"}}}
+                """,
+                cancellation.Token);
+            Assert.Equal("2.0", initialize.RootElement.GetProperty("jsonrpc").GetString());
+
+            using var toolsResponse = await PostMcpAsync(
+                client,
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}",
+                cancellation.Token);
+            var names = toolsResponse.RootElement
+                .GetProperty("result")
+                .GetProperty("tools")
+                .EnumerateArray()
+                .Select(tool => tool.GetProperty("name").GetString())
+                .OrderBy(name => name)
+                .ToArray();
+
+            Assert.Contains("vs_health", names);
+            Assert.Contains("vs_capabilities", names);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+
+            await process.WaitForExitAsync(CancellationToken.None);
+            await stdoutTask;
+            await stderrTask;
+        }
+    }
+
     private static async Task WriteMessageAsync(Process process, string json)
     {
         await process.StandardInput.WriteLineAsync(json.ReplaceLineEndings(string.Empty));
         await process.StandardInput.FlushAsync();
+    }
+
+    private static async Task<JsonDocument> PostMcpAsync(
+        HttpClient client,
+        string json,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/");
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+                request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2025-06-18");
+                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await client.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                return ParseMcpResponse(body);
+            }
+            catch (Exception exception) when (
+                exception is HttpRequestException or IOException or TimeoutException)
+            {
+                lastError = exception;
+                await Task.Delay(100, cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException("The Named Pipe MCP endpoint did not become available.", lastError);
+    }
+
+    private static JsonDocument ParseMcpResponse(string body)
+    {
+        var trimmed = body.Trim();
+        if (trimmed.StartsWith('{'))
+        {
+            return JsonDocument.Parse(trimmed);
+        }
+
+        var data = trimmed
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .FirstOrDefault(line => line.StartsWith("data:", StringComparison.Ordinal));
+        if (data is null)
+        {
+            throw new InvalidDataException("The MCP endpoint returned an unsupported response body.");
+        }
+
+        return JsonDocument.Parse(data["data:".Length..].TrimStart());
     }
 
     private static async Task<JsonDocument> ReadResponseAsync(
