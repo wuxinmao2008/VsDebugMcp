@@ -64,9 +64,10 @@ internal sealed class BridgeServer : IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            NamedPipeServerStream? pipe = null;
             try
             {
-                var pipe = CreatePipe();
+                pipe = CreatePipe();
                 lock (_sync)
                 {
                     _activePipes.Add(pipe);
@@ -74,6 +75,7 @@ internal sealed class BridgeServer : IDisposable
 
                 await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                 _ = ProcessConnectionAndDisposeAsync(pipe, cancellationToken);
+                pipe = null;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -86,6 +88,18 @@ internal sealed class BridgeServer : IDisposable
             catch (Exception)
             {
                 ActivityLog.LogError(LogSource, BridgeErrorCodes.InternalError);
+            }
+            finally
+            {
+                if (pipe is not null)
+                {
+                    lock (_sync)
+                    {
+                        _activePipes.Remove(pipe);
+                    }
+
+                    pipe.Dispose();
+                }
             }
         }
     }

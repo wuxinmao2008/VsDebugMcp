@@ -8,7 +8,7 @@ namespace VsDebugMcp_Vsix;
 
 internal sealed class HostControlClient
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMilliseconds(500);
 
     public Task<HostStatusResponse> GetStatusAsync(CancellationToken cancellationToken) =>
         CallAsync<HostStatusResponse>(BridgeMethods.HostStatus, null, cancellationToken);

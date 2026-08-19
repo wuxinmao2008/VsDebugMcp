@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VsDebugMcp.Host;
 
@@ -55,12 +56,15 @@ builder.Services
 var app = builder.Build();
 app.MapMcp();
 
-var controlTask = controlServer.RunAsync(shutdown.Token);
-var monitorTask = registry.MonitorAsync(shutdown.Token);
+Task? controlTask = null;
+Task? monitorTask = null;
 
 try
 {
-	await app.RunAsync(shutdown.Token);
+	await app.StartAsync(shutdown.Token);
+	controlTask = controlServer.RunAsync(shutdown.Token);
+	monitorTask = registry.MonitorAsync(shutdown.Token);
+	await app.WaitForShutdownAsync(shutdown.Token);
 	return 0;
 }
 catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
@@ -77,7 +81,9 @@ finally
 	shutdown.Cancel();
 	try
 	{
-		await Task.WhenAll(controlTask, monitorTask);
+		await Task.WhenAll(
+			controlTask ?? Task.CompletedTask,
+			monitorTask ?? Task.CompletedTask);
 	}
 	catch (OperationCanceledException)
 	{

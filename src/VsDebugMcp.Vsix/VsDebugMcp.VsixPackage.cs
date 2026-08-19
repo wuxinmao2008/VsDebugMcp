@@ -28,18 +28,7 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
         _bridgeServer = new BridgeServer(this, _solutionBuildProvider, instance);
         _bridgeServer.Start();
         _hostRegistrationManager = new HostRegistrationManager(instance);
-        try
-        {
-            await _hostRegistrationManager.StartAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            ActivityLog.LogError("VsDebugMcp", BridgeErrorCodes.RegistrationFailed);
-        }
+        _hostRegistrationManager.Start();
     }
 
     protected override void Dispose(bool disposing)

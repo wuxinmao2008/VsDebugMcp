@@ -55,7 +55,7 @@ internal sealed class SharedHostProcessManager
             return false;
         }
 
-        for (var attempt = 0; attempt < 40; attempt++)
+        for (var attempt = 0; attempt < 20; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try

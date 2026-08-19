@@ -14,6 +14,7 @@ internal sealed class HostRegistrationManager : IDisposable
     private readonly SharedHostProcessManager _hostManager = new();
     private readonly HostControlClient _client = new();
     private readonly CancellationTokenSource _shutdown = new();
+    private Task? _startupTask;
     private Task? _heartbeatTask;
 
     public HostRegistrationManager(VisualStudioInstanceContext instance)
@@ -21,22 +22,37 @@ internal sealed class HostRegistrationManager : IDisposable
         _instance = instance;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public void Start()
     {
-        if (!await _hostManager.EnsureStartedAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
+        _startupTask = Task.Run(() => StartAsync(_shutdown.Token));
+    }
 
-        var descriptor = await _instance.CreateDescriptorAsync(cancellationToken).ConfigureAwait(false);
-        var response = await _client.RegisterAsync(descriptor, cancellationToken).ConfigureAwait(false);
-        if (!response.Accepted)
+    private async Task StartAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await _hostManager.EnsureStartedAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            var descriptor = await _instance.CreateDescriptorAsync(cancellationToken).ConfigureAwait(false);
+            var response = await _client.RegisterAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            if (!response.Accepted)
+            {
+                ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
+                return;
+            }
+
+            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_shutdown.Token));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
         {
             ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
-            return;
         }
-
-        _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_shutdown.Token));
     }
 
     public void Dispose()
