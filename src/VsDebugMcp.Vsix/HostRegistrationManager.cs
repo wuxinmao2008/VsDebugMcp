@@ -31,14 +31,7 @@ internal sealed class HostRegistrationManager : IDisposable
     {
         try
         {
-            if (!await _hostManager.EnsureStartedAsync(cancellationToken).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            var descriptor = await _instance.CreateDescriptorAsync(cancellationToken).ConfigureAwait(false);
-            var response = await _client.RegisterAsync(descriptor, cancellationToken).ConfigureAwait(false);
-            if (!response.Accepted)
+            if (!await EnsureRegisteredAsync(cancellationToken).ConfigureAwait(false))
             {
                 ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
                 return;
@@ -84,10 +77,9 @@ internal sealed class HostRegistrationManager : IDisposable
             {
                 try
                 {
-                    if (await _hostManager.EnsureStartedAsync(cancellationToken).ConfigureAwait(false))
+                    if (!await EnsureRegisteredAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        var descriptor = await _instance.CreateDescriptorAsync(cancellationToken).ConfigureAwait(false);
-                        await _client.RegisterAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                        ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
                     }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -100,6 +92,40 @@ internal sealed class HostRegistrationManager : IDisposable
                 }
             }
         }
+    }
+
+    private async Task<bool> EnsureRegisteredAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                if (await _hostManager.EnsureStartedAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var descriptor = await _instance.CreateDescriptorAsync(cancellationToken).ConfigureAwait(false);
+                    var response = await _client.RegisterAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                    if (response.Accepted)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or TimeoutException or HostControlException)
+            {
+            }
+
+            if (attempt < 2)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return false;
     }
 
     private async Task UnregisterAsync()

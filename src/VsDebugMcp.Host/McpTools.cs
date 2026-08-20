@@ -81,10 +81,10 @@ public sealed class McpTools
         UseStructuredContent = true)]
     [Description("Starts an asynchronous build of the currently open Visual Studio solution. Omitted configuration or platform values use the active solution setting.")]
     public Task<BuildTaskResponse> RunBuildAsync(
-        [Description("Optional solution configuration name, such as Debug or Release.")] string? configuration,
-        [Description("Optional solution platform name, such as Any CPU or x64.")] string? platform,
-        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
-        CancellationToken cancellationToken) =>
+        [Description("Optional solution configuration name, such as Debug or Release.")] string? configuration = null,
+        [Description("Optional solution platform name, such as Any CPU or x64.")] string? platform = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken));
 
     [McpServerTool(
@@ -96,8 +96,8 @@ public sealed class McpTools
     [Description("Returns the current state of the most recently retained Visual Studio build task.")]
     public Task<BuildTaskResponse> GetBuildStatusAsync(
         [Description("The build task ID returned by vs_run_build.")] string buildTaskId,
-        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
-        CancellationToken cancellationToken) =>
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.GetBuildStatusAsync(buildTaskId, vsInstanceId, cancellationToken));
 
     [McpServerTool(
@@ -109,8 +109,8 @@ public sealed class McpTools
     [Description("Requests cancellation of the active Visual Studio build task.")]
     public Task<CancelBuildResponse> CancelBuildAsync(
         [Description("The active build task ID returned by vs_run_build.")] string buildTaskId,
-        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId,
-        CancellationToken cancellationToken) =>
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.CancelBuildAsync(buildTaskId, vsInstanceId, cancellationToken));
 
     [McpServerTool(

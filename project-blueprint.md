@@ -10,7 +10,7 @@
 - 部署形态：仅发布 `win-x64` self-contained Host，随 VSIX 安装并由 VSIX 确保启动，不依赖 Visual Studio 私有运行时或单独安装 Host。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-08-19）
+## 实施进度（2026-08-20）
 
 ### 固定 HTTP 共享 Host 重构
 
@@ -21,7 +21,15 @@
 - VSIX 已实现 Host 探测、自动启动、注册、每 5 秒心跳和有界注销；15 秒无心跳清理僵尸实例。
 - 最后一个实例注销或超时清理后 Host 立即退出。
 - Host 已按 `win-x64` self-contained 发布并包含在 VSIX 的 `Host/` 目录。
-- managed 与 VSIX Debug package 已构建通过；生成的 VSIX 已确认包含 `VsDebugMcp.Host.exe`。部署和完整在线验收尚未执行。
+- managed 与 VSIX Debug package 已构建通过；生成的 VSIX 已确认包含 `VsDebugMcp.Host.exe`。
+- 首轮在线验收确认 VSIX 从 Experimental Instance 安装目录自动启动 Host，Host 监听 `127.0.0.1:43260`，MCP `tools/list` 返回 10 个工具。
+- `vs_list_instances`、`vs_find_instances`、`vs_health`、`vs_capabilities`、单实例默认路由、显式 `vsInstanceId` 路由及 `instance_not_found` 已在线通过。
+- 在线实例为 VS 18.9 Experimental Instance，solution 为 `OvalPrintSrv.sln`；`vs_get_projects_in_solution` 返回 2 个项目项。
+- `Debug|x64` 构建在线返回 task handle，状态达到 `failed`，Build Output 成功返回 500 字符尾部并包含 MSVC `C3861` 与构建汇总。
+- `vs_get_errors` 继续稳定返回 `diagnostics_unavailable`，与当前 Error Table 公共数据源限制一致。
+- 最新部署已复验 MCP schema：`vs_run_build` 的 `configuration/platform/vsInstanceId` 以及 build status/cancel 的 `vsInstanceId` 均不再出现在 `required` 数组中。
+- 省略全部可选参数调用 `vs_run_build` 已在线成功，自动使用唯一实例和活动 `Debug|x64`；省略 `vsInstanceId` 的 status/cancel 路由均通过。
+- 构建取消在线状态为 `running → cancelling → cancelled`，`cancelRequested=true`；无效 build handle 稳定返回 `build_task_not_found`。
 
 ### 已完成并在线验收
 
@@ -45,7 +53,7 @@ MCP Client
   -> Visual Studio 18.9 Experimental Instance
 ```
 
-当前实现、待部署验收的目标链路：
+当前已完成首轮在线验收的目标链路：
 
 ```text
 VS Code / MCP Client
