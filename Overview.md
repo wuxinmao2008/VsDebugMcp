@@ -24,6 +24,12 @@
 - **输出与错误诊断**：直接读取 Visual Studio “输出”窗口中的构建日志（Build Output），方便 Agent 准确定位编译报错并提供修改建议。
 - **多实例支持**：同时打开多个 Visual Studio 窗口时，支持按实例进行明确路由，防止 Agent 误操作其他工程。
 
+## 实际运行效果
+
+下图展示了 AI Agent（以 VS Code Agent 为例）在执行代码变更后，自主调用 `vs_run_build` 触发构建，并通过 `vs_get_build_status` 轮询进度，结合 `vs_get_errors` 与 `vs_get_output_window_logs` 读取构建日志与诊断信息闭环：
+
+![AI Agent 工作流截图](assets/screenshot_01.png)
+
 ## MCP 工具列表
 
 插件向 AI Agent 暴露以下标准 MCP 工具：
@@ -89,6 +95,12 @@ If you use MCP-compatible AI agents (such as Claude Desktop, Cursor, VS Code, Cl
 - **IDE Build Control**: Start solution builds using active or specified configurations, track build progress asynchronously, or cancel ongoing builds.
 - **Output & Diagnostics**: Retrieve raw text from the Visual Studio Output Window (Build pane) so your agent can diagnose compiler errors accurately.
 - **Multi-Instance Support**: When multiple Visual Studio windows are open, tools can target specific instances to avoid conflicting operations.
+
+## Usage in Action
+
+The screenshot below demonstrates an AI agent (e.g., VS Code Agent) automatically triggering `vs_run_build`, tracking status with `vs_get_build_status`, and reading diagnostic messages and output logs via `vs_get_errors` and `vs_get_output_window_logs` to complete an edit-build-diagnose loop:
+
+![AI Agent in Action](assets/screenshot_01.png)
 
 ## Available MCP Tools
 

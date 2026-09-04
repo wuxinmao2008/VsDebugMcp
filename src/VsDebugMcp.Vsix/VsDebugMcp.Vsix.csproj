@@ -32,6 +32,10 @@
       <IncludeInVSIX>true</IncludeInVSIX>
       <VSIXSubPath>Assets</VSIXSubPath>
     </Content>
+    <Content Include="..\..\assets\screenshot_01.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <VSIXSubPath>assets</VSIXSubPath>
+    </Content>
     <Content Include="..\..\CHANGELOG.md">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>

@@ -30,6 +30,10 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_get_errors`
 - `vs_get_output_window_logs`
 
+### In action
+
+![VS Code Agent using VsDebugMcp](assets/screenshot_01.png)
+
 Debugger control, tests, file editing and remote access are not included yet.
 
 ## Projects
