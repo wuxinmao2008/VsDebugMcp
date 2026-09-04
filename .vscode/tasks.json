@@ -14,7 +14,7 @@
 		{
 			"label": "build: vsix",
 			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
 			"args": [
 				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
 				"/restore",
@@ -30,7 +30,7 @@
 		{
 			"label": "build: vsix: release",
 			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
 			"args": [
 				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
 				"/restore",
@@ -45,7 +45,7 @@
 		{
 			"label": "deploy: vsix",
 			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
 			"args": [
 				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
 				"/restore",

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using VsDebugMcp.Protocol;
+using VsDebugMcp_Vsix.Diagnostics;
 
 namespace VsDebugMcp_Vsix;
 
@@ -15,6 +16,7 @@ namespace VsDebugMcp_Vsix;
 public sealed class VsDebugMcp_VsixPackage : AsyncPackage
 {
     public const string PackageGuidString = "e34c6f9d-54f1-4947-a2c4-9538e401bba9";
+    private VsDiagnosticService? _diagnosticService;
     private BridgeServer? _bridgeServer;
     private SolutionBuildProvider? _solutionBuildProvider;
     private HostRegistrationManager? _hostRegistrationManager;
@@ -23,11 +25,19 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
     {
         await base.InitializeAsync(cancellationToken, progress).ConfigureAwait(false);
         var instance = VisualStudioInstanceContext.Create(this);
+
+        _diagnosticService = new VsDiagnosticService(this);
+        await _diagnosticService.InitializeAsync().ConfigureAwait(false);
+        _diagnosticService.LogInfo($"VsDebugMcp 扩展已加载。当前实例: {instance.VsInstanceId} (PID: {instance.ProcessId})");
+        _diagnosticService.ReportStatus(VsMcpServiceStatus.Starting, "正在初始化...");
+
         _solutionBuildProvider = new SolutionBuildProvider(this, instance.VsInstanceId);
         await _solutionBuildProvider.InitializeAsync(cancellationToken);
         _bridgeServer = new BridgeServer(this, _solutionBuildProvider, instance);
         _bridgeServer.Start();
-        _hostRegistrationManager = new HostRegistrationManager(instance);
+        _diagnosticService.LogInfo($"BridgeServer 命名管道服务已启动: {instance.BridgePipeName}");
+
+        _hostRegistrationManager = new HostRegistrationManager(instance, _diagnosticService);
         _hostRegistrationManager.Start();
     }
 
@@ -42,6 +52,8 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
             _bridgeServer = null;
             _solutionBuildProvider?.Dispose();
             _solutionBuildProvider = null;
+            _diagnosticService?.Dispose();
+            _diagnosticService = null;
         }
 
         base.Dispose(disposing);
