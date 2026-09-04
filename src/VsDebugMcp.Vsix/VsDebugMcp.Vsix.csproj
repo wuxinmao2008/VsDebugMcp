@@ -38,6 +38,9 @@
     <Content Include="..\..\Overview.md">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
+    <Content Include="..\..\LICENSE.txt">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
   </ItemGroup>
   <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">
     <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained false --output &quot;$(HostPublishDirectory)&quot;" />

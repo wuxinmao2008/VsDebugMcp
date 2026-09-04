@@ -14,7 +14,7 @@ Use the agreed hybrid architecture as the default direction:
 
 ```text
 MCP Client / Agent
-  -> VsMcpHost (OOP / standalone .NET)
+  -> VsMcpHost (OOP / Framework-Dependent .NET 8, reusing VS-bundled runtime)
   -> Named Pipe or authenticated localhost IPC
   -> Visual Studio VSIX Bridge
   -> VisualStudio.Extensibility + VSSDK/COM providers
@@ -109,6 +109,9 @@ Initial debugger candidates:
 - Keep comments short and only explain what code cannot show by itself.
 - Keep changes focused; do not refactor unrelated code.
 - Validate builds/tests after meaningful code changes when a runnable project exists.
+- **Build and Deployment Execution**: When building or packaging the VSIX, or when running commands that may hang or take long in background tasks, the agent must not wait indefinitely in background. Instead, pause, display the exact MSBuild/VS Code task command to the user, prompt them to run it locally, and resume only after the user reports the result.
+- **Packaging and Runtime Constraint**: The MCP Host must be published as framework-dependent (`win-x64`, `--self-contained false`), relying on the host Visual Studio 2026's bundled .NET 8 runtime (or system .NET 8) to keep VSIX package size under ~5 MB. Do not revert to self-contained bundling without explicit user approval.
+- **Version and Changelog Maintenance**: Keep `source.extension.vsixmanifest`, csproj `<Version>`, and `CHANGELOG.md` in sync whenever incrementing plugin versions.
 
 ## VSIX Deployment and Online Acceptance Workflow
 
