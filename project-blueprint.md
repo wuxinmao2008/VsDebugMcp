@@ -7,7 +7,7 @@
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 能力范围：构建/编译、启动/附加调试与断点、错误列表/输出窗口、测试发现与测试运行、代码搜索/文件读取/补丁编辑。
 - 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43260` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
-- 部署形态：仅发布 `win-x64` self-contained Host，随 VSIX 安装并由 VSIX 确保启动，不依赖 Visual Studio 私有运行时或单独安装 Host。
+- 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积从 ~103 MB 缩减至 ~2-4 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
 ## 实施进度（2026-08-20）
@@ -58,7 +58,7 @@ MCP Client
 ```text
 VS Code / MCP Client
   -> Streamable HTTP at 127.0.0.1:43260
-  -> shared VsDebugMcp.Host (OOP / win-x64 self-contained)
+  -> shared VsDebugMcp.Host (OOP / win-x64 Framework-Dependent)
   -> instance registry and vsInstanceId routing
   -> per-instance Named Pipe RPC
   -> Visual Studio VSIX Bridge

@@ -13,7 +13,7 @@ VS Code / MCP client
 	-> Visual Studio VSIX Bridge
 ```
 
-The VSIX packages a `win-x64` self-contained Host and ensures that it is running when Visual Studio loads. MCP clients do not launch the Host or need its installation path.
+The VSIX packages a `win-x64` Framework-Dependent Host (reusing Visual Studio 2026's bundled .NET 8 runtime or system .NET 8) and ensures that it is running when Visual Studio loads. MCP clients do not launch the Host or need its installation path.
 
 Each Visual Studio process registers a session identity derived from its PID and process start time. Tools may omit `vsInstanceId` when one instance is registered; when multiple instances are registered, callers must select one explicitly.
 
@@ -35,7 +35,7 @@ Debugger control, tests, file editing and remote access are not included yet.
 ## Projects
 
 - `src/VsDebugMcp.Protocol` — shared IPC contracts, framing, instance identity and error model; targets `net8.0` and `netstandard2.0`.
-- `src/VsDebugMcp.Host` — self-contained .NET 8 Streamable HTTP MCP Host, instance registry and Named Pipe Bridge client.
+- `src/VsDebugMcp.Host` — framework-dependent .NET 8 Streamable HTTP MCP Host, instance registry and Named Pipe Bridge client.
 - `src/VsDebugMcp.Vsix` — SDK-style VSSDK Bridge, Host launcher and Visual Studio instance registrar.
 
 ## VS Code configuration

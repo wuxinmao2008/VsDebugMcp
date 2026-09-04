@@ -53,15 +53,31 @@ internal sealed class SharedHostProcessManager
 
         try
         {
-            _diagnostics?.LogInfo($"正在启动 Host 进程: {hostPath}");
-            Process.Start(new ProcessStartInfo
+            _diagnostics?.LogInfo($"正在准备启动 Host 进程: {hostPath}");
+            var startInfo = new ProcessStartInfo
             {
                 FileName = hostPath,
                 WorkingDirectory = Path.GetDirectoryName(hostPath),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
-            });
+            };
+
+            var resolvedDotNetRoot = TryResolveDotNetRoot();
+            if (!string.IsNullOrEmpty(resolvedDotNetRoot))
+            {
+                _diagnostics?.LogInfo($"已为 Host 配置 .NET 运行时目录 (DOTNET_ROOT): {resolvedDotNetRoot}");
+                startInfo.EnvironmentVariables["DOTNET_ROOT"] = resolvedDotNetRoot;
+
+                var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                startInfo.EnvironmentVariables["PATH"] = resolvedDotNetRoot + Path.PathSeparator + currentPath;
+            }
+            else
+            {
+                _diagnostics?.LogInfo("未显式定位到独立 .NET 运行时目录，将使用系统环境启动 Host。");
+            }
+
+            Process.Start(startInfo);
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -97,6 +113,46 @@ internal sealed class SharedHostProcessManager
         _diagnostics?.LogError("等待 Host 上线超时（5秒）。可能原因：端口 43260 被占用或 Host 异常退出。", "host_start_timeout");
         _diagnostics?.ShowErrorBanner("Host 上线超时，请检查端口 43260 是否被占用", "host_start_timeout");
         return false;
+    }
+
+    private string? TryResolveDotNetRoot()
+    {
+        try
+        {
+            var devenvPath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(devenvPath))
+            {
+                var ideDir = Path.GetDirectoryName(devenvPath);
+                var common7Dir = ideDir != null ? Path.GetDirectoryName(ideDir) : null;
+                var vsInstallDir = common7Dir != null ? Path.GetDirectoryName(common7Dir) : null;
+                if (vsInstallDir != null)
+                {
+                    var vsDotnetRoot = Path.Combine(vsInstallDir, "dotnet", "net8.0", "runtime");
+                    if (File.Exists(Path.Combine(vsDotnetRoot, "dotnet.exe")))
+                    {
+                        return vsDotnetRoot;
+                    }
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            _diagnostics?.LogInfo($"探测 VS 内置 .NET 运行时异常: {exception.Message}");
+        }
+
+        var envDotNetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrEmpty(envDotNetRoot) && File.Exists(Path.Combine(envDotNetRoot, "dotnet.exe")))
+        {
+            return envDotNetRoot;
+        }
+
+        var defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet");
+        if (File.Exists(Path.Combine(defaultPath, "dotnet.exe")))
+        {
+            return defaultPath;
+        }
+
+        return null;
     }
 
     private static bool IsUnavailable(Exception exception) =>

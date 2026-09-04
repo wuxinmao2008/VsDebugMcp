@@ -1,14 +1,26 @@
 <!-- edited with XMLSpy v2014 (http://www.altova.com) by  () -->
 <Solution>
+	<Configurations>
+		<Platform Name="x64" />
+	</Configurations>
 	<Folder Name="/src/">
-		<Project Path="src/VsDebugMcp.Host/VsDebugMcp.Host.csproj"/>
-		<Project Path="src/VsDebugMcp.Protocol/VsDebugMcp.Protocol.csproj"/>
+		<Project Path="src/VsDebugMcp.Host/VsDebugMcp.Host.csproj">
+			<Platform Project="x64" />
+		</Project>
+		<Project Path="src/VsDebugMcp.Protocol/VsDebugMcp.Protocol.csproj">
+			<Platform Project="x64" />
+		</Project>
 		<Project Path="src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj">
-			<Deploy/>
+			<Platform Project="x64" />
+			<Deploy Solution="Debug|*" />
 		</Project>
 	</Folder>
 	<Folder Name="/tests/">
-		<Project Path="tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj"/>
-		<Project Path="tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj"/>
+		<Project Path="tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj">
+			<Platform Project="x64" />
+		</Project>
+		<Project Path="tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj">
+			<Platform Project="x64" />
+		</Project>
 	</Folder>
 </Solution>

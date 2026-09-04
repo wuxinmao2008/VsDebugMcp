@@ -10,6 +10,7 @@
     <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
     <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>
@@ -31,7 +32,7 @@
     </Content>
   </ItemGroup>
   <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">
-    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained true --output &quot;$(HostPublishDirectory)&quot;" />
+    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained false --output &quot;$(HostPublishDirectory)&quot;" />
     <ItemGroup>
       <Content Include="$(HostPublishDirectory)**\*" Exclude="$(HostPublishDirectory)**\*.pdb">
         <IncludeInVSIX>true</IncludeInVSIX>
