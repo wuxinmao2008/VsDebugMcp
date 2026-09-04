@@ -11,6 +11,8 @@
     <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
     <Platforms>AnyCPU;x64</Platforms>
+    <IsPackable>false</IsPackable>
+    <Version>0.1.3.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>
@@ -29,6 +31,12 @@
     <Content Include="..\..\logo.png">
       <IncludeInVSIX>true</IncludeInVSIX>
       <VSIXSubPath>Assets</VSIXSubPath>
+    </Content>
+    <Content Include="..\..\CHANGELOG.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\..\Overview.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
   </ItemGroup>
   <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">

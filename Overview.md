@@ -1,369 +1,139 @@
-# VsDebugMcp Bridge
+# VsDebugMcp
 
-**让 AI Agent 看见并使用你正在运行的 Visual Studio。**
+**Connect Visual Studio 2026 to AI Agents via Model Context Protocol (MCP).**
 
-VsDebugMcp Bridge 通过 MCP 将本地 Visual Studio 2026 / Visual Studio 18.x 的解决方案上下文、构建流程、错误信息和输出窗口连接到外部 AI Agent。
+通过 MCP 协议将 Visual Studio 2026 / 18.x 连接到外部 AI Agent，让 Agent 能够感知打开的解决方案、控制 IDE 构建，并直接读取编译输出与诊断信息。
 
 [简体中文](#简体中文) | [English](#english)
-
-> **Early Access** — 项目、构建生命周期和 Build Output 已完成端到端验证；Error Table 诊断仍受 Visual Studio 公共数据源限制。当前版本不包含调试器控制、测试运行、文件编辑或远程访问。
 
 ---
 
 <a id="简体中文"></a>
 
-## 不再让 Agent 猜测 Visual Studio 的状态
+## 这是你需要的插件吗？
 
-当代码真正由 Visual Studio、MSBuild、MSVC 或解决方案配置驱动时，仅访问工作区文件并不足以回答这些问题：
+如果你在使用支持 MCP 的 AI Agent（如 Claude Desktop、Cursor、VS Code、Cline 等），并且在 Visual Studio 中开发 C++ 或 .NET 项目：
 
-- 当前打开的是哪个解决方案、包含哪些项目？
-- Visual Studio 实际使用哪个配置和平台进行构建？
-- 构建仍在运行、已经成功，还是已经失败？
-- 编译器在 Visual Studio 的 Build Output 中报告了什么？
-- 同时打开多个 Visual Studio 实例时，Agent 应该操作哪一个？
+- **普通 Agent 的局限**：只能查看磁盘上的静态文件，或在终端盲目运行 `dotnet build` / `msbuild`，无法获知 IDE 当前加载的解决方案配置，也经常因为缺少环境上下文导致命令行构建失败。
+- **VsDebugMcp 的作用**：在 Visual Studio 与 AI Agent 之间搭建桥梁，让 Agent 可以直接调用 Visual Studio 内部的能力——读取当前工程结构、触发真实的 IDE 构建、获取详细的生成日志并分析编译错误。
 
-VsDebugMcp Bridge 为这些问题提供一条本机 MCP 通道，让 Agent 使用 Visual Studio 的真实状态，而不是根据文件和命令行结果进行猜测。
+## 核心功能
 
-> **演示素材占位**  
-> 建议 GIF：Agent 发现 Visual Studio 实例 → 列出解决方案项目 → 启动构建 → 返回失败状态和 Build Output。
+- **解决方案与项目感知**：让 Agent 查询 Visual Studio 当前打开的解决方案、包含的项目列表及活动配置（Debug/Release、x64 等）。
+- **IDE 构建控制**：支持通过活动配置或指定配置发起构建、异步轮询构建进度、随时取消正在执行的构建。
+- **输出与错误诊断**：直接读取 Visual Studio “输出”窗口中的构建日志（Build Output），方便 Agent 准确定位编译报错并提供修改建议。
+- **多实例支持**：同时打开多个 Visual Studio 窗口时，支持按实例进行明确路由，防止 Agent 误操作其他工程。
 
-## 你可以做什么
+## MCP 工具列表
 
-### 发现 Visual Studio 上下文
+插件向 AI Agent 暴露以下标准 MCP 工具：
 
-- 检查 Bridge 和 Host 的健康状态
-- 查询当前可用的 MCP 能力
-- 列出或筛选正在运行的 Visual Studio 实例
-- 获取当前解决方案中的项目
-
-### 控制真实的 Visual Studio 构建
-
-- 使用活动配置，或指定 configuration/platform 启动解决方案构建
-- 通过稳定的 build task handle 查询异步构建状态
-- 取消正在运行的构建
-- 识别成功、失败、取消、并发冲突和无效 handle
-
-### 把构建结果交给 Agent
-
-- 读取 Visual Studio **Output → Build** 窗格中的原始输出
-- 获取输出尾部并限制最大字符数，避免返回不受控的大段日志
-- 查询 Error Table 中由 Build 来源提供的诊断信息*
-
-\* `vs_get_errors` 已实现，但部分项目系统不会通过 Visual Studio 公共 Error Table 数据源公开编译诊断。此时工具会明确返回 `diagnostics_unavailable`，不会把 Build Output 解析结果伪装成 Error Table 数据。
-
-### 安全地处理多个实例
-
-每个 Visual Studio 进程都会注册独立的 `vsInstanceId`。只有一个实例时可以自动路由；同时运行多个实例时，Agent 必须明确选择目标，避免误操作其他解决方案。
-
-## 当前 MCP 工具
-
-| 场景 | 工具 |
+| 工具名称 | 功能描述 |
 |---|---|
-| 健康与能力 | `vs_health`, `vs_capabilities` |
-| 实例发现 | `vs_list_instances`, `vs_find_instances` |
-| 解决方案上下文 | `vs_get_projects_in_solution` |
-| 构建生命周期 | `vs_run_build`, `vs_get_build_status`, `vs_cancel_build` |
-| 诊断与输出 | `vs_get_errors`, `vs_get_output_window_logs` |
+| `vs_health` | 检查 MCP 服务与 Visual Studio 的连接健康状态 |
+| `vs_capabilities` | 查询当前支持的 IDE 工具能力集 |
+| `vs_list_instances` | 列出本机当前运行的所有 Visual Studio 实例 |
+| `vs_find_instances` | 根据解决方案路径查找匹配的 Visual Studio 实例 |
+| `vs_get_projects_in_solution` | 获取当前解决方案下的所有项目信息 |
+| `vs_run_build` | 触发当前解决方案或指定项目的构建 |
+| `vs_get_build_status` | 根据构建任务句柄查询当前构建状态（运行中、成功、失败、已取消） |
+| `vs_cancel_build` | 取消正在执行的构建任务 |
+| `vs_get_output_window_logs` | 获取 Visual Studio “输出”窗口指定窗格（如生成日志）的文本 |
+| `vs_get_errors` | 查询 Visual Studio 错误列表中由构建产生的诊断信息 |
 
-## 五分钟开始使用
+## 快速上手
 
-### 1. 安装扩展
+### 1. 安装插件
+安装 `VsDebugMcp` VSIX 扩展，并重启 Visual Studio。
 
-安装 **VsDebugMcp Bridge** VSIX，然后重启 Visual Studio。
-
-### 2. 打开解决方案
-
-在 Visual Studio 中打开需要交给 Agent 使用的解决方案。VSIX 加载后会自动启动随扩展打包的 self-contained Host，无需单独安装或手动运行 Host。
+### 2. 打开工程
+在 Visual Studio 2026 中打开你的解决方案。扩展加载后会在后台自动启动本地服务，无需手动运行任何后台程序。
 
 ### 3. 配置 MCP 客户端
+在你的 MCP 客户端（例如 Claude Desktop 或 VS Code 配置文件）中添加本地服务地址：
 
 ```json
 {
-	"servers": {
-		"vs-debug-mcp": {
-			"type": "http",
-			"url": "http://127.0.0.1:43260"
-		}
-	},
-	"inputs": []
+  "mcpServers": {
+    "vs-debug-mcp": {
+      "url": "http://127.0.0.1:43260"
+    }
+  }
 }
 ```
 
-### 4. 验证连接
+配置完成后，你的 AI Agent 即可自动发现并使用 Visual Studio 工具。
 
-让 Agent 依次调用：
+## 当前状态与后续规划
 
-1. `vs_health`
-2. `vs_list_instances`
-3. `vs_capabilities`
-4. `vs_get_projects_in_solution`
-
-如果工具定义刚刚发生变化，请重新加载 MCP 客户端，使其重新发现工具。
-
-## 一个典型工作流
-
-```text
-发现 Visual Studio 实例
-	→ 选择目标 vsInstanceId
-	→ 获取解决方案项目
-	→ 使用活动配置启动构建
-	→ 通过 buildTaskId 查询状态
-	→ 读取 Build Output
-	→ Agent 根据真实编译结果继续分析
-```
-
-Build task 状态保存在 Visual Studio Bridge 中，不依赖单次 MCP 请求或 Named Pipe 连接的生命周期。
-
-## 工作原理
-
-```text
-MCP Client / AI Agent
-	→ Streamable HTTP on 127.0.0.1:43260
-	→ Shared VsDebugMcp.Host
-	→ vsInstanceId Registry and Router
-	→ Per-instance Named Pipe RPC
-	→ Visual Studio VSIX Bridge
-	→ Visual Studio
-```
-
-- MCP 客户端只需要一个固定的本机 URL。
-- 一个 Windows 用户共享一个 Host，每个 Visual Studio 实例拥有独立 Bridge pipe。
-- VSIX 每 5 秒发送一次心跳；Host 在实例失联 15 秒后移除注册。
-- 最后一个 Visual Studio 实例离开后，Host 自动退出。
-
-## 本机优先的安全边界
-
-- HTTP 仅绑定 IPv4 loopback `127.0.0.1:43260`
-- Host control pipe 和 Bridge pipe 仅允许当前 Windows 用户访问
-- 不开放外部网卡，不支持远程 Visual Studio 访问
-- 当前版本不提供任意命令执行、进程控制或文件编辑
-- 日志不得记录请求载荷、凭据、环境变量或原始 Visual Studio Copilot 日志
-
-## 当前状态
-
-| 状态 | 能力 |
-|---|---|
-| 已完成端到端验证 | Host 自动启动、MCP 工具发现、多实例路由、项目发现、构建启动/状态/取消、Build Output |
-| 已实现，仍在验证 | Error Table build diagnostics |
-| 尚未提供 | Debugger、tests、file read/search/edit、远程访问、通用进程控制 |
-
-这是一个 Early Access 项目，工具接口和能力可能随着验证结果继续调整。
-
-## 后续方向
-
-在保持本机安全边界和显式状态 handle 的前提下，后续阶段计划验证：
-
-- 测试发现与测试运行
-- 调试会话、线程、调用栈、断点和表达式求值
-- 更完整的 IDE diagnostics 和 output providers
-
-暂不考虑：
-
-- 文件读取和代码搜索(*使用Agent宿主的功能应该已经足够)
-
-这些项目代表计划方向，不表示当前版本已经提供，也不承诺具体发布日期。
-
-
-## 要求
-
-- Visual Studio 2026 / Visual Studio 18.x
-- 支持 Streamable HTTP 的 MCP 客户端
-- Windows `win-x64`
-- 可用的 IPv4 loopback 和本机 Named Pipe 通信
-
-## 常见问题
-
-### 是否需要单独安装 .NET 或启动 Host？
-
-不需要。VSIX 包含 `win-x64` self-contained Host，并在 Visual Studio 加载扩展时确保它正在运行。
-
-### 可以连接另一台计算机上的 Visual Studio 吗？
-
-不可以。VsDebugMcp Bridge 有意限制为本机使用。
-
-### 为什么 `vs_get_errors` 可能返回 `diagnostics_unavailable`？
-
-某些项目系统会把编译错误显示在 Build Output 中，却不通过当前可用的 Visual Studio 公共 Error Table 数据源公开这些错误。请使用 `vs_get_output_window_logs` 获取原始构建输出。
-
-### 端口 `43260` 被占用会怎样？
-
-Host 会安全地启动失败，不会改用不可预测的端口，也不会终止占用端口的其他进程。
+- **当前支持（v0.1.x）**：工程项目发现、解决方案构建控制、输出日志读取、多实例路由。
+- **后续规划**：
+  - 调试器接入（断点管理、线程与调用栈查询、表达式求值）
+  - 单元测试集成（测试用例发现与运行）
+- **安全边界**：服务仅监听本机回环地址（`127.0.0.1`），不开放远程网络访问，不执行非受控的外部系统命令。
 
 ---
 
 <a id="english"></a>
 
-## Let your AI agent work with the Visual Studio you are actually running
+## Is this extension for you?
 
-VsDebugMcp Bridge connects MCP-compatible AI agents to the real state of a local Visual Studio 2026 / Visual Studio 18.x instance: its solution, projects, builds, diagnostics, and Build Output.
+If you use MCP-compatible AI agents (such as Claude Desktop, Cursor, VS Code, Cline, etc.) while developing C++ or .NET projects in Visual Studio:
 
-File access alone cannot reliably tell an agent:
+- **The Problem**: General AI tools only see static files on disk or try to run terminal builds blindly. They cannot know which solution configuration is active in the IDE, and command-line builds often fail due to missing IDE environment context.
+- **The Solution**: VsDebugMcp bridges Visual Studio and your AI Agent, enabling the agent to inspect the loaded solution, trigger real IDE builds, and read build logs and diagnostics directly from Visual Studio.
 
-- Which solution and projects are currently loaded
-- Which configuration and platform Visual Studio is using
-- Whether a build is running, succeeded, failed, or was cancelled
-- What MSBuild or the compiler reported in Visual Studio
-- Which Visual Studio instance should be targeted when several are open
+## Key Features
 
-VsDebugMcp Bridge provides a local MCP path for those answers, so agents can act on IDE state instead of guessing from workspace files and shell output.
+- **Solution & Project Awareness**: Query the currently opened solution, project list, and active configurations (Debug/Release, x64, etc.).
+- **IDE Build Control**: Start solution builds using active or specified configurations, track build progress asynchronously, or cancel ongoing builds.
+- **Output & Diagnostics**: Retrieve raw text from the Visual Studio Output Window (Build pane) so your agent can diagnose compiler errors accurately.
+- **Multi-Instance Support**: When multiple Visual Studio windows are open, tools can target specific instances to avoid conflicting operations.
 
-> **Demo media placeholder**  
-> Suggested GIF: discover an instance → list solution projects → start a build → return the failed status and Build Output.
+## Available MCP Tools
 
-## What you can do
+The extension exposes the following tools to MCP-compatible AI clients:
 
-### Discover Visual Studio context
-
-- Check Bridge and Host health
-- Discover the MCP capabilities currently available
-- List or filter running Visual Studio instances
-- Read the projects in the open solution
-
-### Control real Visual Studio builds
-
-- Start a solution build with the active configuration or an explicit configuration/platform
-- Track asynchronous progress through a stable build task handle
-- Cancel a running build
-- Distinguish success, failure, cancellation, concurrency conflicts, and invalid handles
-
-### Bring build results back to the agent
-
-- Read raw text from Visual Studio's **Output → Build** pane
-- Request only the output tail and set a maximum size
-- Query diagnostics exposed by the Build source in the Error Table*
-
-\* `vs_get_errors` is implemented, but some project systems do not expose compiler diagnostics through Visual Studio's public Error Table data source. In that case, the tool returns `diagnostics_unavailable` instead of presenting parsed Build Output as Error Table data.
-
-### Target multiple instances safely
-
-Each Visual Studio process registers its own `vsInstanceId`. Routing is automatic when exactly one instance is available. When several instances are running, the agent must explicitly select one to avoid acting on the wrong solution.
-
-## Available MCP tools
-
-| Workflow | Tools |
+| Tool Name | Description |
 |---|---|
-| Health and discovery | `vs_health`, `vs_capabilities` |
-| Instance discovery | `vs_list_instances`, `vs_find_instances` |
-| Solution context | `vs_get_projects_in_solution` |
-| Build lifecycle | `vs_run_build`, `vs_get_build_status`, `vs_cancel_build` |
-| Diagnostics and output | `vs_get_errors`, `vs_get_output_window_logs` |
+| `vs_health` | Check connection and health status of the bridge |
+| `vs_capabilities` | Discover available IDE capabilities |
+| `vs_list_instances` | List all running Visual Studio instances |
+| `vs_find_instances` | Find running instances matching a solution path |
+| `vs_get_projects_in_solution` | Get all projects in the current solution |
+| `vs_run_build` | Start building the solution or a specified project |
+| `vs_get_build_status` | Poll asynchronous build progress (running, succeeded, failed, cancelled) |
+| `vs_cancel_build` | Cancel an active build task |
+| `vs_get_output_window_logs` | Retrieve text from the Output Window (e.g. Build pane) |
+| `vs_get_errors` | Retrieve diagnostics from the Visual Studio Error List |
 
-## Get started in five minutes
+## Quick Start
 
-### 1. Install the extension
+### 1. Install Extension
+Install the `VsDebugMcp` VSIX package and restart Visual Studio.
 
-Install the **VsDebugMcp Bridge** VSIX, then restart Visual Studio.
+### 2. Open a Solution
+Open your solution in Visual Studio 2026. The extension automatically launches the local service in the background. No manual setup required.
 
-### 2. Open a solution
-
-Open the solution you want the agent to use. When the VSIX loads, it automatically starts the packaged self-contained Host. There is no separate Host installation or manual startup step.
-
-### 3. Configure your MCP client
+### 3. Configure Your MCP Client
+Add the local endpoint to your MCP client configuration (e.g. Claude Desktop or VS Code):
 
 ```json
 {
-	"servers": {
-		"vs-debug-mcp": {
-			"type": "http",
-			"url": "http://127.0.0.1:43260"
-		}
-	},
-	"inputs": []
+  "mcpServers": {
+    "vs-debug-mcp": {
+      "url": "http://127.0.0.1:43260"
+    }
+  }
 }
 ```
 
-### 4. Verify the connection
+Your AI agent will automatically detect and start using Visual Studio tools.
 
-Ask the agent to call:
+## Current Status & Roadmap
 
-1. `vs_health`
-2. `vs_list_instances`
-3. `vs_capabilities`
-4. `vs_get_projects_in_solution`
-
-Reload the MCP client after tool definitions change so it can discover the updated tools.
-
-## A typical workflow
-
-```text
-Discover Visual Studio instances
-	→ select a vsInstanceId
-	→ read solution projects
-	→ start a build with the active configuration
-	→ poll status using buildTaskId
-	→ read Build Output
-	→ continue with the real compiler result
-```
-
-Build task state lives in the Visual Studio Bridge and does not depend on the lifetime of an individual MCP request or Named Pipe connection.
-
-## How it works
-
-```text
-MCP Client / AI Agent
-	→ Streamable HTTP on 127.0.0.1:43260
-	→ Shared VsDebugMcp.Host
-	→ vsInstanceId Registry and Router
-	→ Per-instance Named Pipe RPC
-	→ Visual Studio VSIX Bridge
-	→ Visual Studio
-```
-
-- MCP clients use one stable local URL.
-- One Host is shared per Windows user, while each Visual Studio instance has a separate Bridge pipe.
-- The VSIX sends a heartbeat every 5 seconds; the Host removes an instance after 15 seconds without a heartbeat.
-- The Host exits after the final Visual Studio instance is removed.
-
-## Local-first security boundary
-
-- HTTP binds only to IPv4 loopback `127.0.0.1:43260`
-- Host control and Bridge pipes are restricted to the current Windows user
-- No external network binding or remote Visual Studio access
-- No arbitrary command execution, process control, or file editing in the current release
-- Logs must not contain request payloads, credentials, environment variables, or raw Visual Studio Copilot logs
-
-## Current status
-
-| Status | Capabilities |
-|---|---|
-| End-to-end validated | Automatic Host startup, MCP tool discovery, multi-instance routing, project discovery, build start/status/cancel, Build Output |
-| Implemented, still under validation | Error Table build diagnostics |
-| Not available yet | Debugger, tests, file read/search/edit, remote access, general process control |
-
-This is an Early Access project. Tool contracts and capabilities may evolve as validation continues.
-
-## Roadmap
-
-Future validation tracks include:
-
-- File reading and code search
-- Test discovery and test execution
-- Debug sessions, threads, call stacks, breakpoints, and expression evaluation
-- Broader IDE diagnostics and output providers
-
-These are planned directions, not features available in the current release, and no delivery dates are promised.
-
-## Requirements
-
-- Visual Studio 2026 / Visual Studio 18.x
-- An MCP client with Streamable HTTP support
-- Windows `win-x64`
-- IPv4 loopback and local Named Pipe communication
-
-## FAQ
-
-### Do I need to install .NET or start the Host separately?
-
-No. The VSIX packages a `win-x64` self-contained Host and ensures that it is running when Visual Studio loads the extension.
-
-### Can it connect to Visual Studio on another computer?
-
-No. VsDebugMcp Bridge is intentionally local-only.
-
-### Why can `vs_get_errors` return `diagnostics_unavailable`?
-
-Some project systems display compiler errors in Build Output without exposing them through the public Visual Studio Error Table data source currently available to the extension. Use `vs_get_output_window_logs` to retrieve the raw build output.
-
-### What happens if port `43260` is already in use?
-
-The Host fails safely instead of selecting an unpredictable port or terminating the process that owns it.
+- **Supported Now (v0.1.x)**: Solution & project discovery, build lifecycle control, output log retrieval, multi-instance routing.
+- **Roadmap**:
+  - Debugger integration (breakpoints, threads, call stacks, expression evaluation)
+  - Unit test discovery and execution
+- **Security**: Bound strictly to local loopback (`127.0.0.1`), with no remote access and no arbitrary process execution.

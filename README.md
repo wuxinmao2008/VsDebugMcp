@@ -73,13 +73,13 @@ Use the VS Code tasks:
 - `build: all`
 - `deploy: vsix`
 
-The VSIX project must be built with the Visual Studio 18 MSBuild installation. Its build publishes the Host as `win-x64` self-contained and embeds it under `Host/` in the VSIX package.
+The VSIX project must be built with the Visual Studio 18 MSBuild installation. Its build publishes the Host as `win-x64` framework-dependent and embeds it under `Host/` in the VSIX package.
 
 Ordinary builds do not deploy the extension. Deployment requires closing the relevant Visual Studio instance and running `deploy: vsix` explicitly.
 
 ## Validation status
 
-The fixed HTTP/shared Host source builds successfully, and the generated VSIX contains the self-contained Host. Live acceptance still requires deploying the VSIX, restarting the intended Visual Studio instance and validating the complete MCP client → HTTP Host → instance router → Named Pipe → VSIX → Visual Studio path.
+The fixed HTTP/shared Host source builds successfully, and the generated VSIX contains the framework-dependent Host. Live acceptance still requires deploying the VSIX, restarting the intended Visual Studio instance and validating the complete MCP client → HTTP Host → instance router → Named Pipe → VSIX → Visual Studio path.
 
 ## Security and privacy
 
@@ -90,3 +90,7 @@ The fixed HTTP/shared Host source builds successfully, and the generated VSIX co
 - Logs must not include request payloads, credentials, environment variables or raw Visual Studio Copilot logs.
 
 The project targets `vs2026_5`. The VSIX currently pins `Microsoft.VisualStudio.Sdk` to `17.14.40265` while building with Visual Studio 18 MSBuild.
+
+## Release notes
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
