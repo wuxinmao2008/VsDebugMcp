@@ -13,6 +13,24 @@
 
 ## 实施进度（2026-09-05 更新）
 
+### Phase 3（方向 B / 路线 2）：测试资源管理器集成（Test Explorer / VSTest）开发与闭环验证 (v0.1.8.0)
+
+- **Test Explorer / VSTest 混合链路集成**：
+  - 基于 MEF `ITestsService`（反射 Invoker 封装 internal 访问）与 `IOperationState` 事件监听，实现轻量免引用的测试发现与执行；
+  - 4 个核心 MCP 工具全部落地：
+    - `vs_get_tests`：按项目/FullyQualifiedName/DisplayName 过滤发现方案单元测试；
+    - `vs_run_tests`：异步调度指定 testId 或全方案测试，返回显式 `testRunId`；
+    - `vs_get_test_run_status`：查询测试执行状态（`running`/`completed`/`cancelled`/`failed`）、执行时长、通过/失败/跳过计数及各项详细报错与堆栈；
+    - `vs_cancel_test_run`：即时取消正在运行的测试；
+  - 单测试运行防卫互斥（`test_run_busy`）与容错状态回退。
+- **靶场与底层核心问题攻关**：
+  - 新建真实测试靶场 `sample/SampleTests`（xUnit .NET 8，3 个测试样例），并入 `SampleSolution.sln` 与 `SampleSolution.slnx`；
+  - **核心机制探明**：通过逆向分析 `Microsoft.VisualStudio.TestWindow.Core.dll`，探明 TestWindow 的 `OperationBroker.storeOpenTaskSource` 必须在 Test Explorer 工具窗口就绪后才会放行测试执行队列；在 `EnsureServicesAsync` 中引入 `IVsUIShell.FindToolWindow`（GUID: `E1B7D1F8-9B3C-49B1-8F4F-BFC63A88835D`）程序化唤醒底层管道；
+  - **Host 启动与注册鲁棒性增强**：`HostOptions.InitialRegistrationTimeout` 提升至 60 秒，`SharedHostProcessManager` 等待重试增至 60 次，`HostRegistrationManager` 增加 5 次重试退避循环，彻底消除冷启动偶发超时。
+- **自动化测试与实测进展**：
+  - 单元测试全量通过：`VsDebugMcp.Protocol.Tests` (9/9 PASS) + `VsDebugMcp.Host.Tests` (59/59 PASS)；
+  - 在 VS 18.9 实验实例完成 `vs_health`、`vs_capabilities`、`vs_get_tests`（精确发现 3 个测试）、过滤搜索及 `vs_cancel_test_run` 在线实测。
+
 ### Phase 2C 调试器启动与诊断增强已完成开发并通过全链路在线实测验收 (v0.1.7.0)
 
 - **启动与批量诊断能力**：
@@ -531,21 +549,19 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 - [vs-copilot-debugger-log-analysis.md](vs-copilot-debugger-log-analysis.md)
 - [vs2026_copilot.md](vs2026_copilot.md)
 
-## 下一步规划（面向新会话）
+## 下一步规划（面向新会话 / 周一继续）
 
-当前状态：Phase 0、Phase 1、Phase 2 Debugger POC、Phase 2B 调试器执行控制闭环（v0.1.6.0）以及 Phase 2C 启动调试与诊断增强（路线 1，v0.1.7.0）均已完成开发，全套自动化单元测试（55/55 PASS），并在 VS 18.9 实验实例完成全链路在线实测验收（涵盖 21 个 Bridge 工具与 3 个 Host 发现/健康工具）。
+当前状态：Phase 0、Phase 1、Phase 2 全部调试闭环（v0.1.7.0）以及 Phase 3 测试资源管理器集成（v0.1.8.0，4 个测试工具）代码实现与单测全量通过（Protocol 9/9 PASS，Host 59/59 PASS）。在线实测已验证健康检查、工具发现、测试发现（精确匹配 3 个 xUnit 测试）、过滤查询及取消控制。最新构建已修复 TestWindow 工具窗口激活与 Host 注册退避。
 
-下一阶段可展开的工作方向如下：
+周一会话可直接无缝继续的步骤：
 
-1. **路线 2 / 方向 B：测试资源管理器集成（Test Explorer / VSTest）**
-   - 探索 `VisualStudio.Extensibility` 或 VSSDK 测试发现与运行 API：
-     - `vs_get_tests`（测试发现与层级列表）
-     - `vs_run_tests`（异步触发指定测试或全部测试，返回 `testRunId`）
-     - `vs_get_test_run_status`（轮询测试运行进度、通过率与失败堆栈）
+1. **部署最新构建并完成测试执行闭环在线验收**：
+   - 执行 `powershell -ExecutionPolicy Bypass -File .\scripts\deploy-exp.ps1` 将编译好的最新 VSIX 0.1.8.0 覆盖部署到实验实例；
+   - 启动实验实例并打开 `sample/SampleSolution.slnx`；
+   - 调用 `vs_run_tests` 执行全量测试并获取 `testRunId`；
+   - 调用 `vs_get_test_run_status` 轮询测试执行结果，验证 3 个测试均通过（Passed=3, Failed=0, Skipped=0）；
+   - 验证单项指定 `testId` 运行以及并发防卫（`test_run_busy`）。
 
-2. **方向 C：错误列表（Error List）公开数据源深化**
-   - 深入探索 VS 18.x `ITableManager` / `IVsErrorList` 原生 COM 接口，解决非托管 C++ 与特定构建输出无法沉淀至 Error List 公开快照的遗留限制，将 `vs_get_errors` 提升为稳定可用能力。
-
-3. **方向 D：调试器进程附加与高级能力（Attach & Advanced Diagnostics）**
-   - 支持将调试器附加到外部已运行进程（`vs_debugger_attach_process`）；
-   - 支持条件断点高级配置、Hit Count 计数断点，以及更深层的数据断点。
+2. **后续可选深化方向**：
+   - **方向 C：错误列表（Error List）公开数据源深化**：解决非托管 C++ 与构建输出沉淀至 Error List 公开快照的限制；
+   - **方向 D：调试器进程附加与高级能力（Attach & Advanced Diagnostics）**：支持附加到外部已运行进程与条件/命中计数断点。
