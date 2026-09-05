@@ -125,6 +125,54 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerExecutionResponse> DebuggerStepOverAsync(
+        DebuggerStepRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerStepRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerStepOver,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStepIntoAsync(
+        DebuggerStepRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerStepRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerStepInto,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStepOutAsync(
+        DebuggerStepRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerStepRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerStepOut,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerContinueAsync(
+        DebuggerContinueRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerContinueRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerContinue,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerPauseAsync(
+        DebuggerPauseRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerPauseRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerPause,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStopAsync(
+        DebuggerStopRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerStopRequest, DebuggerExecutionResponse>(
+            BridgeMethods.DebuggerStop,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

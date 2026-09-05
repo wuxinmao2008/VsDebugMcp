@@ -13,6 +13,23 @@
 
 ## 实施进度（2026-09-05 更新）
 
+### Phase 2B 调试器执行控制闭环已完成开发与全套单元测试 (v0.1.6.0)
+
+- **控制能力与并发防卫**：
+  - 基于 `EnvDTE.Debugger` 实现完整的执行控制，调度至 Visual Studio 主 UI 线程；
+  - 引入 `_executionLock` 互斥锁，并发冲突时快速返回结构化错误码 `debugger_busy`，杜绝 VS COM 重入崩溃；
+  - 严格模式防卫：非暂停状态调用 `step_*` 拦截返回 `debugger_not_paused`；设计模式调用 `pause`/`stop` 安全拦截；
+  - 单步执行与暂停成功后统一返回 `DebuggerExecutionResponse`，自动捕获并返回着陆顶层栈帧（`topFrame`），实现即时单步反馈。
+- **6 个核心执行控制 MCP 工具落地**：
+  - `vs_debugger_step_over`：单步步过；
+  - `vs_debugger_step_into`：单步步入；
+  - `vs_debugger_step_out`：单步步出；
+  - `vs_debugger_continue`：继续执行（默认不阻塞等待）；
+  - `vs_debugger_pause`：暂停运行中的调试目标；
+  - `vs_debugger_stop`：终止当前调试会话，安全回到设计模式。
+- **自动化测试**：
+  - `VsDebugMcp.Protocol.Tests` (7/7 PASS) + `VsDebugMcp.Host.Tests` (37/37 PASS)，全套 44 个单元测试 100% 通过。
+
 ### Phase 2 Debugger POC（只读调试观测原型验证）已完成并在线验收 (v0.1.5.0)
 
 - **能力与模式防卫**：
@@ -128,6 +145,12 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 10. `vs_debugger_set_breakpoints`
 11. `vs_debugger_get_call_stack`
 12. `vs_debugger_evaluate_expr`
+13. `vs_debugger_step_over`
+14. `vs_debugger_step_into`
+15. `vs_debugger_step_out`
+16. `vs_debugger_continue`
+17. `vs_debugger_pause`
+18. `vs_debugger_stop`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
@@ -493,17 +516,12 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 
 ## 下一步规划（面向新会话）
 
-当前状态：Phase 0、Phase 1、Phase 2 Debugger POC 均已交付并通过 100% 单元测试与真实 VS 18.9 实验实例全链路在线验收。
+当前状态：Phase 0、Phase 1、Phase 2 Debugger POC 以及 Phase 2B 调试器执行控制闭环（方向 A，v0.1.6.0）均已完成开发并通过 100% 全套自动化单元测试（44/44 PASS）。
 下一阶段可展开的工作方向如下：
 
-1. **方向 A：调试器控制闭环（Debugger Control）**
-   - 在当前只读诊断基础上，引入调试执行控制（带安全确认与状态守卫）：
-     - `vs_debugger_step_over`（单步步过）
-     - `vs_debugger_step_into`（单步步入）
-     - `vs_debugger_step_out`（单步步出）
-     - `vs_debugger_continue`（继续运行）
-     - `vs_debugger_stop`（停止调试）
-   - 依赖 `DTE.Debugger` 对应控制 API，需增加并发锁与会话保护，防止多 agent 指令冲突。
+1. **方向 A 在线实测联调与验收（Debugger Control Live Acceptance）**
+   - 部署 v0.1.6.0 VSIX 到 Visual Studio 2026 / VS 18.x 实验实例；
+   - 依托 `sample/SampleSolution.sln`，全链路实测验证断点命中断点后的单步步进（`step_over`/`step_into`/`step_out`）、调用栈顶帧即时回显、继续运行（`continue`）、挂起（`pause`）与停止调试（`stop`），以及并发互斥报错（`debugger_busy`）。
 
 2. **方向 B：测试资源管理器集成（Test Explorer / VSTest）**
    - 探索 `VisualStudio.Extensibility` 或 VSSDK 测试发现与运行 API：
@@ -513,3 +531,6 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 
 3. **方向 C：错误列表（Error List）公开数据源深化**
    - 深入探索 VS 18.x `ITableManager` / `IVsErrorList` 原生 COM 接口，解决非托管 C++ 与特定构建输出无法沉淀至 Error List 公开快照的遗留限制，将 `vs_get_errors` 提升为稳定可用能力。
+
+4. **方向 D：调试会话启动与进程附加（Launch & Attach）**
+   - 探索从外部 Agent 启动调试会话（`vs_debugger_launch_project`）或附加至已有进程（`vs_debugger_attach_process`）。

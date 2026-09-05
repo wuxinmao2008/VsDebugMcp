@@ -245,6 +245,102 @@ public sealed class McpTools
             vsInstanceId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debugger_step_over",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Steps over the next statement or function call while paused in break mode.")]
+    public Task<DebuggerExecutionResponse> DebuggerStepOverAsync(
+        [Description("Optional flag whether to wait for the step to complete and enter break mode. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerStepOverAsync(
+            waitForBreak ?? true,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_step_into",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Steps into the next statement or function call while paused in break mode.")]
+    public Task<DebuggerExecutionResponse> DebuggerStepIntoAsync(
+        [Description("Optional flag whether to wait for the step to complete and enter break mode. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerStepIntoAsync(
+            waitForBreak ?? true,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_step_out",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Steps out of the current function to its caller while paused in break mode.")]
+    public Task<DebuggerExecutionResponse> DebuggerStepOutAsync(
+        [Description("Optional flag whether to wait for the step to complete and enter break mode. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerStepOutAsync(
+            waitForBreak ?? true,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_continue",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Resumes program execution from break mode until the next breakpoint or process termination.")]
+    public Task<DebuggerExecutionResponse> DebuggerContinueAsync(
+        [Description("Optional flag whether to wait for the program to enter break mode before returning. Defaults to false.")] bool? waitForBreak = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerContinueAsync(
+            waitForBreak ?? false,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_pause",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Pauses (breaks) the currently executing debug target.")]
+    public Task<DebuggerExecutionResponse> DebuggerPauseAsync(
+        [Description("Optional flag whether to wait for the debugger to enter break mode before returning. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerPauseAsync(
+            waitForBreak ?? true,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_stop",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Stops the active debugging session and returns Visual Studio to design mode.")]
+    public Task<DebuggerExecutionResponse> DebuggerStopAsync(
+        [Description("Optional flag whether to wait for debugging to terminate before returning. Defaults to false.")] bool? waitForStop = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerStopAsync(
+            waitForStop ?? false,
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

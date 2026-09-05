@@ -5,6 +5,19 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6.0] - 2026-09-05
+
+### Added
+- **Debugger Execution Control (Direction A)**: Added Visual Studio debugger execution control tools via `EnvDTE.Debugger` with UI thread synchronization, concurrency mutex locks, and mode guards:
+  - `vs_debugger_step_over`: Steps over the next statement or function call while paused in break mode.
+  - `vs_debugger_step_into`: Steps into the next statement or function call while paused in break mode.
+  - `vs_debugger_step_out`: Steps out of the current function to its caller while paused in break mode.
+  - `vs_debugger_continue`: Resumes execution until the next breakpoint or program termination.
+  - `vs_debugger_pause`: Pauses (breaks) the currently executing debuggee.
+  - `vs_debugger_stop`: Stops the active debugging session and returns Visual Studio to design mode.
+  - **Immediate Landing Feedback**: Unified `DebuggerExecutionResponse` automatically extracts and returns the top stack frame (`topFrame`) upon entering break mode.
+  - **Concurrency Guard**: Added `_executionLock` semaphore guard in `DebuggerProvider` to prevent re-entrant command corruption (`debugger_busy`).
+
 ## [0.1.5.0] - 2026-09-05
 
 ### Added

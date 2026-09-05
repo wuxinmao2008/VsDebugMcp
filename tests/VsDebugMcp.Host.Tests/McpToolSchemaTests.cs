@@ -27,6 +27,18 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "timeoutMs")]
     [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "allowSideEffects")]
     [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerStepOverAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerStepOverAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerStepIntoAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerStepIntoAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerStepOutAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerStepOutAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerContinueAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerContinueAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerPauseAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerPauseAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerStopAsync), "waitForStop")]
+    [InlineData(nameof(McpTools.DebuggerStopAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);

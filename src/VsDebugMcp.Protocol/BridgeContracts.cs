@@ -417,6 +417,68 @@ public sealed class DebuggerEvaluateExprResponse
 }
 
 [DataContract]
+public sealed class DebuggerStepRequest
+{
+    [DataMember(Name = "waitForBreak", Order = 1)]
+    public bool WaitForBreak { get; set; } = true;
+}
+
+[DataContract]
+public sealed class DebuggerContinueRequest
+{
+    [DataMember(Name = "waitForBreak", Order = 1)]
+    public bool WaitForBreak { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerPauseRequest
+{
+    [DataMember(Name = "waitForBreak", Order = 1)]
+    public bool WaitForBreak { get; set; } = true;
+}
+
+[DataContract]
+public sealed class DebuggerStopRequest
+{
+    [DataMember(Name = "waitForStop", Order = 1)]
+    public bool WaitForStop { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerExecutionResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "action", Order = 2)]
+    public string Action { get; set; } = string.Empty;
+
+    [DataMember(Name = "previousMode", Order = 3)]
+    public string PreviousMode { get; set; } = string.Empty;
+
+    [DataMember(Name = "currentMode", Order = 4)]
+    public string CurrentMode { get; set; } = string.Empty;
+
+    [DataMember(Name = "isDebugging", Order = 5)]
+    public bool IsDebugging { get; set; }
+
+    [DataMember(Name = "lastBreakReason", Order = 6, EmitDefaultValue = false)]
+    public string? LastBreakReason { get; set; }
+
+    [DataMember(Name = "currentProcessId", Order = 7, EmitDefaultValue = false)]
+    public int? CurrentProcessId { get; set; }
+
+    [DataMember(Name = "currentThreadId", Order = 8, EmitDefaultValue = false)]
+    public int? CurrentThreadId { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 9, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
+
+    [DataMember(Name = "warnings", Order = 10)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
 public sealed class RunBuildRequest
 {
     [DataMember(Name = "configuration", Order = 1, EmitDefaultValue = false)]

@@ -20,6 +20,7 @@ internal sealed class DebuggerProvider
 
 	private readonly AsyncPackage _package;
 	private readonly string _vsInstanceId;
+	private readonly SemaphoreSlim _executionLock = new(1, 1);
 
 	public DebuggerProvider(AsyncPackage package, string vsInstanceId)
 	{
@@ -388,6 +389,217 @@ internal sealed class DebuggerProvider
 				}
 			}
 		}
+	}
+
+	public async Task<DebuggerExecutionResponse> StepOverAsync(
+		DebuggerStepRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("step_over", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotPaused,
+					$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). StepOver is only valid when paused.");
+			}
+
+			debugger.StepOver(request.WaitForBreak);
+		});
+	}
+
+	public async Task<DebuggerExecutionResponse> StepIntoAsync(
+		DebuggerStepRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("step_into", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotPaused,
+					$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). StepInto is only valid when paused.");
+			}
+
+			debugger.StepInto(request.WaitForBreak);
+		});
+	}
+
+	public async Task<DebuggerExecutionResponse> StepOutAsync(
+		DebuggerStepRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("step_out", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotPaused,
+					$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). StepOut is only valid when paused.");
+			}
+
+			debugger.StepOut(request.WaitForBreak);
+		});
+	}
+
+	public async Task<DebuggerExecutionResponse> ContinueAsync(
+		DebuggerContinueRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("continue", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+			{
+				if (debugger.CurrentMode == dbgDebugMode.dbgRunMode)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.DebuggerNotPaused,
+						"The debugger is already running.");
+				}
+
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotDebugging,
+					"The debugger is not active (design mode). Start debugging before calling continue.");
+			}
+
+			debugger.Go(request.WaitForBreak);
+		});
+	}
+
+	public async Task<DebuggerExecutionResponse> PauseAsync(
+		DebuggerPauseRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("pause", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+			{
+				return;
+			}
+
+			if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotDebugging,
+					"The debugger is not active (design mode). Cannot pause.");
+			}
+
+			debugger.Break(request.WaitForBreak);
+		});
+	}
+
+	public async Task<DebuggerExecutionResponse> StopAsync(
+		DebuggerStopRequest request,
+		CancellationToken cancellationToken)
+	{
+		return await ExecuteControlCommandAsync("stop", cancellationToken, debugger =>
+		{
+			if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+			{
+				return;
+			}
+
+			debugger.Stop(request.WaitForStop);
+		});
+	}
+
+	private async Task<DebuggerExecutionResponse> ExecuteControlCommandAsync(
+		string actionName,
+		CancellationToken cancellationToken,
+		Action<Debugger> executeAction)
+	{
+		if (!_executionLock.Wait(0))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerBusy,
+				"A debugger execution control operation is already in progress.");
+		}
+
+		try
+		{
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var debugger = await GetDebuggerAsync(cancellationToken);
+			var previousMode = GetModeString(debugger.CurrentMode);
+
+			executeAction(debugger);
+
+			return CaptureExecutionResult(debugger, actionName, previousMode);
+		}
+		finally
+		{
+			_executionLock.Release();
+		}
+	}
+
+	private DebuggerExecutionResponse CaptureExecutionResult(
+		Debugger debugger,
+		string action,
+		string previousMode)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		var currentMode = GetModeString(debugger.CurrentMode);
+		var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
+
+		int? processId = null;
+		int? threadId = null;
+		string? breakReason = null;
+		StackFrameInfo? topFrame = null;
+
+		if (isDebugging)
+		{
+			try
+			{
+				var proc = debugger.CurrentProcess;
+				if (proc != null)
+				{
+					processId = proc.ProcessID;
+				}
+			}
+			catch
+			{
+			}
+
+			try
+			{
+				var thread = debugger.CurrentThread;
+				if (thread != null)
+				{
+					threadId = thread.ID;
+					if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode && thread.StackFrames != null)
+					{
+						foreach (StackFrame frame in thread.StackFrames)
+						{
+							topFrame = ReadStackFrame(frame, 0);
+							break;
+						}
+					}
+				}
+			}
+			catch
+			{
+			}
+
+			try
+			{
+				breakReason = GetBreakReasonString(debugger.LastBreakReason);
+			}
+			catch
+			{
+			}
+		}
+
+		return new DebuggerExecutionResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			Action = action,
+			PreviousMode = previousMode,
+			CurrentMode = currentMode,
+			IsDebugging = isDebugging,
+			LastBreakReason = breakReason,
+			CurrentProcessId = processId,
+			CurrentThreadId = threadId,
+			TopFrame = topFrame
+		};
 	}
 
 	private async Task<Debugger> GetDebuggerAsync(CancellationToken cancellationToken)

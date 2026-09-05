@@ -28,6 +28,12 @@ public static class BridgeMethods
 	public const string DebuggerSetBreakpoints = "debuggerSetBreakpoints";
 	public const string DebuggerGetCallStack = "debuggerGetCallStack";
 	public const string DebuggerEvaluateExpr = "debuggerEvaluateExpr";
+	public const string DebuggerStepOver = "debuggerStepOver";
+	public const string DebuggerStepInto = "debuggerStepInto";
+	public const string DebuggerStepOut = "debuggerStepOut";
+	public const string DebuggerContinue = "debuggerContinue";
+	public const string DebuggerPause = "debuggerPause";
+	public const string DebuggerStop = "debuggerStop";
 	public const string Shutdown = "shutdown";
 }
 
@@ -57,6 +63,9 @@ public static class BridgeErrorCodes
 	public const string DebuggerNotPaused = "debugger_not_paused";
 	public const string DebuggerUnavailable = "debugger_unavailable";
 	public const string DebuggerEvaluationFailed = "debugger_evaluation_failed";
+	public const string DebuggerBusy = "debugger_busy";
+	public const string DebuggerNotRunning = "debugger_not_running";
+	public const string DebuggerNotDebugging = "debugger_not_debugging";
 	public const string InternalError = "internal_error";
 }
 

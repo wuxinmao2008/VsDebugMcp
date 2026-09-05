@@ -154,4 +154,48 @@ public sealed class InstanceProtocolTests
         Assert.Equal("int", exprCopy.Type);
         Assert.True(exprCopy.IsValid);
     }
+
+    [Fact]
+    public void DebuggerExecutionContractsRoundTripThroughSharedSerializer()
+    {
+        var execResponse = new DebuggerExecutionResponse
+        {
+            VsInstanceId = "vs-1",
+            Action = "step_over",
+            PreviousMode = "break",
+            CurrentMode = "break",
+            IsDebugging = true,
+            LastBreakReason = "step",
+            CurrentProcessId = 1234,
+            CurrentThreadId = 5678,
+            TopFrame = new StackFrameInfo
+            {
+                FrameIndex = 0,
+                FunctionName = "Calculator.Add",
+                FileName = @"C:\src\Calculator.cs",
+                LineNumber = 6,
+                Language = "C#"
+            }
+        };
+
+        var json = BridgeJson.Serialize(execResponse);
+        var copy = BridgeJson.Deserialize<DebuggerExecutionResponse>(json);
+
+        Assert.Equal(execResponse.VsInstanceId, copy.VsInstanceId);
+        Assert.Equal("step_over", copy.Action);
+        Assert.Equal("break", copy.CurrentMode);
+        Assert.True(copy.IsDebugging);
+        Assert.Equal("step", copy.LastBreakReason);
+        Assert.NotNull(copy.TopFrame);
+        Assert.Equal(6, copy.TopFrame.LineNumber);
+        Assert.Equal("Calculator.Add", copy.TopFrame.FunctionName);
+
+        var stepReq = new DebuggerStepRequest { WaitForBreak = true };
+        var stepReqCopy = BridgeJson.Deserialize<DebuggerStepRequest>(BridgeJson.Serialize(stepReq));
+        Assert.True(stepReqCopy.WaitForBreak);
+
+        var contReq = new DebuggerContinueRequest { WaitForBreak = false };
+        var contReqCopy = BridgeJson.Deserialize<DebuggerContinueRequest>(BridgeJson.Serialize(contReq));
+        Assert.False(contReqCopy.WaitForBreak);
+    }
 }

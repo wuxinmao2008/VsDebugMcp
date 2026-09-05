@@ -79,6 +79,36 @@ public interface IBridgeService
         bool allowSideEffects,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerStepOverAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerStepIntoAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerStepOutAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerContinueAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerPauseAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerStopAsync(
+        bool waitForStop,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -297,6 +327,72 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerExecutionResponse> DebuggerStepOverAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerStepOverAsync(
+                new DebuggerStepRequest { WaitForBreak = waitForBreak },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStepIntoAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerStepIntoAsync(
+                new DebuggerStepRequest { WaitForBreak = waitForBreak },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStepOutAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerStepOutAsync(
+                new DebuggerStepRequest { WaitForBreak = waitForBreak },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerContinueAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerContinueAsync(
+                new DebuggerContinueRequest { WaitForBreak = waitForBreak },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerPauseAsync(
+        bool waitForBreak,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerPauseAsync(
+                new DebuggerPauseRequest { WaitForBreak = waitForBreak },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerExecutionResponse> DebuggerStopAsync(
+        bool waitForStop,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerStopAsync(
+                new DebuggerStopRequest { WaitForStop = waitForStop },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -430,6 +526,21 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.DebuggerEvaluationFailed => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerBusy => new(
+                exception.Code,
+                exception.Message,
+                true,
+                exception),
+            BridgeErrorCodes.DebuggerNotRunning => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerNotDebugging => new(
                 exception.Code,
                 exception.Message,
                 false,
