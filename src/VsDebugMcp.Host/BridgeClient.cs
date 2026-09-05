@@ -53,6 +53,14 @@ public sealed class BridgeClient : IAsyncDisposable
             new object(),
             cancellationToken);
 
+    public Task<GetFilesInProjectResponse> GetFilesInProjectAsync(
+        GetFilesInProjectRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetFilesInProjectRequest, GetFilesInProjectResponse>(
+            BridgeMethods.GetFilesInProject,
+            request,
+            cancellationToken);
+
     public Task<BuildTaskResponse> RunBuildAsync(
         RunBuildRequest request,
         CancellationToken cancellationToken) =>

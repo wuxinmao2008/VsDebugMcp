@@ -22,6 +22,7 @@ internal sealed class BridgeServer : IDisposable
     private readonly HashSet<NamedPipeServerStream> _activePipes = new();
     private readonly VisualStudioInstanceContext _instance;
     private readonly SolutionProjectProvider _solutionProjectProvider;
+    private readonly SolutionFileProvider _solutionFileProvider;
     private readonly SolutionBuildProvider _solutionBuildProvider;
     private readonly ErrorListProvider _errorListProvider;
     private readonly OutputWindowProvider _outputWindowProvider;
@@ -34,6 +35,7 @@ internal sealed class BridgeServer : IDisposable
     {
         _instance = instance;
         _solutionProjectProvider = new SolutionProjectProvider(package, instance.VsInstanceId);
+        _solutionFileProvider = new SolutionFileProvider(package, instance.VsInstanceId);
         _solutionBuildProvider = solutionBuildProvider;
         _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
@@ -210,6 +212,35 @@ internal sealed class BridgeServer : IDisposable
                 {
                     var result = await _solutionProjectProvider.GetProjectsAsync(cancellationToken);
                     return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SolutionStateUnavailableException)
+                {
+                    return (
+                        Failure(
+                            request.RequestId,
+                            BridgeErrorCodes.SolutionStateUnavailable,
+                            "The Visual Studio solution state is unavailable.",
+                            true),
+                        false);
+                }
+            case BridgeMethods.GetFilesInProject:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new GetFilesInProjectRequest()
+                        : BridgeJson.Deserialize<GetFilesInProjectRequest>(request.PayloadJson!);
+                    var result = await _solutionFileProvider.GetFilesInProjectAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (
+                        Failure(
+                            request.RequestId,
+                            BridgeErrorCodes.InvalidRequest,
+                            "The get files in project request payload is invalid.",
+                            false),
+                        false);
                 }
                 catch (SolutionStateUnavailableException)
                 {
@@ -421,6 +452,12 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_projects_in_solution",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_files_in_project",
                 Version = "0.1",
                 IsStub = false
             },

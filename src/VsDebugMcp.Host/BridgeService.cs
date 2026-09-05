@@ -18,6 +18,12 @@ public interface IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
+    Task<GetFilesInProjectResponse> GetFilesInProjectAsync(
+        string? projectId,
+        string? extensionFilter,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
     Task<BuildTaskResponse> RunBuildAsync(
         string? configuration,
         string? platform,
@@ -114,6 +120,22 @@ public sealed class BridgeService : IBridgeService
         ExecuteAsync(
             _registry.Resolve(vsInstanceId),
             client => client.GetProjectsInSolutionAsync(cancellationToken),
+            cancellationToken);
+
+    public Task<GetFilesInProjectResponse> GetFilesInProjectAsync(
+        string? projectId,
+        string? extensionFilter,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetFilesInProjectAsync(
+                new GetFilesInProjectRequest
+                {
+                    ProjectId = projectId,
+                    ExtensionFilter = extensionFilter
+                },
+                cancellationToken),
             cancellationToken);
 
     public Task<BuildTaskResponse> RunBuildAsync(

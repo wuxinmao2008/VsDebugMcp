@@ -74,6 +74,20 @@ public sealed class McpTools
         InvokeAsync(() => _bridgeService.GetProjectsInSolutionAsync(vsInstanceId, cancellationToken));
 
     [McpServerTool(
+        Name = "vs_get_files_in_project",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the files belonging to one or all loaded projects in the Visual Studio solution, including relative paths and filter classifications.")]
+    public Task<GetFilesInProjectResponse> GetFilesInProjectAsync(
+        [Description("Optional project ID, name, or project file path to inspect. Omit it to retrieve files across all loaded projects.")] string? projectId = null,
+        [Description("Optional semicolon or comma separated extension filter, e.g. '.cpp;.h' or 'cs'.")] string? extensionFilter = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetFilesInProjectAsync(projectId, extensionFilter, vsInstanceId, cancellationToken));
+
+    [McpServerTool(
         Name = "vs_run_build",
         ReadOnly = false,
         Idempotent = false,

@@ -5,6 +5,15 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4.0] - 2026-09-05
+
+### Added
+- **Project Files Context (`vs_get_files_in_project`)**: Added MCP tool and bridge provider to query files belonging to one or all loaded projects in the Visual Studio solution.
+  - Implemented via high-performance native COM hierarchy traversal (`IVsHierarchy` + `IVsProject`), avoiding UI thread blocking.
+  - Preserves C++ virtual filter classifications (`FilterPath`), relative paths to project root, and physical file paths.
+  - Supports filtering by project ID/name/path and optional extension filter (e.g. `.cpp;.h`).
+  - Automatically filters out external SDK dependencies (`External Dependencies` / `外部依赖项`).
+
 ## [0.1.3.0] - 2026-09-04
 
 ### Changed

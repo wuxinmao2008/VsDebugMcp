@@ -95,11 +95,12 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 
 1. `phase0.ipc`（保留的 stub capability）
 2. `vs_get_projects_in_solution`
-3. `vs_run_build`
-4. `vs_get_build_status`
-5. `vs_cancel_build`
-6. `vs_get_errors`
-7. `vs_get_output_window_logs`
+3. `vs_get_files_in_project`
+4. `vs_run_build`
+5. `vs_get_build_status`
+6. `vs_cancel_build`
+7. `vs_get_errors`
+8. `vs_get_output_window_logs`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
@@ -296,26 +297,28 @@ MCP Client / Agent
 
 ### Phase 1：最小 IDE 闭环
 
-目标：让 agent 完成“看项目 → 构建 → 看错误 → 读文件/搜索”的闭环。
+目标：让 agent 完成“看项目结构/包含文件 → 构建 → 诊断输出”的 VS 独有上下文闭环。
 
-状态：**进行中**。
+设计原则（2026-09-05 共识）：
+- **不重复造轮子**：通用全盘搜索（ripgrep）、常规磁盘文件读取、文件修改/打补丁均由 Agent 宿主（VS Code / Cursor / Claude 等）原生提供，VsDebugMcp 专注于提供 Visual Studio 独有的 IDE 上下文。
+- 原路线图中的通用读盘（`vs_read_file`）、全盘搜索（`vs_file_search`）和文件编辑（`vs_edit_file` / `vs_create_patch`）予以裁剪，移出默认 MCP 工具面。
+
+状态：**代码实现完成，待在线部署验收**。
 
 任务：
 
 1. ✅ `vs_get_projects_in_solution`
-2. ⬜ `vs_get_files_in_project`
+2. ✅ `vs_get_files_in_project`（基于 `IVsHierarchy` + `IVsProject` 原生 COM 遍历，支持 Filters 分类和后缀筛选）
 3. ✅ `vs_run_build`
-4. 🔶 `vs_get_errors`：已实现，Qt/C++ Error Table 在线验收未通过。
+4. 🔶 `vs_get_errors`：已实现，Qt/C++ Error Table 在线验收未通过，公开 API 无法提供时稳定返回 `diagnostics_unavailable`。
 5. ✅ `vs_get_output_window_logs`
-6. ⬜ `vs_read_file`
-7. ⬜ `vs_file_search`
 
 验收：
 
 - Agent 能列出解决方案项目。
-- Agent 能触发构建。
-- 构建失败后能获取错误列表和输出窗口。
-- Agent 能读取相关源码文件。
+- Agent 能查询指定项目或全部项目的源码/头文件清单（含相对路径与 C++ 筛选器结构）。
+- Agent 能触发构建并追踪进度。
+- 构建失败后能获取 Build Output 原始输出窗口文本。
 - 所有只读工具不需要用户确认。
 
 ### Phase 2：基础调试闭环

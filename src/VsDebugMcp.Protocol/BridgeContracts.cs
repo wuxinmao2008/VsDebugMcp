@@ -158,6 +158,67 @@ public sealed class BridgeWarning
 }
 
 [DataContract]
+public sealed class GetFilesInProjectRequest
+{
+    [DataMember(Name = "projectId", Order = 1, EmitDefaultValue = false)]
+    public string? ProjectId { get; set; }
+
+    [DataMember(Name = "extensionFilter", Order = 2, EmitDefaultValue = false)]
+    public string? ExtensionFilter { get; set; }
+}
+
+[DataContract]
+public sealed class ProjectFileInfo
+{
+    [DataMember(Name = "filePath", Order = 1)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "relativePath", Order = 2)]
+    public string RelativePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "filterPath", Order = 3, EmitDefaultValue = false)]
+    public string? FilterPath { get; set; }
+
+    [DataMember(Name = "extension", Order = 4)]
+    public string Extension { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class ProjectFilesGroup
+{
+    [DataMember(Name = "projectId", Order = 1)]
+    public string ProjectId { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectName", Order = 2)]
+    public string ProjectName { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectFilePath", Order = 3)]
+    public string ProjectFilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "files", Order = 4)]
+    public List<ProjectFileInfo> Files { get; set; } = new();
+
+    [DataMember(Name = "fileCount", Order = 5)]
+    public int FileCount { get; set; }
+}
+
+[DataContract]
+public sealed class GetFilesInProjectResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "projects", Order = 2)]
+    public List<ProjectFilesGroup> Projects { get; set; } = new();
+
+    [DataMember(Name = "totalFileCount", Order = 3)]
+    public int TotalFileCount { get; set; }
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
 public sealed class RunBuildRequest
 {
     [DataMember(Name = "configuration", Order = 1, EmitDefaultValue = false)]
