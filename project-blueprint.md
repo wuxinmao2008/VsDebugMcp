@@ -3,16 +3,39 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 2026 / VS 18.x 提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0 已完成，Phase 1 最小 IDE 闭环实施中；项目、构建生命周期和 Build Output 已完成在线验收。
+- 阶段：Phase 0、Phase 1（最小 IDE 上下文与构建闭环）及 Phase 2 Debugger POC（只读调试观测原型）已全部完成开发并完成全链路在线实测验收。
+- 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
-- 能力范围：构建/编译、启动/附加调试与断点、错误列表/输出窗口、测试发现与测试运行、代码搜索/文件读取/补丁编辑。
+- 能力范围：构建/编译、断点设置、调试状态/调用栈/表达式求值诊断、输出窗口、项目工程与文件树。
 - 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43260` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
-- 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积从 ~103 MB 缩减至 ~2-4 MB。
+- 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积 ~4 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-08-20）
+## 实施进度（2026-09-05 更新）
 
-### 固定 HTTP 共享 Host 重构
+### Phase 2 Debugger POC（只读调试观测原型验证）已完成并在线验收 (v0.1.5.0)
+
+- **能力与模式防卫**：
+  - 基于 `EnvDTE.Debugger` 实现只读调试现场诊断，前置判定 `dbgDesignMode`、`dbgRunMode` 与 `dbgBreakMode`；
+  - 非中断模式下读取调用栈或求值严格拦截并返回结构化错误码 `debugger_not_paused`，杜绝 COM 崩溃；
+  - 所有调试器交互通过 `ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync` 调度至 Visual Studio 主 UI 线程；
+  - 表达式求值限制 2000ms 超时并支持指定 `frameIndex` 进行跨栈帧上卷求值。
+- **4 个核心调试 MCP 工具全部落地并通过在线实测**：
+  - `vs_debugger_get_info`：在线验证设计模式（`design`）与断点中断模式（`break`），准确报告调试器模式、活动 PID/TID、断点数与中断原因；
+  - `vs_debugger_set_breakpoints`：在线验证在源码物理路径与行号打断点（`sample/SampleApp/Services/Calculator.cs:5`），成功被 VS 采纳（`isBound=true`，断点数增至 1）；
+  - `vs_debugger_get_call_stack`：在线验证在中断现场准确捕获线程调用栈帧（Frame 0: `Calculator.Add`，Frame 1: `Program.<Main>$`）；
+  - `vs_debugger_evaluate_expr`：在线验证当前栈帧局部形参求值（`a=10`、`b=20`、`a+b=30`）以及调用者栈帧对象属性求值（`item.Name="Widget"`、`item.Price=9.99`）。
+- **自动化测试**：
+  - `VsDebugMcp.Protocol.Tests` (6/6 PASS) + `VsDebugMcp.Host.Tests` (25/25 PASS)，全套 31 个单元测试 100% 通过。
+
+### Phase 1 最小 IDE 闭环与样本方案已完成并在线验收 (v0.1.4.0)
+
+- **`vs_get_files_in_project`**：
+  - 基于 `IVsHierarchy` + `IVsProject` 原生 COM 实现，高效遍历项目文件树；
+  - 提取物理路径、相对根路径、C++ 筛选器（Filters）及后缀，自动过滤 `External Dependencies` 外部依赖干扰项；
+  - 在 VS 18.9 实验实例上完成全案 5 个文件、单工程过滤与扩展名过滤实测。
+- **开箱即用测试方案 (`sample/`)**：
+  - 建立 `sample/SampleSolution.sln` / `.slnx`，包含 `SampleApp`（.NET 8 Console）与 `SampleLib`（.NET 8 ClassLib）。
 
 - Host 已改为仅监听 IPv4 loopback `127.0.0.1:43260` 的无状态 Streamable HTTP MCP 服务。
 - 已删除 MCP stdio、MCP Named Pipe HTTP、手工 smoke 启动入口和对应 VS Code 任务。
@@ -468,13 +491,25 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 - [vs-copilot-debugger-log-analysis.md](vs-copilot-debugger-log-analysis.md)
 - [vs2026_copilot.md](vs2026_copilot.md)
 
-## 下一步
+## 下一步规划（面向新会话）
 
-1. 由用户运行最新 managed tests，覆盖新增的 Build Output DTO、Bridge RPC 和 MCP tool schema。
-2. 将 `vs_get_errors` 的空集合误判收紧为稳定的 `diagnostics_unavailable`，继续研究 Qt/C++ Error List 的公开数据源，不使用输出解析 fallback。
-3. 继续 Phase 1 低风险工具，优先顺序：
-  - `vs_get_files_in_project`
-  - `vs_read_file`
-  - `vs_file_search`
-4. 为 Build Output 增加可选的 build handle/起始偏移关联，避免当前窗格包含多次历史构建内容。
-5. Phase 1 最小闭环完成后，再进入 Debugger POC。
+当前状态：Phase 0、Phase 1、Phase 2 Debugger POC 均已交付并通过 100% 单元测试与真实 VS 18.9 实验实例全链路在线验收。
+下一阶段可展开的工作方向如下：
+
+1. **方向 A：调试器控制闭环（Debugger Control）**
+   - 在当前只读诊断基础上，引入调试执行控制（带安全确认与状态守卫）：
+     - `vs_debugger_step_over`（单步步过）
+     - `vs_debugger_step_into`（单步步入）
+     - `vs_debugger_step_out`（单步步出）
+     - `vs_debugger_continue`（继续运行）
+     - `vs_debugger_stop`（停止调试）
+   - 依赖 `DTE.Debugger` 对应控制 API，需增加并发锁与会话保护，防止多 agent 指令冲突。
+
+2. **方向 B：测试资源管理器集成（Test Explorer / VSTest）**
+   - 探索 `VisualStudio.Extensibility` 或 VSSDK 测试发现与运行 API：
+     - `vs_get_tests`（测试发现与层级列表）
+     - `vs_run_tests`（异步触发指定测试或全部测试）
+     - `vs_get_test_run_status`（轮询测试运行进度、通过率与失败堆栈）
+
+3. **方向 C：错误列表（Error List）公开数据源深化**
+   - 深入探索 VS 18.x `ITableManager` / `IVsErrorList` 原生 COM 接口，解决非托管 C++ 与特定构建输出无法沉淀至 Error List 公开快照的遗留限制，将 `vs_get_errors` 提升为稳定可用能力。
