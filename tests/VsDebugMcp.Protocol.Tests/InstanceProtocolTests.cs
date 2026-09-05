@@ -198,4 +198,57 @@ public sealed class InstanceProtocolTests
         var contReqCopy = BridgeJson.Deserialize<DebuggerContinueRequest>(BridgeJson.Serialize(contReq));
         Assert.False(contReqCopy.WaitForBreak);
     }
+
+    [Fact]
+    public void DebuggerDiagnosticEnhancementsRoundTripThroughSharedSerializer()
+    {
+        var startReq = new DebuggerStartRequest { WaitForBreak = true, TimeoutMs = 3000 };
+        var startReqCopy = BridgeJson.Deserialize<DebuggerStartRequest>(BridgeJson.Serialize(startReq));
+        Assert.True(startReqCopy.WaitForBreak);
+        Assert.Equal(3000, startReqCopy.TimeoutMs);
+
+        var evalReq = new DebuggerEvaluateExpressionsRequest
+        {
+            Expressions = new List<string> { "item.Id", "item.Name" },
+            FrameIndex = 1,
+            TimeoutMs = 1500,
+            AllowSideEffects = false
+        };
+        var evalReqCopy = BridgeJson.Deserialize<DebuggerEvaluateExpressionsRequest>(BridgeJson.Serialize(evalReq));
+        Assert.Equal(2, evalReqCopy.Expressions.Count);
+        Assert.Equal("item.Id", evalReqCopy.Expressions[0]);
+        Assert.Equal(1, evalReqCopy.FrameIndex);
+
+        var evalResp = new DebuggerEvaluateExpressionsResponse
+        {
+            VsInstanceId = "vs-1",
+            FrameIndex = 1,
+            Results = new List<DebuggerExpressionItemResult>
+            {
+                new() { Expression = "item.Id", Value = "1", Type = "int", IsValid = true },
+                new() { Expression = "item.Name", Value = "\"Widget\"", Type = "string", IsValid = true }
+            }
+        };
+        var evalRespCopy = BridgeJson.Deserialize<DebuggerEvaluateExpressionsResponse>(BridgeJson.Serialize(evalResp));
+        Assert.Equal(2, evalRespCopy.Results.Count);
+        Assert.Equal("\"Widget\"", evalRespCopy.Results[1].Value);
+
+        var localsResp = new DebuggerGetLocalsResponse
+        {
+            VsInstanceId = "vs-1",
+            FrameIndex = 0,
+            TotalCount = 2,
+            Truncated = false,
+            Variables = new List<DebuggerVariableInfo>
+            {
+                new() { Name = "a", Value = "10", Type = "int", IsArgument = true },
+                new() { Name = "sum", Value = "30", Type = "int", IsArgument = false }
+            }
+        };
+        var localsRespCopy = BridgeJson.Deserialize<DebuggerGetLocalsResponse>(BridgeJson.Serialize(localsResp));
+        Assert.Equal(2, localsRespCopy.Variables.Count);
+        Assert.True(localsRespCopy.Variables[0].IsArgument);
+        Assert.False(localsRespCopy.Variables[1].IsArgument);
+        Assert.Equal("10", localsRespCopy.Variables[0].Value);
+    }
 }

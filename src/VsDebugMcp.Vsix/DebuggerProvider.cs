@@ -503,6 +503,290 @@ internal sealed class DebuggerProvider
 		});
 	}
 
+	public async Task<DebuggerExecutionResponse> StartAsync(
+		DebuggerStartRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (!_executionLock.Wait(0))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerBusy,
+				"A debugger execution control operation is already in progress.");
+		}
+
+		try
+		{
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+			if (!dte.Solution?.IsOpen ?? true)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.SolutionNotOpen,
+					"No Visual Studio solution is open. Open a solution before starting debugging.");
+			}
+
+			if (debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerAlreadyRunning,
+					$"The debugger is already running (current mode: {GetModeString(debugger.CurrentMode)}). Use continue or step instead.");
+			}
+
+			var previousMode = GetModeString(debugger.CurrentMode);
+			debugger.Go(WaitForBreakOrEnd: false);
+
+			if (request.WaitForBreak)
+			{
+				var timeoutMs = Clamp(request.TimeoutMs ?? 5000, 500, 30000);
+				var sw = System.Diagnostics.Stopwatch.StartNew();
+				while (sw.ElapsedMilliseconds < timeoutMs)
+				{
+					await Task.Delay(100, cancellationToken);
+					await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+					if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode || debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+					{
+						break;
+					}
+				}
+			}
+
+			return CaptureExecutionResult(debugger, "start", previousMode);
+		}
+		finally
+		{
+			_executionLock.Release();
+		}
+	}
+
+	public async Task<DebuggerEvaluateExpressionsResponse> EvaluateExpressionsAsync(
+		DebuggerEvaluateExpressionsRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (request.Expressions == null || request.Expressions.Count == 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "Expressions list cannot be empty.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). Expression evaluation is only available when paused at a breakpoint or exception.");
+		}
+
+		var targetFrameIndex = request.FrameIndex ?? 0;
+		var timeoutMs = Clamp(request.TimeoutMs ?? DefaultTimeoutMs, 100, MaxAllowedTimeoutMs);
+
+		StackFrame? originalFrame = null;
+		var switchedFrame = false;
+
+		try
+		{
+			if (targetFrameIndex > 0 && debugger.CurrentThread?.StackFrames != null)
+			{
+				originalFrame = debugger.CurrentStackFrame;
+				var currentIndex = 0;
+				foreach (StackFrame frame in debugger.CurrentThread.StackFrames)
+				{
+					if (currentIndex == targetFrameIndex)
+					{
+						debugger.CurrentStackFrame = frame;
+						switchedFrame = true;
+						break;
+					}
+
+					currentIndex++;
+				}
+			}
+
+			var results = new List<DebuggerExpressionItemResult>();
+			foreach (var exprStr in request.Expressions)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				if (string.IsNullOrWhiteSpace(exprStr))
+				{
+					continue;
+				}
+
+				try
+				{
+					var expr = debugger.GetExpression(exprStr, UseAutoExpandRules: false, Timeout: timeoutMs);
+					if (expr == null)
+					{
+						results.Add(new DebuggerExpressionItemResult
+						{
+							Expression = exprStr,
+							Value = "<evaluation produced no result>",
+							Type = "unknown",
+							IsValid = false
+						});
+					}
+					else
+					{
+						results.Add(new DebuggerExpressionItemResult
+						{
+							Expression = exprStr,
+							Value = expr.Value ?? string.Empty,
+							Type = expr.Type ?? string.Empty,
+							IsValid = expr.IsValidValue
+						});
+					}
+				}
+				catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+				{
+					results.Add(new DebuggerExpressionItemResult
+					{
+						Expression = exprStr,
+						Value = $"<Evaluation error: {ex.Message}>",
+						Type = "error",
+						IsValid = false,
+						Error = ex.Message
+					});
+				}
+			}
+
+			return new DebuggerEvaluateExpressionsResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				FrameIndex = targetFrameIndex,
+				Results = results
+			};
+		}
+		finally
+		{
+			if (switchedFrame && originalFrame != null)
+			{
+				try
+				{
+					debugger.CurrentStackFrame = originalFrame;
+				}
+				catch
+				{
+				}
+			}
+		}
+	}
+
+	public async Task<DebuggerGetLocalsResponse> GetLocalsAsync(
+		DebuggerGetLocalsRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). Locals inspection is only available when paused.");
+		}
+
+		var targetFrameIndex = request.FrameIndex ?? 0;
+		var maxCount = Clamp(request.MaxCount ?? 50, 1, 200);
+
+		StackFrame? targetFrame = null;
+		if (debugger.CurrentThread?.StackFrames != null)
+		{
+			var currentIndex = 0;
+			foreach (StackFrame frame in debugger.CurrentThread.StackFrames)
+			{
+				if (currentIndex == targetFrameIndex)
+				{
+					targetFrame = frame;
+					break;
+				}
+				currentIndex++;
+			}
+		}
+
+		if (targetFrame == null)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerUnavailable,
+				$"Stack frame at index {targetFrameIndex} was not found.");
+		}
+
+		var variables = new List<DebuggerVariableInfo>();
+		var totalCount = 0;
+		var warnings = new List<BridgeWarning>();
+
+		try
+		{
+			var args = targetFrame.Arguments;
+			if (args != null)
+			{
+				foreach (Expression arg in args)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					totalCount++;
+					if (variables.Count < maxCount)
+					{
+						variables.Add(new DebuggerVariableInfo
+						{
+							Name = arg.Name ?? string.Empty,
+							Value = arg.Value ?? string.Empty,
+							Type = arg.Type ?? string.Empty,
+							IsArgument = true
+						});
+					}
+				}
+			}
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+		{
+			warnings.Add(new BridgeWarning
+			{
+				Code = "arguments_read_failed",
+				Message = $"Failed to read function arguments: {ex.Message}"
+			});
+		}
+
+		try
+		{
+			var locals = targetFrame.Locals;
+			if (locals != null)
+			{
+				foreach (Expression loc in locals)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					totalCount++;
+					if (variables.Count < maxCount)
+					{
+						variables.Add(new DebuggerVariableInfo
+						{
+							Name = loc.Name ?? string.Empty,
+							Value = loc.Value ?? string.Empty,
+							Type = loc.Type ?? string.Empty,
+							IsArgument = false
+						});
+					}
+				}
+			}
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+		{
+			warnings.Add(new BridgeWarning
+			{
+				Code = "locals_read_failed",
+				Message = $"Failed to read function locals: {ex.Message}"
+			});
+		}
+
+		return new DebuggerGetLocalsResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			FrameIndex = targetFrameIndex,
+			Variables = variables,
+			TotalCount = totalCount,
+			Truncated = totalCount > variables.Count,
+			Warnings = warnings
+		};
+	}
+
 	private async Task<DebuggerExecutionResponse> ExecuteControlCommandAsync(
 		string actionName,
 		CancellationToken cancellationToken,
@@ -602,13 +886,20 @@ internal sealed class DebuggerProvider
 		};
 	}
 
-	private async Task<Debugger> GetDebuggerAsync(CancellationToken cancellationToken)
+	private async Task<(DTE2 Dte, Debugger Debugger)> GetDteAndDebuggerAsync(CancellationToken cancellationToken)
 	{
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 		var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2
 			?? throw new DebuggerProviderException(BridgeErrorCodes.DebuggerUnavailable, "The Visual Studio DTE service is unavailable.");
-		return dte.Debugger
+		var debugger = dte.Debugger
 			?? throw new DebuggerProviderException(BridgeErrorCodes.DebuggerUnavailable, "The Visual Studio debugger is unavailable.");
+		return (dte, debugger);
+	}
+
+	private async Task<Debugger> GetDebuggerAsync(CancellationToken cancellationToken)
+	{
+		var (_, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+		return debugger;
 	}
 
 	private static EnvDTE.Thread? FindThread(Debugger debugger, int? requestedThreadId)

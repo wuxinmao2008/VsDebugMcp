@@ -341,6 +341,64 @@ public sealed class McpTools
             vsInstanceId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debugger_start",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Starts debugging the active startup project in the open solution (equivalent to F5).")]
+    public Task<DebuggerExecutionResponse> DebuggerStartAsync(
+        [Description("Optional flag whether to wait for the program to enter break mode before returning. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional timeout in milliseconds to wait for a breakpoint or pause when waitForBreak is true. Defaults to 5000.")] int? timeoutMs = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerStartAsync(
+            waitForBreak ?? true,
+            timeoutMs,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_evaluate_expressions",
+        ReadOnly = true,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Evaluates multiple expressions or variables in batch within the context of the current or specified stack frame while paused in break mode.")]
+    public Task<DebuggerEvaluateExpressionsResponse> DebuggerEvaluateExpressionsAsync(
+        [Description("The list of expressions or variables to evaluate.")] List<string> expressions,
+        [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
+        [Description("Optional evaluation timeout per expression in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
+        [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerEvaluateExpressionsAsync(
+            expressions,
+            frameIndex,
+            timeoutMs,
+            allowSideEffects ?? false,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_locals",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the arguments and local variables available in the context of the current or specified stack frame while paused in break mode.")]
+    public Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
+        [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
+        [Description("Optional maximum number of variables to retrieve from 1 to 200. Defaults to 50.")] int? maxCount = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetLocalsAsync(
+            frameIndex,
+            maxCount,
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

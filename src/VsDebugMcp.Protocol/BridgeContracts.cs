@@ -479,6 +479,115 @@ public sealed class DebuggerExecutionResponse
 }
 
 [DataContract]
+public sealed class DebuggerStartRequest
+{
+    [DataMember(Name = "waitForBreak", Order = 1)]
+    public bool WaitForBreak { get; set; } = true;
+
+    [DataMember(Name = "timeoutMs", Order = 2, EmitDefaultValue = false)]
+    public int? TimeoutMs { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerEvaluateExpressionsRequest
+{
+    [DataMember(Name = "expressions", Order = 1)]
+    public List<string> Expressions { get; set; } = new();
+
+    [DataMember(Name = "frameIndex", Order = 2, EmitDefaultValue = false)]
+    public int? FrameIndex { get; set; }
+
+    [DataMember(Name = "timeoutMs", Order = 3, EmitDefaultValue = false)]
+    public int? TimeoutMs { get; set; }
+
+    [DataMember(Name = "allowSideEffects", Order = 4)]
+    public bool AllowSideEffects { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerExpressionItemResult
+{
+    [DataMember(Name = "expression", Order = 1)]
+    public string Expression { get; set; } = string.Empty;
+
+    [DataMember(Name = "value", Order = 2)]
+    public string Value { get; set; } = string.Empty;
+
+    [DataMember(Name = "type", Order = 3)]
+    public string Type { get; set; } = string.Empty;
+
+    [DataMember(Name = "isValid", Order = 4)]
+    public bool IsValid { get; set; }
+
+    [DataMember(Name = "error", Order = 5, EmitDefaultValue = false)]
+    public string? Error { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerEvaluateExpressionsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "frameIndex", Order = 2)]
+    public int FrameIndex { get; set; }
+
+    [DataMember(Name = "results", Order = 3)]
+    public List<DebuggerExpressionItemResult> Results { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetLocalsRequest
+{
+    [DataMember(Name = "frameIndex", Order = 1, EmitDefaultValue = false)]
+    public int? FrameIndex { get; set; }
+
+    [DataMember(Name = "maxCount", Order = 2, EmitDefaultValue = false)]
+    public int? MaxCount { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerVariableInfo
+{
+    [DataMember(Name = "name", Order = 1)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "value", Order = 2)]
+    public string Value { get; set; } = string.Empty;
+
+    [DataMember(Name = "type", Order = 3)]
+    public string Type { get; set; } = string.Empty;
+
+    [DataMember(Name = "isArgument", Order = 4)]
+    public bool IsArgument { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetLocalsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "frameIndex", Order = 2)]
+    public int FrameIndex { get; set; }
+
+    [DataMember(Name = "variables", Order = 3)]
+    public List<DebuggerVariableInfo> Variables { get; set; } = new();
+
+    [DataMember(Name = "totalCount", Order = 4)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "truncated", Order = 5)]
+    public bool Truncated { get; set; }
+
+    [DataMember(Name = "warnings", Order = 6)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
 public sealed class RunBuildRequest
 {
     [DataMember(Name = "configuration", Order = 1, EmitDefaultValue = false)]

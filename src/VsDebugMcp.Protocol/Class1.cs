@@ -34,6 +34,9 @@ public static class BridgeMethods
 	public const string DebuggerContinue = "debuggerContinue";
 	public const string DebuggerPause = "debuggerPause";
 	public const string DebuggerStop = "debuggerStop";
+	public const string DebuggerStart = "debuggerStart";
+	public const string DebuggerEvaluateExpressions = "debuggerEvaluateExpressions";
+	public const string DebuggerGetLocals = "debuggerGetLocals";
 	public const string Shutdown = "shutdown";
 }
 
@@ -66,6 +69,7 @@ public static class BridgeErrorCodes
 	public const string DebuggerBusy = "debugger_busy";
 	public const string DebuggerNotRunning = "debugger_not_running";
 	public const string DebuggerNotDebugging = "debugger_not_debugging";
+	public const string DebuggerAlreadyRunning = "debugger_already_running";
 	public const string InternalError = "internal_error";
 }
 

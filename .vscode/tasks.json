@@ -44,19 +44,12 @@
 		},
 		{
 			"label": "deploy: vsix",
-			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
-			"args": [
-				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
-				"/restore",
-				"/t:Build;DeployVsixExtensionFiles",
-				"/p:Configuration=Debug",
-				"/p:DeployExtension=true",
-				"/m:1",
-				"/nr:false",
-				"/v:minimal"
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/deploy-exp.ps1",
+			"dependsOn": [
+				"build: vsix"
 			],
-			"problemMatcher": "$msCompile"
+			"problemMatcher": []
 		},
 		{
 			"label": "build: all",

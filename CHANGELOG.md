@@ -5,6 +5,15 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7.0] - 2026-09-05
+
+### Added
+- **Debugger Launch & Diagnostic Enhancements (Route 1)**: Added programmatic debugger launch and batch diagnostics tools via `EnvDTE.Debugger` and `EnvDTE.StackFrame`:
+  - `vs_debugger_start`: Starts debugging the active startup project in the open solution (equivalent to F5) with smart landing probe (`waitForBreak`).
+  - `vs_debugger_evaluate_expressions`: Evaluates multiple expressions or variables in batch within the context of the current or specified stack frame.
+  - `vs_debugger_get_locals`: Inspects all arguments and local variables available in the active or specified stack frame, eliminating variable name guesswork.
+  - Added mode guard `debugger_already_running` when attempting to start an active debug session.
+
 ## [0.1.6.0] - 2026-09-05
 
 ### Added

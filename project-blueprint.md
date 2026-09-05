@@ -13,7 +13,17 @@
 
 ## 实施进度（2026-09-05 更新）
 
-### Phase 2B 调试器执行控制闭环已完成开发与全套单元测试 (v0.1.6.0)
+### Phase 2C 调试器启动与诊断增强已完成开发与全套单元测试 (v0.1.7.0)
+
+- **启动与批量诊断能力**：
+  - `vs_debugger_start`：在设计模式下程序化触发 F5 启动调试，支持智能着陆探测（`waitForBreak`）并即时回显断点栈帧；
+  - `vs_debugger_evaluate_expressions`：单次 RPC 批量求值多个表达式，消除反复网络往返延迟；
+  - `vs_debugger_get_locals`：基于 `StackFrame.Locals` 与 `Arguments` 原生 COM 集合，自动列出活动栈帧的形参与局部变量名值清单；
+  - 严格模式防卫：调试运行中禁止重复调用启动（`debugger_already_running`）。
+- **自动化测试**：
+  - `VsDebugMcp.Protocol.Tests` (8/8 PASS) + `VsDebugMcp.Host.Tests` (47/47 PASS)，全套 55 个单元测试 100% 通过。
+
+### Phase 2B 调试器执行控制闭环已完成开发并在线验收 (v0.1.6.0)
 
 - **控制能力与并发防卫**：
   - 基于 `EnvDTE.Debugger` 实现完整的执行控制，调度至 Visual Studio 主 UI 线程；
@@ -151,6 +161,9 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 16. `vs_debugger_continue`
 17. `vs_debugger_pause`
 18. `vs_debugger_stop`
+19. `vs_debugger_start`
+20. `vs_debugger_evaluate_expressions`
+21. `vs_debugger_get_locals`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 

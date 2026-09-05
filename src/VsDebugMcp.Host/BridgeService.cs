@@ -109,6 +109,26 @@ public interface IBridgeService
         bool waitForStop,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerExecutionResponse> DebuggerStartAsync(
+        bool waitForBreak,
+        int? timeoutMs,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerEvaluateExpressionsResponse> DebuggerEvaluateExpressionsAsync(
+        List<string> expressions,
+        int? frameIndex,
+        int? timeoutMs,
+        bool allowSideEffects,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
+        int? frameIndex,
+        int? maxCount,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -393,6 +413,58 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerExecutionResponse> DebuggerStartAsync(
+        bool waitForBreak,
+        int? timeoutMs,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerStartAsync(
+                new DebuggerStartRequest
+                {
+                    WaitForBreak = waitForBreak,
+                    TimeoutMs = timeoutMs
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerEvaluateExpressionsResponse> DebuggerEvaluateExpressionsAsync(
+        List<string> expressions,
+        int? frameIndex,
+        int? timeoutMs,
+        bool allowSideEffects,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerEvaluateExpressionsAsync(
+                new DebuggerEvaluateExpressionsRequest
+                {
+                    Expressions = expressions,
+                    FrameIndex = frameIndex,
+                    TimeoutMs = timeoutMs,
+                    AllowSideEffects = allowSideEffects
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
+        int? frameIndex,
+        int? maxCount,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetLocalsAsync(
+                new DebuggerGetLocalsRequest
+                {
+                    FrameIndex = frameIndex,
+                    MaxCount = maxCount
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -541,6 +613,11 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.DebuggerNotDebugging => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerAlreadyRunning => new(
                 exception.Code,
                 exception.Message,
                 false,
