@@ -19,22 +19,32 @@ Each Visual Studio process registers a session identity derived from its PID and
 
 ## Current capabilities
 
-- `vs_health`
-- `vs_capabilities`
-- `vs_list_instances`
-- `vs_find_instances`
-- `vs_get_projects_in_solution`
-- `vs_run_build`
-- `vs_get_build_status`
-- `vs_cancel_build`
-- `vs_get_errors`
-- `vs_get_output_window_logs`
+### Solution, Project & Build Context
+- `vs_health` — MCP server and Visual Studio bridge connectivity check
+- `vs_capabilities` — Active IDE capability discovery
+- `vs_list_instances` / `vs_find_instances` — Multi-instance Visual Studio management
+- `vs_get_projects_in_solution` — Solution structure and project discovery
+- `vs_get_files_in_project` — Comprehensive project source file tree and C++ filters
+- `vs_run_build` — Asynchronous IDE build execution
+- `vs_get_build_status` — Build task state polling
+- `vs_cancel_build` — Active build cancellation
+- `vs_get_errors` — Error list diagnostics extraction
+- `vs_get_output_window_logs` — Raw Build Output and IDE pane logs
+
+### Debugger Launch, Control & Diagnostics
+- `vs_debugger_start` — Programmatic F5 launch with smart landing break detection
+- `vs_debugger_get_info` — Debugger mode, active process, thread, and break reason
+- `vs_debugger_set_breakpoints` — Source line breakpoint management
+- `vs_debugger_get_call_stack` — Call stack capture upon pause/breakpoint
+- `vs_debugger_get_locals` — Arguments and local variables inspection
+- `vs_debugger_evaluate_expr` — Single expression evaluation with timeout protection
+- `vs_debugger_evaluate_expressions` — Single-RPC batch expressions evaluation
+- `vs_debugger_step_over` / `step_into` / `step_out` — Stepping execution control
+- `vs_debugger_continue` / `pause` / `stop` — Session continuation, pause, and termination
 
 ### In action
 
 ![VS Code Agent using VsDebugMcp](assets/screenshot_01.png)
-
-Debugger control, tests, file editing and remote access are not included yet.
 
 ## Projects
 

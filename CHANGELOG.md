@@ -10,9 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Debugger Launch & Diagnostic Enhancements (Route 1)**: Added programmatic debugger launch and batch diagnostics tools via `EnvDTE.Debugger` and `EnvDTE.StackFrame`:
   - `vs_debugger_start`: Starts debugging the active startup project in the open solution (equivalent to F5) with smart landing probe (`waitForBreak`).
-  - `vs_debugger_evaluate_expressions`: Evaluates multiple expressions or variables in batch within the context of the current or specified stack frame.
+  - `vs_debugger_evaluate_expressions`: Evaluates multiple expressions or variables in batch within the context of the current or specified stack frame, isolating per-item errors.
   - `vs_debugger_get_locals`: Inspects all arguments and local variables available in the active or specified stack frame, eliminating variable name guesswork.
   - Added mode guard `debugger_already_running` when attempting to start an active debug session.
+  - Added deployment helper script `scripts/deploy-exp.ps1` and updated `deploy: vsix` task to ensure safe, file-lock-free updates.
+
+### Fixed
+- Fixed .NET Framework compatibility in `DebuggerProvider.cs` by replacing .NET Core-only `Environment.TickCount64` with `System.Diagnostics.Stopwatch.StartNew()`.
+
+### Verified
+- Automated unit tests: 55/55 PASS (100%).
+- Full end-to-end online acceptance in Visual Studio 2026 (VS 18.9.12120.119) Experimental Instance against `sample/SampleSolution.slnx`: verified programmatic F5 start, break landing, locals inspection, step over, batch evaluation, step into, argument inspection, step out, and stop.
 
 ## [0.1.6.0] - 2026-09-05
 

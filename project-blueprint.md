@@ -13,15 +13,19 @@
 
 ## 实施进度（2026-09-05 更新）
 
-### Phase 2C 调试器启动与诊断增强已完成开发与全套单元测试 (v0.1.7.0)
+### Phase 2C 调试器启动与诊断增强已完成开发并通过全链路在线实测验收 (v0.1.7.0)
 
 - **启动与批量诊断能力**：
   - `vs_debugger_start`：在设计模式下程序化触发 F5 启动调试，支持智能着陆探测（`waitForBreak`）并即时回显断点栈帧；
-  - `vs_debugger_evaluate_expressions`：单次 RPC 批量求值多个表达式，消除反复网络往返延迟；
+  - `vs_debugger_evaluate_expressions`：单次 RPC 批量求值多个表达式，具备单项错误隔离能力，消除反复网络往返延迟；
   - `vs_debugger_get_locals`：基于 `StackFrame.Locals` 与 `Arguments` 原生 COM 集合，自动列出活动栈帧的形参与局部变量名值清单；
   - 严格模式防卫：调试运行中禁止重复调用启动（`debugger_already_running`）。
-- **自动化测试**：
-  - `VsDebugMcp.Protocol.Tests` (8/8 PASS) + `VsDebugMcp.Host.Tests` (47/47 PASS)，全套 55 个单元测试 100% 通过。
+- **工程与部署优化**：
+  - 修复 VSIX .NET Framework 兼容性问题，改用 `Stopwatch.StartNew()` 计时；
+  - 新增 `scripts/deploy-exp.ps1` 专用部署工具，保障实验实例文件覆盖与时间戳刷新。
+- **自动化测试与实测验收**：
+  - `VsDebugMcp.Protocol.Tests` (8/8 PASS) + `VsDebugMcp.Host.Tests` (47/47 PASS)，全套 55 个单元测试 100% 通过；
+  - 在 VS 18.9 实验实例完成全链路闭环实测（0 手工按键启动调试、断点停靠、变量巡检、单步控制、批量求值与平稳退出）。
 
 ### Phase 2B 调试器执行控制闭环已完成开发并在线验收 (v0.1.6.0)
 
@@ -169,14 +173,14 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`8/8` 通过。
-- Host tests 最近一次完整运行：`16/16` 通过。
-- 后续已增加 Build Output DTO、tool forwarding 和 tool discovery 测试；最新完整 managed test run 待执行。
-- VSIX 已使用 VS 18 MSBuild 成功编译。
-- 已新增独立 VS Code 任务：
-  - `build: vsix`：只构建，不部署。
-  - `deploy: vsix`：执行 `Build;DeployVsixExtensionFiles` 并显式启用部署。
-- 已在线确认编译 DLL 与 Exp 安装副本 SHA-256 一致，解决了“构建成功但安装目录未更新”的问题。
+- Protocol tests 最近一次完整运行：`8/8` PASS。
+- Host tests 最近一次完整运行：`47/47` PASS。
+- 全套测试通过率：`55/55` PASS (100%)。
+- VSIX 已使用 VS 18 MSBuild 成功编译与打包（~4 MB）。
+- 部署流水线已完善：
+  - `build: vsix`：编译 VSIX 包；
+  - `deploy: vsix`：依赖 `build: vsix`，调用 `scripts/deploy-exp.ps1` 校验实验实例与 Host 状态并完成安全覆盖部署。
+- 已在 Visual Studio 2026 (VS 18.9) 实验实例完成全链路实测验收。
 
 ## 核心依据
 
@@ -529,21 +533,19 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 
 ## 下一步规划（面向新会话）
 
-当前状态：Phase 0、Phase 1、Phase 2 Debugger POC 以及 Phase 2B 调试器执行控制闭环（方向 A，v0.1.6.0）均已完成开发并通过 100% 全套自动化单元测试（44/44 PASS）。
+当前状态：Phase 0、Phase 1、Phase 2 Debugger POC、Phase 2B 调试器执行控制闭环（v0.1.6.0）以及 Phase 2C 启动调试与诊断增强（路线 1，v0.1.7.0）均已完成开发，全套自动化单元测试（55/55 PASS），并在 VS 18.9 实验实例完成全链路在线实测验收（涵盖 21 个 Bridge 工具与 3 个 Host 发现/健康工具）。
+
 下一阶段可展开的工作方向如下：
 
-1. **方向 A 在线实测联调与验收（Debugger Control Live Acceptance）**
-   - 部署 v0.1.6.0 VSIX 到 Visual Studio 2026 / VS 18.x 实验实例；
-   - 依托 `sample/SampleSolution.sln`，全链路实测验证断点命中断点后的单步步进（`step_over`/`step_into`/`step_out`）、调用栈顶帧即时回显、继续运行（`continue`）、挂起（`pause`）与停止调试（`stop`），以及并发互斥报错（`debugger_busy`）。
-
-2. **方向 B：测试资源管理器集成（Test Explorer / VSTest）**
+1. **路线 2 / 方向 B：测试资源管理器集成（Test Explorer / VSTest）**
    - 探索 `VisualStudio.Extensibility` 或 VSSDK 测试发现与运行 API：
      - `vs_get_tests`（测试发现与层级列表）
-     - `vs_run_tests`（异步触发指定测试或全部测试）
+     - `vs_run_tests`（异步触发指定测试或全部测试，返回 `testRunId`）
      - `vs_get_test_run_status`（轮询测试运行进度、通过率与失败堆栈）
 
-3. **方向 C：错误列表（Error List）公开数据源深化**
+2. **方向 C：错误列表（Error List）公开数据源深化**
    - 深入探索 VS 18.x `ITableManager` / `IVsErrorList` 原生 COM 接口，解决非托管 C++ 与特定构建输出无法沉淀至 Error List 公开快照的遗留限制，将 `vs_get_errors` 提升为稳定可用能力。
 
-4. **方向 D：调试会话启动与进程附加（Launch & Attach）**
-   - 探索从外部 Agent 启动调试会话（`vs_debugger_launch_project`）或附加至已有进程（`vs_debugger_attach_process`）。
+3. **方向 D：调试器进程附加与高级能力（Attach & Advanced Diagnostics）**
+   - 支持将调试器附加到外部已运行进程（`vs_debugger_attach_process`）；
+   - 支持条件断点高级配置、Hit Count 计数断点，以及更深层的数据断点。
