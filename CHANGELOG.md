@@ -5,6 +5,15 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5.0] - 2026-09-05
+
+### Added
+- **Debugger POC (Read-only observation track)**: Added core Visual Studio debugger inspection and breakpoint tools via `EnvDTE.Debugger` with UI thread synchronization and mode guards:
+  - `vs_debugger_get_info`: Queries current debugger mode (design, running, break), active process, thread, and last break reason.
+  - `vs_debugger_set_breakpoints`: Sets, toggles, or clears source line breakpoints in the solution.
+  - `vs_debugger_get_call_stack`: Captures stack frames (function signatures, module, file/line heuristics) when paused at a breakpoint or exception.
+  - `vs_debugger_evaluate_expr`: Evaluates expressions or variables at specified stack frames with timeout protection and side-effect control.
+
 ## [0.1.4.0] - 2026-09-05
 
 ### Added

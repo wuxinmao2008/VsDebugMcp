@@ -26,6 +26,7 @@ internal sealed class BridgeServer : IDisposable
     private readonly SolutionBuildProvider _solutionBuildProvider;
     private readonly ErrorListProvider _errorListProvider;
     private readonly OutputWindowProvider _outputWindowProvider;
+    private readonly DebuggerProvider _debuggerProvider;
     private Task? _serverTask;
 
     public BridgeServer(
@@ -39,6 +40,7 @@ internal sealed class BridgeServer : IDisposable
         _solutionBuildProvider = solutionBuildProvider;
         _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
+        _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId);
     }
 
     public void Start()
@@ -268,6 +270,70 @@ internal sealed class BridgeServer : IDisposable
                 return await HandleDiagnosticsRequestAsync(request, cancellationToken);
             case BridgeMethods.GetOutputWindowLogs:
                 return await HandleOutputWindowRequestAsync(request, cancellationToken);
+            case BridgeMethods.DebuggerGetInfo:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetInfoRequest()
+                        : BridgeJson.Deserialize<DebuggerGetInfoRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetInfoAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerSetBreakpoints:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerSetBreakpointsRequest()
+                        : BridgeJson.Deserialize<DebuggerSetBreakpointsRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.SetBreakpointsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The set breakpoints request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerGetCallStack:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetCallStackRequest()
+                        : BridgeJson.Deserialize<DebuggerGetCallStackRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetCallStackAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get call stack request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerEvaluateExpr:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerEvaluateExprRequest()
+                        : BridgeJson.Deserialize<DebuggerEvaluateExprRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.EvaluateExprAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The evaluate expression request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -488,6 +554,30 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_output_window_logs",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_info",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_set_breakpoints",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_call_stack",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_evaluate_expr",
                 Version = "0.1",
                 IsStub = false
             }

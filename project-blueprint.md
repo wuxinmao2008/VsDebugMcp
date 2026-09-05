@@ -101,6 +101,10 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 6. `vs_cancel_build`
 7. `vs_get_errors`
 8. `vs_get_output_window_logs`
+9. `vs_debugger_get_info`
+10. `vs_debugger_set_breakpoints`
+11. `vs_debugger_get_call_stack`
+12. `vs_debugger_evaluate_expr`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
@@ -323,23 +327,33 @@ MCP Client / Agent
 
 ### Phase 2：基础调试闭环
 
-目标：让 agent 能进入基础调试诊断。
+目标：让 agent 能进入基础调试诊断与现场分析。
 
-任务：
+状态：**Debugger POC（只读观测轨道）代码实现完成，待在线部署验收**。
 
-1. `vs_debugger_get_info`
-2. `vs_debugger_set_breakpoints`
-3. `vs_debugger_launch_project`
-4. `vs_debugger_attach_process`
-5. `vs_debugger_get_threads`
-6. `vs_debugger_get_call_stack`
-7. `vs_debugger_evaluate_expr`
-8. `vs_debugger_evaluate_expressions`
-9. `vs_debugger_continue`
-10. `vs_debugger_pause`
-11. `vs_debugger_step_over`
-12. `vs_debugger_step_into`
-13. `vs_debugger_step_out`
+POC 核心原则：
+- **只读观测先行**：优先提供状态探测（`get_info`）、断点管理（`set_breakpoints`）、中断现场栈帧提取（`get_call_stack`）与表达式探针（`evaluate_expr`）。
+- **模式防卫（Mode Guard）**：未暂停时严格拦截并返回结构化错误码 `debugger_not_paused`。
+- **超时保护**：表达式求值设置有界超时（默认 2000ms），防止死循环或耗时 getter 冻结 VS UI。
+
+已实现 POC 任务：
+
+1. ✅ `vs_debugger_get_info`
+2. ✅ `vs_debugger_set_breakpoints`
+3. ✅ `vs_debugger_get_call_stack`
+4. ✅ `vs_debugger_evaluate_expr`
+
+后续控制任务（Phase 2B）：
+
+5. ⬜ `vs_debugger_launch_project`
+6. ⬜ `vs_debugger_attach_process`
+7. ⬜ `vs_debugger_get_threads`
+8. ⬜ `vs_debugger_evaluate_expressions`
+9. ⬜ `vs_debugger_continue`
+10. ⬜ `vs_debugger_pause`
+11. ⬜ `vs_debugger_step_over`
+12. ⬜ `vs_debugger_step_into`
+13. ⬜ `vs_debugger_step_out`
 
 验收：
 

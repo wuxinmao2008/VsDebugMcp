@@ -24,6 +24,10 @@ public static class BridgeMethods
 	public const string CancelBuild = "cancelBuild";
 	public const string GetErrors = "getErrors";
 	public const string GetOutputWindowLogs = "getOutputWindowLogs";
+	public const string DebuggerGetInfo = "debuggerGetInfo";
+	public const string DebuggerSetBreakpoints = "debuggerSetBreakpoints";
+	public const string DebuggerGetCallStack = "debuggerGetCallStack";
+	public const string DebuggerEvaluateExpr = "debuggerEvaluateExpr";
 	public const string Shutdown = "shutdown";
 }
 
@@ -50,6 +54,9 @@ public static class BridgeErrorCodes
 	public const string BuildStateUnavailable = "build_state_unavailable";
 	public const string DiagnosticsUnavailable = "diagnostics_unavailable";
 	public const string OutputUnavailable = "output_unavailable";
+	public const string DebuggerNotPaused = "debugger_not_paused";
+	public const string DebuggerUnavailable = "debugger_unavailable";
+	public const string DebuggerEvaluationFailed = "debugger_evaluation_failed";
 	public const string InternalError = "internal_error";
 }
 

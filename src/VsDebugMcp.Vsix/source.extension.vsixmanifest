@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="VsDebugMcp.Bridge.c2fcf48e-5c7b-4a36-9f83-d6cda8e6c2ad" Version="0.1.4.0" Language="en-US" Publisher="WuXinmao" />
+    <Identity Id="VsDebugMcp.Bridge.c2fcf48e-5c7b-4a36-9f83-d6cda8e6c2ad" Version="0.1.5.0" Language="en-US" Publisher="WuXinmao" />
     <DisplayName>VsDebugMcp</DisplayName>
     <Description>Connect AI agents to local Visual Studio through MCP for solution discovery, build control, diagnostics, and Build Output.</Description>
     <MoreInfo>https://github.com/wuxinmao2008/VsDebugMcp</MoreInfo>

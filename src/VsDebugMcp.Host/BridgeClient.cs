@@ -95,6 +95,36 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetInfoResponse> DebuggerGetInfoAsync(CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetInfoRequest, DebuggerGetInfoResponse>(
+            BridgeMethods.DebuggerGetInfo,
+            new DebuggerGetInfoRequest(),
+            cancellationToken);
+
+    public Task<DebuggerSetBreakpointsResponse> DebuggerSetBreakpointsAsync(
+        DebuggerSetBreakpointsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerSetBreakpointsRequest, DebuggerSetBreakpointsResponse>(
+            BridgeMethods.DebuggerSetBreakpoints,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
+        DebuggerGetCallStackRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetCallStackRequest, DebuggerGetCallStackResponse>(
+            BridgeMethods.DebuggerGetCallStack,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerEvaluateExprResponse> DebuggerEvaluateExprAsync(
+        DebuggerEvaluateExprRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerEvaluateExprRequest, DebuggerEvaluateExprResponse>(
+            BridgeMethods.DebuggerEvaluateExpr,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

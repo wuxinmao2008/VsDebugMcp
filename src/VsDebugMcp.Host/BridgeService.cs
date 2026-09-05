@@ -54,6 +54,31 @@ public interface IBridgeService
         int? maxChars,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerGetInfoResponse> DebuggerGetInfoAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerSetBreakpointsResponse> DebuggerSetBreakpointsAsync(
+        string filePath,
+        List<BreakpointSpec> breakpoints,
+        bool clearExisting,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
+        int? threadId,
+        int? maxFrames,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerEvaluateExprResponse> DebuggerEvaluateExprAsync(
+        string expression,
+        int? frameIndex,
+        int? timeoutMs,
+        bool allowSideEffects,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -210,6 +235,68 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerGetInfoResponse> DebuggerGetInfoAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetInfoAsync(cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerSetBreakpointsResponse> DebuggerSetBreakpointsAsync(
+        string filePath,
+        List<BreakpointSpec> breakpoints,
+        bool clearExisting,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerSetBreakpointsAsync(
+                new DebuggerSetBreakpointsRequest
+                {
+                    FilePath = filePath,
+                    Breakpoints = breakpoints,
+                    ClearExisting = clearExisting
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
+        int? threadId,
+        int? maxFrames,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetCallStackAsync(
+                new DebuggerGetCallStackRequest
+                {
+                    ThreadId = threadId,
+                    MaxFrames = maxFrames
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerEvaluateExprResponse> DebuggerEvaluateExprAsync(
+        string expression,
+        int? frameIndex,
+        int? timeoutMs,
+        bool allowSideEffects,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerEvaluateExprAsync(
+                new DebuggerEvaluateExprRequest
+                {
+                    Expression = expression,
+                    FrameIndex = frameIndex,
+                    TimeoutMs = timeoutMs,
+                    AllowSideEffects = allowSideEffects
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -331,6 +418,21 @@ public sealed class BridgeServiceException : Exception
                 exception.Code,
                 "The Visual Studio output window is unavailable.",
                 exception.Retryable,
+                exception),
+            BridgeErrorCodes.DebuggerNotPaused => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerUnavailable => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerEvaluationFailed => new(
+                exception.Code,
+                exception.Message,
+                false,
                 exception),
             _ => new(
                 BridgeErrorCodes.InternalError,

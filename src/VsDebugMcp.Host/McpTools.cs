@@ -165,6 +165,86 @@ public sealed class McpTools
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.GetOutputWindowLogsAsync(source, maxChars, vsInstanceId, cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debugger_get_info",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns current Visual Studio debugger status, including debug mode (design, running, break), active process, thread, breakpoint count, and last break reason.")]
+    public Task<DebuggerGetInfoResponse> DebuggerGetInfoAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetInfoAsync(vsInstanceId, cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_set_breakpoints",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Sets, updates, or clears a breakpoint at a specified source line in the Visual Studio solution.")]
+    public Task<DebuggerSetBreakpointsResponse> DebuggerSetBreakpointsAsync(
+        [Description("The source file path to set the breakpoint in.")] string filePath,
+        [Description("Line number to set the breakpoint at.")] int line,
+        [Description("Optional column number. Defaults to 1.")] int? column = null,
+        [Description("Optional conditional expression for the breakpoint.")] string? condition = null,
+        [Description("Optional flag whether the breakpoint is enabled. Defaults to true.")] bool? enabled = null,
+        [Description("Optional flag whether to clear existing breakpoints in this file first. Defaults to false.")] bool? clearExisting = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerSetBreakpointsAsync(
+            filePath,
+            new List<BreakpointSpec>
+            {
+                new()
+                {
+                    Line = line,
+                    Column = column,
+                    Condition = condition,
+                    Enabled = enabled ?? true
+                }
+            },
+            clearExisting ?? false,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_call_stack",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the call stack of the active or specified thread when the debugger is paused in break mode.")]
+    public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
+        [Description("Optional thread ID. Omit it to retrieve the call stack for the current active thread.")] int? threadId = null,
+        [Description("Optional maximum number of frames to retrieve from 1 to 200. Defaults to 50.")] int? maxFrames = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetCallStackAsync(threadId, maxFrames, vsInstanceId, cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_evaluate_expr",
+        ReadOnly = true,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Evaluates an expression or variable in the context of the current or specified stack frame while the debugger is paused in break mode.")]
+    public Task<DebuggerEvaluateExprResponse> DebuggerEvaluateExprAsync(
+        [Description("The variable or expression to evaluate.")] string expression,
+        [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
+        [Description("Optional evaluation timeout in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
+        [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerEvaluateExprAsync(
+            expression,
+            frameIndex,
+            timeoutMs,
+            allowSideEffects ?? false,
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

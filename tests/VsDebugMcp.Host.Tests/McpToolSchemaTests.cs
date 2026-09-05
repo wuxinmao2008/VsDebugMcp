@@ -14,6 +14,19 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.GetFilesInProjectAsync), "projectId")]
     [InlineData(nameof(McpTools.GetFilesInProjectAsync), "extensionFilter")]
     [InlineData(nameof(McpTools.GetFilesInProjectAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetInfoAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "column")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "condition")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "enabled")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "clearExisting")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetCallStackAsync), "threadId")]
+    [InlineData(nameof(McpTools.DebuggerGetCallStackAsync), "maxFrames")]
+    [InlineData(nameof(McpTools.DebuggerGetCallStackAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "frameIndex")]
+    [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "timeoutMs")]
+    [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "allowSideEffects")]
+    [InlineData(nameof(McpTools.DebuggerEvaluateExprAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
