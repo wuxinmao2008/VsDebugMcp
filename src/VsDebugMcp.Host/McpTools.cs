@@ -399,6 +399,72 @@ public sealed class McpTools
             vsInstanceId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_get_tests",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Discovers and returns unit tests in the current solution known to Test Explorer, with optional filtering.")]
+    public Task<GetTestsResponse> GetTestsAsync(
+        [Description("Optional project name substring to filter tests by project or container.")] string? projectName = null,
+        [Description("Optional search text to filter tests by display name or fully qualified name.")] string? filter = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetTestsAsync(
+            vsInstanceId,
+            projectName,
+            filter,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_run_tests",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Asynchronously triggers unit test execution for specified test IDs or all discovered tests in the solution.")]
+    public Task<RunTestsResponse> RunTestsAsync(
+        [Description("Optional list of specific test IDs (GUIDs) to execute. If omitted or empty, all discovered tests in the solution will be run.")] IReadOnlyList<string>? testIds = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.RunTestsAsync(
+            vsInstanceId,
+            testIds,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_get_test_run_status",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Gets the current execution progress, state, and detailed outcomes of a test run.")]
+    public Task<TestRunStatusResponse> GetTestRunStatusAsync(
+        [Description("Optional test run ID. If omitted, the active or most recent test run will be queried.")] string? testRunId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetTestRunStatusAsync(
+            vsInstanceId,
+            testRunId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_cancel_test_run",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Cancels an active unit test run.")]
+    public Task<CancelTestRunResponse> CancelTestRunAsync(
+        [Description("Optional test run ID. If omitted, the currently running test run will be cancelled.")] string? testRunId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.CancelTestRunAsync(
+            vsInstanceId,
+            testRunId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

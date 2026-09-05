@@ -197,6 +197,38 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<GetTestsResponse> GetTestsAsync(
+        GetTestsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetTestsRequest, GetTestsResponse>(
+            BridgeMethods.TestGet,
+            request,
+            cancellationToken);
+
+    public Task<RunTestsResponse> RunTestsAsync(
+        RunTestsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<RunTestsRequest, RunTestsResponse>(
+            BridgeMethods.TestRun,
+            request,
+            cancellationToken);
+
+    public Task<TestRunStatusResponse> GetTestRunStatusAsync(
+        GetTestRunStatusRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetTestRunStatusRequest, TestRunStatusResponse>(
+            BridgeMethods.TestGetStatus,
+            request,
+            cancellationToken);
+
+    public Task<CancelTestRunResponse> CancelTestRunAsync(
+        CancelTestRunRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<CancelTestRunRequest, CancelTestRunResponse>(
+            BridgeMethods.TestCancel,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

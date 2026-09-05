@@ -43,35 +43,45 @@ internal sealed class HostRegistrationManager : IDisposable
         _diagnostics?.ReportStatus(VsMcpServiceStatus.Starting, "正在注册实例...");
         _diagnostics?.LogInfo($"开始向 Host 注册当前 VS 实例: {_instance.VsInstanceId}");
 
-        try
+        var registered = false;
+        for (var retry = 0; retry < 5 && !cancellationToken.IsCancellationRequested; retry++)
         {
-            if (!await EnsureRegisteredAsync(cancellationToken).ConfigureAwait(false))
+            try
             {
-                ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
-                _diagnostics?.ReportStatus(VsMcpServiceStatus.Error, "注册失败");
-                _diagnostics?.LogError("实例向 Host 注册失败，请检查输出日志以排查 Host 是否正常运行。", BridgeErrorCodes.RegistrationFailed);
-                _diagnostics?.ShowErrorBanner("MCP 实例注册失败", BridgeErrorCodes.RegistrationFailed, RetryRegistrationAsync);
+                if (await EnsureRegisteredAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    registered = true;
+                    break;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
                 return;
             }
-
-            _diagnostics?.ReportStatus(VsMcpServiceStatus.Ready, "http://127.0.0.1:43260");
-            _diagnostics?.LogInfo($"实例注册成功。MCP 服务端点已就绪: http://127.0.0.1:43260 (vsInstanceId: {_instance.VsInstanceId})");
-            _diagnostics?.ClearErrorBanner();
-
-            if (_heartbeatTask == null || _heartbeatTask.IsCompleted)
+            catch (Exception ex)
             {
-                _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_shutdown.Token));
+                _diagnostics?.LogInfo($"注册尝试 #{retry + 1} 异常: {ex.Message}，将在 2 秒后重试。");
             }
+
+            await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
+
+        if (!registered)
         {
             ActivityLog.LogError(LogSource, BridgeErrorCodes.RegistrationFailed);
-            _diagnostics?.ReportStatus(VsMcpServiceStatus.Error, "注册发生异常");
-            _diagnostics?.LogError("注册流程发生异常: " + ex.Message, BridgeErrorCodes.RegistrationFailed);
-            _diagnostics?.ShowErrorBanner("MCP 实例注册异常", BridgeErrorCodes.RegistrationFailed, RetryRegistrationAsync);
+            _diagnostics?.ReportStatus(VsMcpServiceStatus.Error, "注册失败");
+            _diagnostics?.LogError("实例向 Host 注册失败，请检查输出日志以排查 Host 是否正常运行。", BridgeErrorCodes.RegistrationFailed);
+            _diagnostics?.ShowErrorBanner("MCP 实例注册失败", BridgeErrorCodes.RegistrationFailed, RetryRegistrationAsync);
+            return;
+        }
+
+        _diagnostics?.ReportStatus(VsMcpServiceStatus.Ready, "http://127.0.0.1:43260");
+        _diagnostics?.LogInfo($"实例注册成功。MCP 服务端点已就绪: http://127.0.0.1:43260 (vsInstanceId: {_instance.VsInstanceId})");
+        _diagnostics?.ClearErrorBanner();
+
+        if (_heartbeatTask == null || _heartbeatTask.IsCompleted)
+        {
+            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_shutdown.Token));
         }
     }
 

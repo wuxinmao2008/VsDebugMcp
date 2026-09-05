@@ -251,4 +251,96 @@ public sealed class InstanceProtocolTests
         Assert.False(localsRespCopy.Variables[1].IsArgument);
         Assert.Equal("10", localsRespCopy.Variables[0].Value);
     }
+
+    [Fact]
+    public void TestContractsRoundTripThroughSharedSerializer()
+    {
+        var getReq = new GetTestsRequest { ProjectName = "SampleApp", Filter = "Add" };
+        var getReqCopy = BridgeJson.Deserialize<GetTestsRequest>(BridgeJson.Serialize(getReq));
+        Assert.Equal("SampleApp", getReqCopy.ProjectName);
+        Assert.Equal("Add", getReqCopy.Filter);
+
+        var getResp = new GetTestsResponse
+        {
+            VsInstanceId = "vs-1",
+            TotalCount = 1,
+            Tests = new List<VsTestItem>
+            {
+                new()
+                {
+                    TestId = "d3b07384-d113-46fb-ba3a-ec4f67645d12",
+                    DisplayName = "CalculatorTests.Add_TwoNumbers_ReturnsSum",
+                    FullyQualifiedName = "SampleTests.CalculatorTests.Add_TwoNumbers_ReturnsSum",
+                    FilePath = @"C:\Sample\CalculatorTests.cs",
+                    LineNumber = 10,
+                    State = "Passed",
+                    DurationMs = 12.5
+                }
+            }
+        };
+        var getRespCopy = BridgeJson.Deserialize<GetTestsResponse>(BridgeJson.Serialize(getResp));
+        Assert.Equal(1, getRespCopy.TotalCount);
+        Assert.Equal("CalculatorTests.Add_TwoNumbers_ReturnsSum", getRespCopy.Tests[0].DisplayName);
+        Assert.Equal(12.5, getRespCopy.Tests[0].DurationMs);
+
+        var runReq = new RunTestsRequest
+        {
+            TestIds = new List<string> { "d3b07384-d113-46fb-ba3a-ec4f67645d12" }
+        };
+        var runReqCopy = BridgeJson.Deserialize<RunTestsRequest>(BridgeJson.Serialize(runReq));
+        Assert.Single(runReqCopy.TestIds!);
+
+        var runResp = new RunTestsResponse
+        {
+            VsInstanceId = "vs-1",
+            TestRunId = "testrun-12345678",
+            State = TestRunStates.Running,
+            TotalCount = 1,
+            StartedAt = "2026-09-05T12:00:00Z"
+        };
+        var runRespCopy = BridgeJson.Deserialize<RunTestsResponse>(BridgeJson.Serialize(runResp));
+        Assert.Equal("testrun-12345678", runRespCopy.TestRunId);
+        Assert.Equal(TestRunStates.Running, runRespCopy.State);
+
+        var statusResp = new TestRunStatusResponse
+        {
+            VsInstanceId = "vs-1",
+            TestRunId = "testrun-12345678",
+            State = TestRunStates.Completed,
+            TotalCount = 1,
+            PassedCount = 1,
+            FailedCount = 0,
+            SkippedCount = 0,
+            DurationMs = 25.0,
+            Results = new List<VsTestResult>
+            {
+                new()
+                {
+                    TestId = "d3b07384-d113-46fb-ba3a-ec4f67645d12",
+                    DisplayName = "CalculatorTests.Add_TwoNumbers_ReturnsSum",
+                    Outcome = "Passed",
+                    DurationMs = 25.0
+                }
+            }
+        };
+        var statusRespCopy = BridgeJson.Deserialize<TestRunStatusResponse>(BridgeJson.Serialize(statusResp));
+        Assert.Equal(TestRunStates.Completed, statusRespCopy.State);
+        Assert.Equal(1, statusRespCopy.PassedCount);
+        Assert.Equal("Passed", statusRespCopy.Results[0].Outcome);
+
+        var cancelReq = new CancelTestRunRequest { TestRunId = "testrun-12345678" };
+        var cancelReqCopy = BridgeJson.Deserialize<CancelTestRunRequest>(BridgeJson.Serialize(cancelReq));
+        Assert.Equal("testrun-12345678", cancelReqCopy.TestRunId);
+
+        var cancelResp = new CancelTestRunResponse
+        {
+            VsInstanceId = "vs-1",
+            TestRunId = "testrun-12345678",
+            State = TestRunStates.Cancelled,
+            CancelRequested = true
+        };
+        var cancelRespCopy = BridgeJson.Deserialize<CancelTestRunResponse>(BridgeJson.Serialize(cancelResp));
+        Assert.True(cancelRespCopy.CancelRequested);
+        Assert.Equal(TestRunStates.Cancelled, cancelRespCopy.State);
+    }
 }

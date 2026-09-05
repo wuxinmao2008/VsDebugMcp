@@ -88,7 +88,7 @@ internal sealed class SharedHostProcessManager
         }
 
         _diagnostics?.LogInfo("Host 进程已拉起，正在等待控制管道就绪...");
-        for (var attempt = 0; attempt < 20; attempt++)
+        for (var attempt = 0; attempt < 60; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try

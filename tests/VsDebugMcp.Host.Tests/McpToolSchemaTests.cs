@@ -49,6 +49,15 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerGetLocalsAsync), "frameIndex")]
     [InlineData(nameof(McpTools.DebuggerGetLocalsAsync), "maxCount")]
     [InlineData(nameof(McpTools.DebuggerGetLocalsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetTestsAsync), "projectName")]
+    [InlineData(nameof(McpTools.GetTestsAsync), "filter")]
+    [InlineData(nameof(McpTools.GetTestsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.RunTestsAsync), "testIds")]
+    [InlineData(nameof(McpTools.RunTestsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetTestRunStatusAsync), "testRunId")]
+    [InlineData(nameof(McpTools.GetTestRunStatusAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.CancelTestRunAsync), "testRunId")]
+    [InlineData(nameof(McpTools.CancelTestRunAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);

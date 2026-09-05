@@ -850,3 +850,187 @@ public sealed class UnregisterInstanceResponse
     [DataMember(Name = "removed", Order = 1)]
     public bool Removed { get; set; }
 }
+
+[DataContract]
+public sealed class GetTestsRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "projectName", Order = 2, EmitDefaultValue = false)]
+    public string? ProjectName { get; set; }
+
+    [DataMember(Name = "filter", Order = 3, EmitDefaultValue = false)]
+    public string? Filter { get; set; }
+}
+
+[DataContract]
+public sealed class VsTestItem
+{
+    [DataMember(Name = "testId", Order = 1)]
+    public string TestId { get; set; } = string.Empty;
+
+    [DataMember(Name = "displayName", Order = 2)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [DataMember(Name = "fullyQualifiedName", Order = 3)]
+    public string FullyQualifiedName { get; set; } = string.Empty;
+
+    [DataMember(Name = "filePath", Order = 4, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "lineNumber", Order = 5, EmitDefaultValue = false)]
+    public int? LineNumber { get; set; }
+
+    [DataMember(Name = "projectId", Order = 6, EmitDefaultValue = false)]
+    public string? ProjectId { get; set; }
+
+    [DataMember(Name = "source", Order = 7, EmitDefaultValue = false)]
+    public string? Source { get; set; }
+
+    [DataMember(Name = "state", Order = 8)]
+    public string State { get; set; } = "NotRun";
+
+    [DataMember(Name = "durationMs", Order = 9, EmitDefaultValue = false)]
+    public double? DurationMs { get; set; }
+
+    [DataMember(Name = "lastErrorMessage", Order = 10, EmitDefaultValue = false)]
+    public string? LastErrorMessage { get; set; }
+}
+
+[DataContract]
+public sealed class GetTestsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "tests", Order = 2)]
+    public List<VsTestItem> Tests { get; set; } = new();
+
+    [DataMember(Name = "totalCount", Order = 3)]
+    public int TotalCount { get; set; }
+}
+
+[DataContract]
+public sealed class RunTestsRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "testIds", Order = 2, EmitDefaultValue = false)]
+    public List<string>? TestIds { get; set; }
+}
+
+[DataContract]
+public sealed class RunTestsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testRunId", Order = 2)]
+    public string TestRunId { get; set; } = string.Empty;
+
+    [DataMember(Name = "state", Order = 3)]
+    public string State { get; set; } = TestRunStates.Starting;
+
+    [DataMember(Name = "totalCount", Order = 4)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "startedAt", Order = 5)]
+    public string StartedAt { get; set; } = string.Empty;
+}
+
+[DataContract]
+public sealed class GetTestRunStatusRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "testRunId", Order = 2, EmitDefaultValue = false)]
+    public string? TestRunId { get; set; }
+}
+
+[DataContract]
+public sealed class VsTestResult
+{
+    [DataMember(Name = "testId", Order = 1)]
+    public string TestId { get; set; } = string.Empty;
+
+    [DataMember(Name = "displayName", Order = 2)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [DataMember(Name = "outcome", Order = 3)]
+    public string Outcome { get; set; } = "None";
+
+    [DataMember(Name = "durationMs", Order = 4)]
+    public double DurationMs { get; set; }
+
+    [DataMember(Name = "errorMessage", Order = 5, EmitDefaultValue = false)]
+    public string? ErrorMessage { get; set; }
+
+    [DataMember(Name = "stackTrace", Order = 6, EmitDefaultValue = false)]
+    public string? StackTrace { get; set; }
+
+    [DataMember(Name = "standardOutput", Order = 7, EmitDefaultValue = false)]
+    public string? StandardOutput { get; set; }
+
+    [DataMember(Name = "standardError", Order = 8, EmitDefaultValue = false)]
+    public string? StandardError { get; set; }
+}
+
+[DataContract]
+public sealed class TestRunStatusResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testRunId", Order = 2)]
+    public string TestRunId { get; set; } = string.Empty;
+
+    [DataMember(Name = "state", Order = 3)]
+    public string State { get; set; } = TestRunStates.Running;
+
+    [DataMember(Name = "totalCount", Order = 4)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "passedCount", Order = 5)]
+    public int PassedCount { get; set; }
+
+    [DataMember(Name = "failedCount", Order = 6)]
+    public int FailedCount { get; set; }
+
+    [DataMember(Name = "skippedCount", Order = 7)]
+    public int SkippedCount { get; set; }
+
+    [DataMember(Name = "durationMs", Order = 8)]
+    public double DurationMs { get; set; }
+
+    [DataMember(Name = "results", Order = 9)]
+    public List<VsTestResult> Results { get; set; } = new();
+}
+
+[DataContract]
+public sealed class CancelTestRunRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "testRunId", Order = 2, EmitDefaultValue = false)]
+    public string? TestRunId { get; set; }
+}
+
+[DataContract]
+public sealed class CancelTestRunResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testRunId", Order = 2)]
+    public string TestRunId { get; set; } = string.Empty;
+
+    [DataMember(Name = "state", Order = 3)]
+    public string State { get; set; } = TestRunStates.Cancelled;
+
+    [DataMember(Name = "cancelRequested", Order = 4)]
+    public bool CancelRequested { get; set; }
+}

@@ -12,7 +12,7 @@
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
     <Platforms>AnyCPU;x64</Platforms>
     <IsPackable>false</IsPackable>
-    <Version>0.1.7.0</Version>
+    <Version>0.1.8.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>
@@ -24,8 +24,17 @@
     <DeployVSTemplates>false</DeployVSTemplates>
     <RegisterOutputPackage>false</RegisterOutputPackage>
   </PropertyGroup>
+  <PropertyGroup>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(DevEnvDir)' != '' and '$(DevEnvDir)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(DevEnvDir)..\..\'))</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Professional</VsInstallRoot>
+    <TestWindowDir>$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+    <Reference Include="Microsoft.VisualStudio.TestWindow.Interfaces">
+      <HintPath>$(TestWindowDir)Microsoft.VisualStudio.TestWindow.Interfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\logo.png">

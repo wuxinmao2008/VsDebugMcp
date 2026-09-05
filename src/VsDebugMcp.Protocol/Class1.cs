@@ -37,6 +37,10 @@ public static class BridgeMethods
 	public const string DebuggerStart = "debuggerStart";
 	public const string DebuggerEvaluateExpressions = "debuggerEvaluateExpressions";
 	public const string DebuggerGetLocals = "debuggerGetLocals";
+	public const string TestGet = "testGet";
+	public const string TestRun = "testRun";
+	public const string TestGetStatus = "testGetStatus";
+	public const string TestCancel = "testCancel";
 	public const string Shutdown = "shutdown";
 }
 
@@ -70,7 +74,19 @@ public static class BridgeErrorCodes
 	public const string DebuggerNotRunning = "debugger_not_running";
 	public const string DebuggerNotDebugging = "debugger_not_debugging";
 	public const string DebuggerAlreadyRunning = "debugger_already_running";
+	public const string TestRunBusy = "test_run_busy";
+	public const string TestRunNotFound = "test_run_not_found";
+	public const string TestWindowUnavailable = "test_window_unavailable";
 	public const string InternalError = "internal_error";
+}
+
+public static class TestRunStates
+{
+	public const string Starting = "starting";
+	public const string Running = "running";
+	public const string Completed = "completed";
+	public const string Failed = "failed";
+	public const string Cancelled = "cancelled";
 }
 
 public static class BuildStates

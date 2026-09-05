@@ -14,5 +14,5 @@ public sealed class VsHostOptions
 
     public TimeSpan StaleInstanceTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
-    public TimeSpan InitialRegistrationTimeout { get; init; } = TimeSpan.FromSeconds(15);
+    public TimeSpan InitialRegistrationTimeout { get; init; } = TimeSpan.FromSeconds(60);
 }

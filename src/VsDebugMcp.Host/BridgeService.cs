@@ -129,6 +129,27 @@ public interface IBridgeService
         int? maxCount,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<GetTestsResponse> GetTestsAsync(
+        string? vsInstanceId,
+        string? projectName,
+        string? filter,
+        CancellationToken cancellationToken);
+
+    Task<RunTestsResponse> RunTestsAsync(
+        string? vsInstanceId,
+        IReadOnlyList<string>? testIds,
+        CancellationToken cancellationToken);
+
+    Task<TestRunStatusResponse> GetTestRunStatusAsync(
+        string? vsInstanceId,
+        string? testRunId,
+        CancellationToken cancellationToken);
+
+    Task<CancelTestRunResponse> CancelTestRunAsync(
+        string? vsInstanceId,
+        string? testRunId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -465,6 +486,64 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<GetTestsResponse> GetTestsAsync(
+        string? vsInstanceId,
+        string? projectName,
+        string? filter,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetTestsAsync(
+                new GetTestsRequest
+                {
+                    ProjectName = projectName,
+                    Filter = filter
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<RunTestsResponse> RunTestsAsync(
+        string? vsInstanceId,
+        IReadOnlyList<string>? testIds,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.RunTestsAsync(
+                new RunTestsRequest
+                {
+                    TestIds = testIds != null ? new List<string>(testIds) : null
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<TestRunStatusResponse> GetTestRunStatusAsync(
+        string? vsInstanceId,
+        string? testRunId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetTestRunStatusAsync(
+                new GetTestRunStatusRequest
+                {
+                    TestRunId = testRunId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<CancelTestRunResponse> CancelTestRunAsync(
+        string? vsInstanceId,
+        string? testRunId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.CancelTestRunAsync(
+                new CancelTestRunRequest
+                {
+                    TestRunId = testRunId
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -621,6 +700,21 @@ public sealed class BridgeServiceException : Exception
                 exception.Code,
                 exception.Message,
                 false,
+                exception),
+            BridgeErrorCodes.TestRunBusy => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.TestRunNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.TestWindowUnavailable => new(
+                exception.Code,
+                exception.Message,
+                true,
                 exception),
             _ => new(
                 BridgeErrorCodes.InternalError,

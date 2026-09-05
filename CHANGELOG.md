@@ -5,6 +5,17 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8.0] - 2026-09-05
+
+### Added
+- **Test Explorer / VSTest Integration (Direction B / Route 2)**: Added full hybrid Visual Studio Test Explorer integration via MEF services (`ITestsService`, `IOperationState`) and package preload:
+  - `vs_get_tests`: Discovers tests in the current solution with optional project and search term filters.
+  - `vs_run_tests`: Triggers asynchronous test execution for specific test IDs or all discovered tests, returning a dedicated `testRunId`.
+  - `vs_get_test_run_status`: Queries test execution status (`pending`, `running`, `completed`, `cancelled`, `failed`), summary counts (passed, failed, skipped), durations, and detailed per-test outcome records.
+  - `vs_cancel_test_run`: Programmatically cancels an active test run via `IOperationState`.
+  - Added single-run mutual exclusion guard (`test_run_busy`) and safe fallback error handling (`test_run_not_found`, `test_window_unavailable`).
+  - Added sample test suite `sample/SampleTests` (xUnit .NET 8) with 3 unit tests integrated into `SampleSolution.sln` and `SampleSolution.slnx`.
+
 ## [0.1.7.0] - 2026-09-05
 
 ### Added
