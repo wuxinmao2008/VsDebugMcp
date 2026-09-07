@@ -165,6 +165,35 @@ public interface IBridgeService
     Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerGetProcessesResponse> DebuggerGetProcessesAsync(
+        string? vsInstanceId,
+        string? processName,
+        int? processId,
+        bool onlyDebugged,
+        int? maxCount,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerAttachResponse> DebuggerAttachProcessAsync(
+        string? vsInstanceId,
+        int? processId,
+        string? processName,
+        bool waitForBreak,
+        int? breakTimeoutMs,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerDetachResponse> DebuggerDetachAsync(
+        string? vsInstanceId,
+        int? processId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetModulesResponse> DebuggerGetModulesAsync(
+        string? vsInstanceId,
+        int? processId,
+        string? nameFilter,
+        bool userCodeOnly,
+        int? maxCount,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -597,6 +626,80 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerGetProcessesResponse> DebuggerGetProcessesAsync(
+        string? vsInstanceId,
+        string? processName,
+        int? processId,
+        bool onlyDebugged,
+        int? maxCount,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetProcessesAsync(
+                new DebuggerGetProcessesRequest
+                {
+                    ProcessName = processName,
+                    ProcessId = processId,
+                    OnlyDebugged = onlyDebugged,
+                    MaxCount = maxCount
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerAttachResponse> DebuggerAttachProcessAsync(
+        string? vsInstanceId,
+        int? processId,
+        string? processName,
+        bool waitForBreak,
+        int? breakTimeoutMs,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerAttachProcessAsync(
+                new DebuggerAttachRequest
+                {
+                    ProcessId = processId,
+                    ProcessName = processName,
+                    WaitForBreak = waitForBreak,
+                    BreakTimeoutMs = breakTimeoutMs
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerDetachResponse> DebuggerDetachAsync(
+        string? vsInstanceId,
+        int? processId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerDetachAsync(
+                new DebuggerDetachRequest
+                {
+                    ProcessId = processId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetModulesResponse> DebuggerGetModulesAsync(
+        string? vsInstanceId,
+        int? processId,
+        string? nameFilter,
+        bool userCodeOnly,
+        int? maxCount,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetModulesAsync(
+                new DebuggerGetModulesRequest
+                {
+                    ProcessId = processId,
+                    NameFilter = nameFilter,
+                    UserCodeOnly = userCodeOnly,
+                    MaxCount = maxCount
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -750,6 +853,11 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.DebuggerAlreadyRunning => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.ProcessNotFound => new(
                 exception.Code,
                 exception.Message,
                 false,

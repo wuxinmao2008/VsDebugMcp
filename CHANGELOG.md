@@ -5,6 +5,21 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11.0] - 2026-09-07
+
+### Added
+- **Process Attachment & Detachment (`vs_debugger_attach_process`, `vs_debugger_detach`, `vs_debugger_get_processes`) (Phase 3C)**:
+  - `vs_debugger_get_processes`: Discovers running OS processes via `EnvDTE.Debugger.LocalProcesses` and `DebuggedProcesses`, supporting substring name filtering, PID query, only-debugged filtering, and username/transport extraction.
+  - `vs_debugger_attach_process`: Attaches the Visual Studio debugger to a target process by PID or process name with optional break landing probe (`waitForBreak`), returning current mode, break reason, and top stack frame.
+  - `vs_debugger_detach`: Safely detaches the debugger from a specific process or all processes (`debugger.DetachAll()`), allowing target processes to remain alive while returning Visual Studio to design mode.
+  - Added mode guard `debugger_not_running` and error code `process_not_found`.
+- **Loaded Modules & Symbol Diagnostics (`vs_debugger_get_modules`) (Phase 3C)**:
+  - Deep module and symbol inspection via `EnvDTE90.Process3.Modules`: extracts module name, disk path, load order, version, hex load/end addresses, symbol file (PDB) path, symbols loaded flag, optimization, and Just My Code (`userCode`) status.
+  - Added name filter and `userCodeOnly` filters.
+
+### Verified
+- Automated unit tests: 101/101 PASS (100% across Protocol and Host test suites, 11/11 Protocol tests, 90/90 Host tests).
+
 ## [0.1.10.0] - 2026-09-07
 
 ### Added

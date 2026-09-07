@@ -478,4 +478,143 @@ public sealed class InstanceProtocolTests
         Assert.Equal("Attempted to divide by zero.", exRespCopy.Message);
         Assert.Contains("Calculator.Divide", exRespCopy.StackTrace);
     }
+
+    [Fact]
+    public void DebuggerProcessesAndModulesContractsRoundTripThroughSharedSerializer()
+    {
+        // 1. Get Processes
+        var procReq = new DebuggerGetProcessesRequest
+        {
+            VsInstanceId = "vs-1",
+            ProcessName = "Sample",
+            ProcessId = 12345,
+            OnlyDebugged = false,
+            MaxCount = 50
+        };
+        var procReqCopy = BridgeJson.Deserialize<DebuggerGetProcessesRequest>(BridgeJson.Serialize(procReq));
+        Assert.Equal("Sample", procReqCopy.ProcessName);
+        Assert.Equal(12345, procReqCopy.ProcessId);
+        Assert.False(procReqCopy.OnlyDebugged);
+        Assert.Equal(50, procReqCopy.MaxCount);
+
+        var procResp = new DebuggerGetProcessesResponse
+        {
+            VsInstanceId = "vs-1",
+            TotalCount = 1,
+            ReturnedCount = 1,
+            Processes = new List<ProcessInfo>
+            {
+                new()
+                {
+                    ProcessId = 12345,
+                    Name = "SampleApp.exe",
+                    UserName = @"DOMAIN\user",
+                    IsBeingDebugged = true,
+                    TransportQualifier = "localhost"
+                }
+            }
+        };
+        var procRespCopy = BridgeJson.Deserialize<DebuggerGetProcessesResponse>(BridgeJson.Serialize(procResp));
+        Assert.Equal(1, procRespCopy.TotalCount);
+        Assert.Single(procRespCopy.Processes);
+        Assert.Equal(12345, procRespCopy.Processes[0].ProcessId);
+        Assert.Equal("SampleApp.exe", procRespCopy.Processes[0].Name);
+        Assert.True(procRespCopy.Processes[0].IsBeingDebugged);
+
+        // 2. Attach Process
+        var attachReq = new DebuggerAttachRequest
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345,
+            ProcessName = "SampleApp.exe",
+            WaitForBreak = true,
+            BreakTimeoutMs = 5000
+        };
+        var attachReqCopy = BridgeJson.Deserialize<DebuggerAttachRequest>(BridgeJson.Serialize(attachReq));
+        Assert.Equal(12345, attachReqCopy.ProcessId);
+        Assert.True(attachReqCopy.WaitForBreak);
+        Assert.Equal(5000, attachReqCopy.BreakTimeoutMs);
+
+        var attachResp = new DebuggerAttachResponse
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345,
+            ProcessName = "SampleApp.exe",
+            CurrentMode = "running",
+            IsDebugging = true,
+            LastBreakReason = null,
+            TopFrame = null,
+            Warnings = new List<BridgeWarning>()
+        };
+        var attachRespCopy = BridgeJson.Deserialize<DebuggerAttachResponse>(BridgeJson.Serialize(attachResp));
+        Assert.Equal(12345, attachRespCopy.ProcessId);
+        Assert.Equal("running", attachRespCopy.CurrentMode);
+        Assert.True(attachRespCopy.IsDebugging);
+
+        // 3. Detach
+        var detachReq = new DebuggerDetachRequest
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345
+        };
+        var detachReqCopy = BridgeJson.Deserialize<DebuggerDetachRequest>(BridgeJson.Serialize(detachReq));
+        Assert.Equal(12345, detachReqCopy.ProcessId);
+
+        var detachResp = new DebuggerDetachResponse
+        {
+            VsInstanceId = "vs-1",
+            DetachedProcessId = 12345,
+            CurrentMode = "design",
+            IsDebugging = false
+        };
+        var detachRespCopy = BridgeJson.Deserialize<DebuggerDetachResponse>(BridgeJson.Serialize(detachResp));
+        Assert.Equal(12345, detachRespCopy.DetachedProcessId);
+        Assert.Equal("design", detachRespCopy.CurrentMode);
+        Assert.False(detachRespCopy.IsDebugging);
+
+        // 4. Get Modules
+        var modReq = new DebuggerGetModulesRequest
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345,
+            NameFilter = "Sample",
+            UserCodeOnly = true,
+            MaxCount = 100
+        };
+        var modReqCopy = BridgeJson.Deserialize<DebuggerGetModulesRequest>(BridgeJson.Serialize(modReq));
+        Assert.Equal("Sample", modReqCopy.NameFilter);
+        Assert.True(modReqCopy.UserCodeOnly);
+
+        var modResp = new DebuggerGetModulesResponse
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345,
+            ProcessName = "SampleApp.exe",
+            TotalCount = 1,
+            ReturnedCount = 1,
+            Modules = new List<ModuleInfo>
+            {
+                new()
+                {
+                    Name = "SampleApp.dll",
+                    Path = @"C:\app\SampleApp.dll",
+                    Order = 1,
+                    Version = "1.0.0.0",
+                    LoadAddress = "0x00007FF7B1230000",
+                    EndAddress = "0x00007FF7B1250000",
+                    SymbolFile = @"C:\app\SampleApp.pdb",
+                    SymbolsLoaded = true,
+                    Optimized = false,
+                    UserCode = true,
+                    Is64Bit = true
+                }
+            }
+        };
+        var modRespCopy = BridgeJson.Deserialize<DebuggerGetModulesResponse>(BridgeJson.Serialize(modResp));
+        Assert.Equal(1, modRespCopy.TotalCount);
+        Assert.Single(modRespCopy.Modules);
+        Assert.Equal("SampleApp.dll", modRespCopy.Modules[0].Name);
+        Assert.True(modRespCopy.Modules[0].SymbolsLoaded);
+        Assert.Equal("0x00007FF7B1230000", modRespCopy.Modules[0].LoadAddress);
+    }
 }

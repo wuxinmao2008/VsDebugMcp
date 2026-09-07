@@ -519,6 +519,88 @@ public sealed class McpTools
             vsInstanceId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debugger_get_processes",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the list of running processes available for attaching or currently being debugged by Visual Studio.")]
+    public Task<DebuggerGetProcessesResponse> DebuggerGetProcessesAsync(
+        [Description("Optional process name filter (case-insensitive substring match).")] string? processName = null,
+        [Description("Optional exact process ID to query.")] int? processId = null,
+        [Description("Optional flag to only return processes currently being debugged by this instance. Defaults to false.")] bool? onlyDebugged = null,
+        [Description("Optional maximum number of processes to return (1-200, defaults to 50).")] int? maxCount = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetProcessesAsync(
+            vsInstanceId,
+            processName,
+            processId,
+            onlyDebugged ?? false,
+            maxCount,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_attach_process",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Attaches the Visual Studio debugger to a running process by process ID or process name.")]
+    public Task<DebuggerAttachResponse> DebuggerAttachProcessAsync(
+        [Description("Optional target process ID to attach to. One of processId or processName must be specified.")] int? processId = null,
+        [Description("Optional process name to find and attach to if processId is omitted.")] string? processName = null,
+        [Description("Optional flag whether to wait for the debugger to pause at a breakpoint or exception. Defaults to false.")] bool? waitForBreak = null,
+        [Description("Optional timeout in milliseconds to wait for break mode when waitForBreak is true. Defaults to 3000.")] int? breakTimeoutMs = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerAttachProcessAsync(
+            vsInstanceId,
+            processId,
+            processName,
+            waitForBreak ?? false,
+            breakTimeoutMs,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_detach",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Detaches the Visual Studio debugger from a debugged process, allowing it to continue running independently.")]
+    public Task<DebuggerDetachResponse> DebuggerDetachAsync(
+        [Description("Optional specific process ID to detach from. Omit to detach all debugged processes.")] int? processId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerDetachAsync(
+            vsInstanceId,
+            processId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_modules",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the list of modules (DLLs/EXEs) loaded by the active debugged process, including load addresses and symbol (PDB) status.")]
+    public Task<DebuggerGetModulesResponse> DebuggerGetModulesAsync(
+        [Description("Optional specific process ID. Defaults to current active debugged process.")] int? processId = null,
+        [Description("Optional case-insensitive module name filter.")] string? nameFilter = null,
+        [Description("Optional flag to only return user code modules (Just My Code). Defaults to false.")] bool? userCodeOnly = null,
+        [Description("Optional maximum number of modules to return (1-500, defaults to 100).")] int? maxCount = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetModulesAsync(
+            vsInstanceId,
+            processId,
+            nameFilter,
+            userCodeOnly ?? false,
+            maxCount,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

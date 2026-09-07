@@ -13,6 +13,27 @@
 
 ## 实施进度（2026-09-07 更新）
 
+### Phase 3C：进程附加与模块符号诊断闭环已完成开发并通过全链路在线实测验收 (v0.1.11.0)
+
+- **`vs_debugger_get_processes` 本地进程发现与过滤**：
+  - 基于 `EnvDTE.Debugger.LocalProcesses` 与 `DebuggedProcesses` 实现运行中进程遍历；
+  - 自动向下转型为 `EnvDTE80.Process2` 提取 `UserName`、`IsBeingDebugged` 与 `TransportQualifier`；
+  - 支持进程名模糊/子串匹配（忽略大小写）、PID 精确查询与仅看被调试进程过滤。
+- **`vs_debugger_attach_process` 附加到进程与智能着陆**：
+  - 支持按 PID 或进程名锁定系统目标进程；
+  - 接入 `_executionLock` 互斥保护，调用 `proc.Attach()` 调度至 UI 线程；
+  - 支持 `waitForBreak` 中断等待探测与顶层栈帧即时回显。
+- **`vs_debugger_detach` 安全无害分离**：
+  - 区别于 `stop`（杀死目标进程），`detach` 解除调试器挂钩并恢复至设计模式，目标进程在操作系统中继续存活独立运行。
+- **`vs_debugger_get_modules` 加载模块与 PDB 符号诊断**：
+  - 基于 `EnvDTE90.Process3.Modules` 遍历已加载模块集合；
+  - 提取模块名、物理路径、版本、格式化十六进制加载与结束地址（`0x...`）、PDB 符号加载状态（`symbolsLoaded`）、优化与用户代码标记；
+  - 支持模块名过滤与 `userCodeOnly` 过滤。
+- **自动化测试与全链路在线实测验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (11/11 PASS) + `VsDebugMcp.Host.Tests` (90/90 PASS)，全套 101 个单元测试 100% 通过；
+  - 在 VS 18.x 实验实例通过 `scripts/test_acceptance_phase3c.py` 验证外部常驻靶标进程启动、PID 发现、附加调试、模块枚举、暂停排查、安全分离（验证外部进程存活）完整闭环；
+  - Bridge capability 注册总数升至 **32 个**（MCP 工具总数 34 个）。
+
 ### Phase 3B：核心诊断与高级调试闭环已完成开发并通过全链路在线实测验收 (v0.1.10.0)
 
 - **`vs_get_errors` 深度攻坚与双轨保底**：
@@ -211,15 +232,19 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 26. `vs_debug_test_by_id`
 27. `vs_debugger_get_threads`
 28. `vs_debugger_get_exception_info`
+29. `vs_debugger_get_processes`
+30. `vs_debugger_attach_process`
+31. `vs_debugger_detach`
+32. `vs_debugger_get_modules`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`10/10` PASS。
-- Host tests 最近一次完整运行：`68/68` PASS。
-- 全套测试通过率：`78/78` PASS (100%)。
-- 当前扩展与 Host 版本号：`0.1.10.0`。
+- Protocol tests 最近一次完整运行：`11/11` PASS。
+- Host tests 最近一次完整运行：`90/90` PASS。
+- 全套测试通过率：`101/101` PASS (100%)。
+- 当前扩展与 Host 版本号：`0.1.11.0`。
 - VSIX 已使用 VS 18 MSBuild 成功编译与打包。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；

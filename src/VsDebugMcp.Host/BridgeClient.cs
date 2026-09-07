@@ -253,6 +253,38 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetProcessesResponse> DebuggerGetProcessesAsync(
+        DebuggerGetProcessesRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetProcessesRequest, DebuggerGetProcessesResponse>(
+            BridgeMethods.DebuggerGetProcesses,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerAttachResponse> DebuggerAttachProcessAsync(
+        DebuggerAttachRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerAttachRequest, DebuggerAttachResponse>(
+            BridgeMethods.DebuggerAttachProcess,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerDetachResponse> DebuggerDetachAsync(
+        DebuggerDetachRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerDetachRequest, DebuggerDetachResponse>(
+            BridgeMethods.DebuggerDetach,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerGetModulesResponse> DebuggerGetModulesAsync(
+        DebuggerGetModulesRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetModulesRequest, DebuggerGetModulesResponse>(
+            BridgeMethods.DebuggerGetModules,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

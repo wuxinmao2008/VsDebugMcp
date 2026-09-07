@@ -66,6 +66,23 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebugTestByIdAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerGetThreadsAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerGetExceptionInfoAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "processName")]
+    [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "processId")]
+    [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "onlyDebugged")]
+    [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "maxCount")]
+    [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "processId")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "processName")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "breakTimeoutMs")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerDetachAsync), "processId")]
+    [InlineData(nameof(McpTools.DebuggerDetachAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "processId")]
+    [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "nameFilter")]
+    [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "userCodeOnly")]
+    [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "maxCount")]
+    [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -74,5 +91,22 @@ public sealed class McpToolSchemaTests
         Assert.NotNull(parameter);
         Assert.True(parameter.HasDefaultValue);
         Assert.Null(parameter.DefaultValue);
+    }
+
+    [Theory]
+    [InlineData("vs_debugger_get_processes", nameof(McpTools.DebuggerGetProcessesAsync), true)]
+    [InlineData("vs_debugger_attach_process", nameof(McpTools.DebuggerAttachProcessAsync), false)]
+    [InlineData("vs_debugger_detach", nameof(McpTools.DebuggerDetachAsync), false)]
+    [InlineData("vs_debugger_get_modules", nameof(McpTools.DebuggerGetModulesAsync), true)]
+    public void AllPhase3CToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
     }
 }

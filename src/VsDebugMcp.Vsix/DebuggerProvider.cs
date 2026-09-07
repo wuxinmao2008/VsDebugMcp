@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
 using EnvDTE80;
+using EnvDTE90;
 using Microsoft.VisualStudio.Shell;
 using VsDebugMcp.Protocol;
 
@@ -1119,6 +1120,429 @@ internal sealed class DebuggerProvider
 		}
 
 		return response;
+	}
+
+	public async Task<DebuggerGetProcessesResponse> GetProcessesAsync(
+		DebuggerGetProcessesRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		var list = new List<ProcessInfo>();
+		var source = request.OnlyDebugged ? debugger.DebuggedProcesses : debugger.LocalProcesses;
+		var maxCount = Clamp(request.MaxCount ?? 50, 1, 200);
+
+		if (source != null)
+		{
+			foreach (EnvDTE.Process proc in source)
+			{
+				try
+				{
+					var pid = proc.ProcessID;
+					var name = proc.Name ?? string.Empty;
+
+					if (request.ProcessId.HasValue && pid != request.ProcessId.Value)
+					{
+						continue;
+					}
+
+					if (!string.IsNullOrWhiteSpace(request.ProcessName))
+					{
+						var match = name.IndexOf(request.ProcessName, StringComparison.OrdinalIgnoreCase) >= 0;
+						if (!match)
+						{
+							continue;
+						}
+					}
+
+					string? userName = null;
+					var isBeingDebugged = false;
+					string? transport = null;
+
+					if (proc is Process2 proc2)
+					{
+						try { userName = proc2.UserName; } catch { }
+						try { isBeingDebugged = proc2.IsBeingDebugged; } catch { }
+						try { transport = proc2.TransportQualifier; } catch { }
+					}
+
+					list.Add(new ProcessInfo
+					{
+						ProcessId = pid,
+						Name = name,
+						UserName = string.IsNullOrWhiteSpace(userName) ? null : userName,
+						IsBeingDebugged = isBeingDebugged,
+						TransportQualifier = string.IsNullOrWhiteSpace(transport) ? null : transport
+					});
+
+					if (list.Count >= maxCount)
+					{
+						break;
+					}
+				}
+				catch
+				{
+					// Ignore individual processes that cannot be inspected due to permissions
+				}
+			}
+		}
+
+		return new DebuggerGetProcessesResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			TotalCount = list.Count,
+			ReturnedCount = list.Count,
+			Processes = list
+		};
+	}
+
+	public async Task<DebuggerAttachResponse> AttachProcessAsync(
+		DebuggerAttachRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (!_executionLock.Wait(0))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerBusy,
+				"A debugger execution control operation is already in progress.");
+		}
+
+		try
+		{
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var debugger = await GetDebuggerAsync(cancellationToken);
+
+			EnvDTE.Process? targetProc = null;
+			var localProcesses = debugger.LocalProcesses;
+			if (localProcesses != null)
+			{
+				foreach (EnvDTE.Process proc in localProcesses)
+				{
+					try
+					{
+						if (request.ProcessId.HasValue && proc.ProcessID == request.ProcessId.Value)
+						{
+							targetProc = proc;
+							break;
+						}
+
+						if (!request.ProcessId.HasValue && !string.IsNullOrWhiteSpace(request.ProcessName))
+						{
+							if (proc.Name != null && proc.Name.IndexOf(request.ProcessName, StringComparison.OrdinalIgnoreCase) >= 0)
+							{
+								targetProc = proc;
+								break;
+							}
+						}
+					}
+					catch { }
+				}
+			}
+
+			if (targetProc == null)
+			{
+				var identifier = request.ProcessId.HasValue ? $"PID {request.ProcessId.Value}" : $"Name '{request.ProcessName}'";
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.ProcessNotFound,
+					$"Target process ({identifier}) was not found in local running processes.");
+			}
+
+			var warnings = new List<BridgeWarning>();
+			if (targetProc is Process2 proc2 && proc2.IsBeingDebugged)
+			{
+				warnings.Add(new BridgeWarning
+				{
+					Code = "already_debugged",
+					Message = $"Process {targetProc.Name} (PID: {targetProc.ProcessID}) is already being debugged by this instance."
+				});
+			}
+			else
+			{
+				try
+				{
+					targetProc.Attach();
+				}
+				catch (Exception ex)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.DebuggerUnavailable,
+						$"Failed to attach to process {targetProc.Name} (PID: {targetProc.ProcessID}): {ex.Message}",
+						ex);
+				}
+			}
+
+			if (request.WaitForBreak)
+			{
+				var timeoutMs = Clamp(request.BreakTimeoutMs ?? 3000, 500, 30000);
+				var sw = System.Diagnostics.Stopwatch.StartNew();
+				while (sw.ElapsedMilliseconds < timeoutMs)
+				{
+					await Task.Delay(100, cancellationToken);
+					await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+					if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode || debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+					{
+						break;
+					}
+				}
+			}
+
+			var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
+			var currentMode = GetModeString(debugger.CurrentMode);
+			string? breakReason = null;
+			StackFrameInfo? topFrame = null;
+
+			if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+			{
+				try
+				{
+					breakReason = GetBreakReasonString(debugger.LastBreakReason);
+				}
+				catch { }
+
+				try
+				{
+					var frame = debugger.CurrentStackFrame;
+					if (frame != null)
+					{
+						topFrame = ReadStackFrame(frame, 0);
+					}
+				}
+				catch { }
+			}
+
+			return new DebuggerAttachResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				ProcessId = targetProc.ProcessID,
+				ProcessName = targetProc.Name ?? string.Empty,
+				CurrentMode = currentMode,
+				IsDebugging = isDebugging,
+				LastBreakReason = breakReason,
+				TopFrame = topFrame,
+				Warnings = warnings
+			};
+		}
+		finally
+		{
+			_executionLock.Release();
+		}
+	}
+
+	public async Task<DebuggerDetachResponse> DetachAsync(
+		DebuggerDetachRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (!_executionLock.Wait(0))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerBusy,
+				"A debugger execution control operation is already in progress.");
+		}
+
+		try
+		{
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var debugger = await GetDebuggerAsync(cancellationToken);
+
+			if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerNotRunning,
+					"The debugger is in design mode and is not currently debugging any process.");
+			}
+
+			if (request.ProcessId.HasValue)
+			{
+				EnvDTE.Process? foundProc = null;
+				if (debugger.DebuggedProcesses != null)
+				{
+					foreach (EnvDTE.Process p in debugger.DebuggedProcesses)
+					{
+						try
+						{
+							if (p.ProcessID == request.ProcessId.Value)
+							{
+								foundProc = p;
+								break;
+							}
+						}
+						catch { }
+					}
+				}
+
+				if (foundProc == null)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.ProcessNotFound,
+						$"Debugged process with PID {request.ProcessId.Value} was not found among active debugged processes.");
+				}
+
+				foundProc.Detach(WaitForBreakOrEnd: false);
+			}
+			else
+			{
+				debugger.DetachAll();
+			}
+
+			var currentMode = GetModeString(debugger.CurrentMode);
+			var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
+
+			return new DebuggerDetachResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				DetachedProcessId = request.ProcessId,
+				CurrentMode = currentMode,
+				IsDebugging = isDebugging
+			};
+		}
+		finally
+		{
+			_executionLock.Release();
+		}
+	}
+
+	public async Task<DebuggerGetModulesResponse> GetModulesAsync(
+		DebuggerGetModulesRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotRunning,
+				"Cannot retrieve modules when the debugger is in design mode.");
+		}
+
+		EnvDTE.Process? targetProc = null;
+		if (request.ProcessId.HasValue)
+		{
+			if (debugger.DebuggedProcesses != null)
+			{
+				foreach (EnvDTE.Process p in debugger.DebuggedProcesses)
+				{
+					try
+					{
+						if (p.ProcessID == request.ProcessId.Value)
+						{
+							targetProc = p;
+							break;
+						}
+					}
+					catch { }
+				}
+			}
+
+			if (targetProc == null)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.ProcessNotFound,
+					$"Debugged process with PID {request.ProcessId.Value} was not found.");
+			}
+		}
+		else
+		{
+			targetProc = debugger.CurrentProcess;
+		}
+
+		if (targetProc == null)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotRunning,
+				"No active debugged process is currently available.");
+		}
+
+		var pid = targetProc.ProcessID;
+		var procName = targetProc.Name ?? string.Empty;
+		var modulesList = new List<ModuleInfo>();
+		var maxCount = Clamp(request.MaxCount ?? 100, 1, 500);
+
+		if (targetProc is Process3 proc3 && proc3.Modules != null)
+		{
+			foreach (EnvDTE90.Module mod in proc3.Modules)
+			{
+				try
+				{
+					var modName = mod.Name ?? string.Empty;
+					var userCode = false;
+					try { userCode = mod.UserCode; } catch { }
+
+					if (request.UserCodeOnly && !userCode)
+					{
+						continue;
+					}
+
+					if (!string.IsNullOrWhiteSpace(request.NameFilter))
+					{
+						if (modName.IndexOf(request.NameFilter, StringComparison.OrdinalIgnoreCase) < 0)
+						{
+							continue;
+						}
+					}
+
+					string? path = null;
+					try { path = mod.Path; } catch { }
+
+					uint order = 0;
+					try { order = mod.Order; } catch { }
+
+					string? version = null;
+					try { version = mod.Version; } catch { }
+
+					string? loadAddr = null;
+					try { loadAddr = string.Format(CultureInfo.InvariantCulture, "0x{0:X16}", mod.LoadAddress); } catch { }
+
+					string? endAddr = null;
+					try { endAddr = string.Format(CultureInfo.InvariantCulture, "0x{0:X16}", mod.EndAddress); } catch { }
+
+					string? symFile = null;
+					try { symFile = mod.SymbolFile; } catch { }
+
+					var symLoaded = !string.IsNullOrWhiteSpace(symFile);
+
+					var optimized = false;
+					try { optimized = mod.Optimized; } catch { }
+
+					var is64Bit = false;
+					try { is64Bit = mod.Is64bit; } catch { }
+
+					modulesList.Add(new ModuleInfo
+					{
+						Name = modName,
+						Path = string.IsNullOrWhiteSpace(path) ? null : path,
+						Order = order,
+						Version = string.IsNullOrWhiteSpace(version) ? null : version,
+						LoadAddress = loadAddr,
+						EndAddress = endAddr,
+						SymbolFile = string.IsNullOrWhiteSpace(symFile) ? null : symFile,
+						SymbolsLoaded = symLoaded,
+						Optimized = optimized,
+						UserCode = userCode,
+						Is64Bit = is64Bit
+					});
+
+					if (modulesList.Count >= maxCount)
+					{
+						break;
+					}
+				}
+				catch
+				{
+				}
+			}
+		}
+
+		return new DebuggerGetModulesResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ProcessId = pid,
+			ProcessName = procName,
+			TotalCount = modulesList.Count,
+			ReturnedCount = modulesList.Count,
+			Modules = modulesList
+		};
 	}
 
 	internal async Task<DebuggerExecutionResponse> CaptureCurrentStateAsync(

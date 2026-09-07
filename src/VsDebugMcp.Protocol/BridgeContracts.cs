@@ -1197,3 +1197,208 @@ public sealed class DebuggerGetExceptionInfoResponse
     [DataMember(Name = "rawDetails", Order = 9, EmitDefaultValue = false)]
     public string? RawDetails { get; set; }
 }
+
+[DataContract]
+public sealed class ProcessInfo
+{
+    [DataMember(Name = "processId", Order = 1)]
+    public int ProcessId { get; set; }
+
+    [DataMember(Name = "name", Order = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "userName", Order = 3, EmitDefaultValue = false)]
+    public string? UserName { get; set; }
+
+    [DataMember(Name = "isBeingDebugged", Order = 4)]
+    public bool IsBeingDebugged { get; set; }
+
+    [DataMember(Name = "transportQualifier", Order = 5, EmitDefaultValue = false)]
+    public string? TransportQualifier { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetProcessesRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "processName", Order = 2, EmitDefaultValue = false)]
+    public string? ProcessName { get; set; }
+
+    [DataMember(Name = "processId", Order = 3, EmitDefaultValue = false)]
+    public int? ProcessId { get; set; }
+
+    [DataMember(Name = "onlyDebugged", Order = 4, EmitDefaultValue = false)]
+    public bool OnlyDebugged { get; set; }
+
+    [DataMember(Name = "maxCount", Order = 5, EmitDefaultValue = false)]
+    public int? MaxCount { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetProcessesResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "totalCount", Order = 2)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "returnedCount", Order = 3)]
+    public int ReturnedCount { get; set; }
+
+    [DataMember(Name = "processes", Order = 4)]
+    public List<ProcessInfo> Processes { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerAttachRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "processId", Order = 2, EmitDefaultValue = false)]
+    public int? ProcessId { get; set; }
+
+    [DataMember(Name = "processName", Order = 3, EmitDefaultValue = false)]
+    public string? ProcessName { get; set; }
+
+    [DataMember(Name = "waitForBreak", Order = 4, EmitDefaultValue = false)]
+    public bool WaitForBreak { get; set; }
+
+    [DataMember(Name = "breakTimeoutMs", Order = 5, EmitDefaultValue = false)]
+    public int? BreakTimeoutMs { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerAttachResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "processId", Order = 2)]
+    public int ProcessId { get; set; }
+
+    [DataMember(Name = "processName", Order = 3)]
+    public string ProcessName { get; set; } = string.Empty;
+
+    [DataMember(Name = "currentMode", Order = 4)]
+    public string CurrentMode { get; set; } = string.Empty;
+
+    [DataMember(Name = "isDebugging", Order = 5)]
+    public bool IsDebugging { get; set; }
+
+    [DataMember(Name = "lastBreakReason", Order = 6, EmitDefaultValue = false)]
+    public string? LastBreakReason { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 7, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
+
+    [DataMember(Name = "warnings", Order = 8, EmitDefaultValue = false)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerDetachRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "processId", Order = 2, EmitDefaultValue = false)]
+    public int? ProcessId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerDetachResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "detachedProcessId", Order = 2, EmitDefaultValue = false)]
+    public int? DetachedProcessId { get; set; }
+
+    [DataMember(Name = "currentMode", Order = 3)]
+    public string CurrentMode { get; set; } = string.Empty;
+
+    [DataMember(Name = "isDebugging", Order = 4)]
+    public bool IsDebugging { get; set; }
+}
+
+[DataContract]
+public sealed class ModuleInfo
+{
+    [DataMember(Name = "name", Order = 1)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "path", Order = 2, EmitDefaultValue = false)]
+    public string? Path { get; set; }
+
+    [DataMember(Name = "order", Order = 3)]
+    public uint Order { get; set; }
+
+    [DataMember(Name = "version", Order = 4, EmitDefaultValue = false)]
+    public string? Version { get; set; }
+
+    [DataMember(Name = "loadAddress", Order = 5, EmitDefaultValue = false)]
+    public string? LoadAddress { get; set; }
+
+    [DataMember(Name = "endAddress", Order = 6, EmitDefaultValue = false)]
+    public string? EndAddress { get; set; }
+
+    [DataMember(Name = "symbolFile", Order = 7, EmitDefaultValue = false)]
+    public string? SymbolFile { get; set; }
+
+    [DataMember(Name = "symbolsLoaded", Order = 8)]
+    public bool SymbolsLoaded { get; set; }
+
+    [DataMember(Name = "optimized", Order = 9)]
+    public bool Optimized { get; set; }
+
+    [DataMember(Name = "userCode", Order = 10)]
+    public bool UserCode { get; set; }
+
+    [DataMember(Name = "is64Bit", Order = 11)]
+    public bool Is64Bit { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetModulesRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "processId", Order = 2, EmitDefaultValue = false)]
+    public int? ProcessId { get; set; }
+
+    [DataMember(Name = "nameFilter", Order = 3, EmitDefaultValue = false)]
+    public string? NameFilter { get; set; }
+
+    [DataMember(Name = "userCodeOnly", Order = 4, EmitDefaultValue = false)]
+    public bool UserCodeOnly { get; set; }
+
+    [DataMember(Name = "maxCount", Order = 5, EmitDefaultValue = false)]
+    public int? MaxCount { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetModulesResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "processId", Order = 2)]
+    public int ProcessId { get; set; }
+
+    [DataMember(Name = "processName", Order = 3, EmitDefaultValue = false)]
+    public string? ProcessName { get; set; }
+
+    [DataMember(Name = "totalCount", Order = 4)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "returnedCount", Order = 5)]
+    public int ReturnedCount { get; set; }
+
+    [DataMember(Name = "modules", Order = 6)]
+    public List<ModuleInfo> Modules { get; set; } = new();
+}

@@ -39,6 +39,10 @@ public static class BridgeMethods
 	public const string DebuggerGetLocals = "debuggerGetLocals";
 	public const string DebuggerGetThreads = "debuggerGetThreads";
 	public const string DebuggerGetExceptionInfo = "debuggerGetExceptionInfo";
+	public const string DebuggerGetProcesses = "debuggerGetProcesses";
+	public const string DebuggerAttachProcess = "debuggerAttachProcess";
+	public const string DebuggerDetach = "debuggerDetach";
+	public const string DebuggerGetModules = "debuggerGetModules";
 	public const string TestGet = "testGet";
 	public const string TestRun = "testRun";
 	public const string TestDebug = "testDebug";
@@ -77,6 +81,7 @@ public static class BridgeErrorCodes
 	public const string DebuggerNotRunning = "debugger_not_running";
 	public const string DebuggerNotDebugging = "debugger_not_debugging";
 	public const string DebuggerAlreadyRunning = "debugger_already_running";
+	public const string ProcessNotFound = "process_not_found";
 	public const string TestRunBusy = "test_run_busy";
 	public const string TestRunNotFound = "test_run_not_found";
 	public const string TestNotFound = "test_not_found";

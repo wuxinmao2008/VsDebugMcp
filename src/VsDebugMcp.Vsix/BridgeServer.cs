@@ -611,6 +611,74 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerGetProcesses:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetProcessesRequest()
+                        : BridgeJson.Deserialize<DebuggerGetProcessesRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetProcessesAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get processes request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerAttachProcess:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerAttachRequest()
+                        : BridgeJson.Deserialize<DebuggerAttachRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.AttachProcessAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The attach process request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerDetach:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerDetachRequest()
+                        : BridgeJson.Deserialize<DebuggerDetachRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.DetachAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The detach request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerGetModules:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetModulesRequest()
+                        : BridgeJson.Deserialize<DebuggerGetModulesRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetModulesAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get modules request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -951,6 +1019,30 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_get_exception_info",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_processes",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_attach_process",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_detach",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_modules",
                 Version = "0.1",
                 IsStub = false
             }

@@ -11,6 +11,7 @@ public sealed class BridgeServiceExceptionTests
     [InlineData(BridgeErrorCodes.TestRunNotFound, false)]
     [InlineData(BridgeErrorCodes.TestNotFound, false)]
     [InlineData(BridgeErrorCodes.TestWindowUnavailable, true)]
+    [InlineData(BridgeErrorCodes.ProcessNotFound, false)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {
         var rpcException = new BridgeRpcException(code, $"Error for {code}", expectedRetryable);
