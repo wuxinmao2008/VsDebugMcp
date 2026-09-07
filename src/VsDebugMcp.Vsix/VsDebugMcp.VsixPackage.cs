@@ -33,7 +33,7 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
 
         _solutionBuildProvider = new SolutionBuildProvider(this, instance.VsInstanceId);
         await _solutionBuildProvider.InitializeAsync(cancellationToken);
-        _bridgeServer = new BridgeServer(this, _solutionBuildProvider, instance);
+        _bridgeServer = new BridgeServer(this, _solutionBuildProvider, instance, _diagnosticService);
         _bridgeServer.Start();
         _diagnosticService.LogInfo($"BridgeServer 命名管道服务已启动: {instance.BridgePipeName}");
 

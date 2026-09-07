@@ -30,9 +30,9 @@ internal sealed class OutputWindowProvider
         var requestedSource = request.Source;
         var source = string.IsNullOrWhiteSpace(requestedSource)
             ? "build"
-            : requestedSource!.Trim().ToLowerInvariant();
+            : requestedSource!.Trim();
         var maxChars = request.MaxChars ?? DefaultMaxChars;
-        if (source != "build" || maxChars < 1 || maxChars > MaximumMaxChars)
+        if (maxChars < 1 || maxChars > MaximumMaxChars)
         {
             throw OutputWindowProviderException.InvalidRequest();
         }
@@ -42,7 +42,7 @@ internal sealed class OutputWindowProvider
         {
             var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2
                 ?? throw new OutputWindowProviderException();
-            var text = ReadBuildOutput(dte);
+            var text = ReadPaneOutput(dte, source);
             var returnedText = text.Length > maxChars ? text.Substring(text.Length - maxChars) : text;
             return new GetOutputWindowLogsResponse
             {
@@ -69,23 +69,38 @@ internal sealed class OutputWindowProvider
         }
     }
 
-    private static string ReadBuildOutput(DTE2 dte)
+    private static string ReadPaneOutput(DTE2 dte, string source)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
+        OutputWindowPane? matchedPane = null;
         foreach (OutputWindowPane pane in dte.ToolWindows.OutputWindow.OutputWindowPanes)
         {
-            if (!Guid.TryParse(pane.Guid, out var paneGuid) ||
-                paneGuid != VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid)
+            if (string.Equals(source, "build", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                if (Guid.TryParse(pane.Guid, out var paneGuid) &&
+                    paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid)
+                {
+                    matchedPane = pane;
+                    break;
+                }
             }
 
-            var document = pane.TextDocument;
-            var editPoint = document.StartPoint.CreateEditPoint();
-            return editPoint.GetText(document.EndPoint);
+            if (pane.Name.Equals(source, StringComparison.OrdinalIgnoreCase) ||
+                pane.Name.IndexOf(source, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                matchedPane = pane;
+                break;
+            }
         }
 
-        throw new OutputWindowProviderException();
+        if (matchedPane == null)
+        {
+            return string.Empty;
+        }
+
+        var document = matchedPane.TextDocument;
+        var editPoint = document.StartPoint.CreateEditPoint();
+        return editPoint.GetText(document.EndPoint);
     }
 }
 

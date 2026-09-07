@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
 using VsDebugMcp.Protocol;
+using VsDebugMcp_Vsix.Diagnostics;
 
 namespace VsDebugMcp_Vsix;
 
@@ -33,7 +34,8 @@ internal sealed class BridgeServer : IDisposable
     public BridgeServer(
         AsyncPackage package,
         SolutionBuildProvider solutionBuildProvider,
-        VisualStudioInstanceContext instance)
+        VisualStudioInstanceContext instance,
+        VsDiagnosticService? diagnostics = null)
     {
         _instance = instance;
         _solutionProjectProvider = new SolutionProjectProvider(package, instance.VsInstanceId);
@@ -42,7 +44,7 @@ internal sealed class BridgeServer : IDisposable
         _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
         _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId);
-        _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId);
+        _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId, diagnostics);
     }
 
     public void Start()

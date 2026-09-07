@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestWindow.Extensibility;
 using VsDebugMcp.Protocol;
+using VsDebugMcp_Vsix.Diagnostics;
 
 namespace VsDebugMcp_Vsix;
 
@@ -17,21 +18,24 @@ internal sealed class TestExplorerProvider : IDisposable
     private static readonly Guid TestWindowPackageGuid = new("BFC24BF4-B994-4757-BCDC-1D5D2768BF29");
     private readonly AsyncPackage _package;
     private readonly string _vsInstanceId;
+    private readonly VsDiagnosticService? _diagnostics;
     private readonly object _sync = new();
 
     private IComponentModel? _componentModel;
     private TestsServiceInvoker? _testsService;
     private IOperationState? _operationState;
+    private OperationBrokerInvoker? _operationBroker;
     private bool _subscribedToOperationState;
     private bool _disposed;
 
     private ActiveTestRunContext? _activeRun;
     private ActiveTestRunContext? _lastRun;
 
-    public TestExplorerProvider(AsyncPackage package, string vsInstanceId)
+    public TestExplorerProvider(AsyncPackage package, string vsInstanceId, VsDiagnosticService? diagnostics = null)
     {
         _package = package;
         _vsInstanceId = vsInstanceId;
+        _diagnostics = diagnostics;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -124,6 +128,7 @@ internal sealed class TestExplorerProvider : IDisposable
             _operationState = _componentModel.GetService<IOperationState>();
             if (_operationState != null)
             {
+                _operationBroker = new OperationBrokerInvoker(_operationState, _diagnostics);
                 _operationState.StateChanged += OnOperationStateChanged;
                 _subscribedToOperationState = true;
             }
@@ -134,9 +139,11 @@ internal sealed class TestExplorerProvider : IDisposable
 
     private void OnOperationStateChanged(object? sender, OperationStateChangedEventArgs e)
     {
+        _diagnostics?.LogInfo($"[TestExplorer] OperationStateChanged: {e.State} (0x{(int)e.State:X})");
+
+        // Specific test execution finished masks
         var finished = e.State.HasFlag(TestOperationStates.TestExecutionFinished)
             || e.State.HasFlag(TestOperationStates.TestExecutionCancelAndFinished)
-            || (e.State & TestOperationStates.Finished) != 0
             || (int)e.State == (int)TestOperationStates.OperationSetFinished;
 
         if (finished)
@@ -150,11 +157,13 @@ internal sealed class TestExplorerProvider : IDisposable
                     {
                         try
                         {
-                            await Task.Delay(500);
+                            // Brief delay to allow TestStore to commit completed test results
+                            await Task.Delay(300);
                             await FinalizeRunAsync(run);
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            _diagnostics?.LogError($"[TestExplorer] FinalizeRunAsync error: {ex.Message}");
                         }
                     });
                 }
@@ -239,25 +248,32 @@ internal sealed class TestExplorerProvider : IDisposable
         var testsService = await EnsureServicesAsync(cancellationToken);
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
+        bool isAllTests = request.TestIds == null || request.TestIds.Count == 0;
         List<Guid> targetGuids = new();
-        if (request.TestIds != null && request.TestIds.Count > 0)
+        List<string> targetFqns = new();
+
+        var allTests = await testsService.GetTestsAsync();
+        if (allTests != null)
         {
-            foreach (var idStr in request.TestIds)
-            {
-                if (Guid.TryParse(idStr, out var g))
-                {
-                    targetGuids.Add(g);
-                }
-            }
-        }
-        else
-        {
-            var allTests = await testsService.GetTestsAsync();
-            if (allTests != null)
+            if (isAllTests)
             {
                 foreach (var t in allTests)
                 {
                     targetGuids.Add(TestAccessor.GetId(t));
+                    targetFqns.Add(TestAccessor.GetFullyQualifiedName(t));
+                }
+            }
+            else
+            {
+                var requestedIdSet = new HashSet<string>(request.TestIds!, StringComparer.OrdinalIgnoreCase);
+                foreach (var t in allTests)
+                {
+                    var idStr = TestAccessor.GetId(t).ToString();
+                    if (requestedIdSet.Contains(idStr))
+                    {
+                        targetGuids.Add(TestAccessor.GetId(t));
+                        targetFqns.Add(TestAccessor.GetFullyQualifiedName(t));
+                    }
                 }
             }
         }
@@ -303,16 +319,69 @@ internal sealed class TestExplorerProvider : IDisposable
             await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
             try
             {
-                await testsService.RunTestsAsync(targetGuids);
-                await Task.Delay(1000);
-                await FinalizeRunAsync(runContext);
+                bool started = false;
+                if (isAllTests)
+                {
+                    if (_operationBroker != null)
+                    {
+                        started = await _operationBroker.ExecuteAllTestsAsync(CancellationToken.None);
+                    }
+                    if (!started)
+                    {
+                        started = await testsService.RunTestsAsync(targetGuids);
+                    }
+                }
+                else
+                {
+                    if (_operationBroker != null && targetFqns.Count > 0)
+                    {
+                        started = await _operationBroker.ExecuteTestsByFilterAsync(targetFqns, CancellationToken.None);
+                    }
+                    if (!started)
+                    {
+                        started = await testsService.RunTestsAsync(targetGuids);
+                    }
+                }
+
+                _diagnostics?.LogInfo($"[TestExplorer] Test execution initiated for run {runId}, started={started}");
+                if (!started)
+                {
+                    lock (_sync)
+                    {
+                        runContext.State = TestRunStates.Failed;
+                        runContext.CompletedAt = DateTimeOffset.UtcNow;
+                        if (_activeRun == runContext)
+                        {
+                            _activeRun = null;
+                        }
+                    }
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _diagnostics?.LogError($"[TestExplorer] Error starting run {runId}: {ex.Message}");
                 lock (_sync)
                 {
                     runContext.State = TestRunStates.Failed;
                     runContext.CompletedAt = DateTimeOffset.UtcNow;
+                    if (_activeRun == runContext)
+                    {
+                        _activeRun = null;
+                    }
+                }
+            }
+        });
+
+        // Safety watchdog: finalize after 120s if event is never received
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(120));
+            lock (_sync)
+            {
+                if (_activeRun == runContext && runContext.State == TestRunStates.Running)
+                {
+                    _diagnostics?.LogWarning($"[TestExplorer] Safety watchdog reached for run {runId}; finalizing.");
+                    _ = FinalizeRunAsync(runContext);
                 }
             }
         });
@@ -428,6 +497,17 @@ internal sealed class TestExplorerProvider : IDisposable
             _activeRun = null;
         }
 
+        if (_operationBroker != null)
+        {
+            try
+            {
+                await _operationBroker.CancelAsync(cancellationToken);
+            }
+            catch
+            {
+            }
+        }
+
         return new CancelTestRunResponse
         {
             VsInstanceId = _vsInstanceId,
@@ -459,23 +539,7 @@ internal sealed class TestExplorerProvider : IDisposable
         if (_testsService == null) return;
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-        System.Collections.IEnumerable? tests = null;
-        if (run.TargetGuids != null && run.TargetGuids.Count > 0)
-        {
-            try
-            {
-                tests = await _testsService.GetTestsAsync(run.TargetGuids);
-            }
-            catch
-            {
-            }
-        }
-
-        if (tests == null)
-        {
-            tests = await _testsService.GetTestsAsync();
-        }
-
+        var tests = await _testsService.GetTestsAsync();
         if (tests == null) return;
 
         var results = new List<VsTestResult>();
@@ -602,11 +666,109 @@ internal sealed class TestExplorerProvider : IDisposable
         }
     }
 
+    private sealed class OperationBrokerInvoker
+    {
+        private readonly object _broker;
+        private readonly VsDiagnosticService? _diagnostics;
+        private readonly MethodInfo? _executeAllTestsMethod;
+        private readonly MethodInfo? _executeTestsByFilterMethod;
+        private readonly MethodInfo? _cancelAsyncMethod;
+
+        public OperationBrokerInvoker(object broker, VsDiagnosticService? diagnostics = null)
+        {
+            _broker = broker;
+            _diagnostics = diagnostics;
+            var type = broker.GetType();
+            _executeAllTestsMethod = type.GetMethod("ExecuteAllTestsAsync", new[] { typeof(int?), typeof(CancellationToken) });
+            _executeTestsByFilterMethod = type.GetMethod("ExecuteTestsByFilterAsync", BindingFlags.Public | BindingFlags.Instance);
+            _cancelAsyncMethod = type.GetMethod("CancelAsync", new[] { typeof(CancellationToken) });
+        }
+
+        public async Task<bool> ExecuteAllTestsAsync(CancellationToken cancellationToken)
+        {
+            if (_executeAllTestsMethod == null) return false;
+            try
+            {
+                var task = (Task)_executeAllTestsMethod.Invoke(_broker, new object?[] { null, cancellationToken })!;
+                await task.ConfigureAwait(false);
+                var prop = task.GetType().GetProperty("Result");
+                if (prop != null && prop.GetValue(task) is bool b) return b;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogError($"[TestExplorer] ExecuteAllTestsAsync error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> ExecuteTestsByFilterAsync(List<string> fqns, CancellationToken cancellationToken)
+        {
+            if (_executeTestsByFilterMethod == null)
+            {
+                _diagnostics?.LogWarning("[TestExplorer] ExecuteTestsByFilterAsync method not found on broker.");
+                return false;
+            }
+
+            try
+            {
+                var messagesAsm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "Microsoft.VisualStudio.TestWindow.Internal")
+                    ?? Assembly.Load("Microsoft.VisualStudio.TestWindow.Internal");
+                var searchQueryType = messagesAsm?.GetType("Microsoft.VisualStudio.TestWindow.Messages.SearchQuery");
+                var filterMatchKindType = typeof(IOperationState).Assembly.GetType("Microsoft.VisualStudio.TestWindow.Extensibility.FilterMatchKind");
+
+                if (searchQueryType == null || filterMatchKindType == null)
+                {
+                    _diagnostics?.LogWarning($"[TestExplorer] Cannot resolve SearchQuery ({searchQueryType != null}) or FilterMatchKind ({filterMatchKindType != null}).");
+                    return false;
+                }
+
+                var exactMatchVal = Enum.Parse(filterMatchKindType, "ExactMatch");
+                var listType = typeof(List<>).MakeGenericType(searchQueryType);
+                var filterList = (System.Collections.IList)Activator.CreateInstance(listType)!;
+
+                var ctors = searchQueryType.GetConstructors();
+                if (ctors.Length > 0 && fqns != null && fqns.Count > 0)
+                {
+                    var ctor = ctors[0];
+                    // SearchQuery ctor: (property, value, values, subQueries, matchKind)
+                    var queryObj = ctor.Invoke(new object?[] { "TestWindow_FullyQualifiedName", null, fqns, null, exactMatchVal });
+                    filterList.Add(queryObj);
+                }
+
+                var task = (Task)_executeTestsByFilterMethod.Invoke(_broker, new object[] { filterList, cancellationToken })!;
+                await task.ConfigureAwait(false);
+                var prop = task.GetType().GetProperty("Result");
+                if (prop != null && prop.GetValue(task) is bool b) return b;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogError($"[TestExplorer] ExecuteTestsByFilterAsync error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> CancelAsync(CancellationToken cancellationToken)
+        {
+            if (_cancelAsyncMethod == null) return false;
+            try
+            {
+                var task = (Task)_cancelAsyncMethod.Invoke(_broker, new object[] { cancellationToken })!;
+                await task.ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
     private sealed class TestsServiceInvoker
     {
         private readonly object _service;
         private readonly MethodInfo _getTestsMethod;
-        private readonly MethodInfo _getTestsWithIdsMethod;
         private readonly MethodInfo _runTestsMethod;
 
         public TestsServiceInvoker(object service)
@@ -615,8 +777,6 @@ internal sealed class TestExplorerProvider : IDisposable
             var type = service.GetType();
             _getTestsMethod = type.GetMethod("GetTestsAsEnumerableAsync", Type.EmptyTypes)
                 ?? throw new InvalidOperationException("GetTestsAsEnumerableAsync not found.");
-            _getTestsWithIdsMethod = type.GetMethod("GetTestsAsEnumerableAsync", new[] { typeof(IEnumerable<Guid>) })
-                ?? throw new InvalidOperationException("GetTestsAsEnumerableAsync(ids) not found.");
             _runTestsMethod = type.GetMethod("RunTestsAsync", new[] { typeof(IEnumerable<Guid>) })
                 ?? throw new InvalidOperationException("RunTestsAsync not found.");
         }
@@ -624,14 +784,6 @@ internal sealed class TestExplorerProvider : IDisposable
         public async Task<System.Collections.IEnumerable?> GetTestsAsync()
         {
             var task = (Task)_getTestsMethod.Invoke(_service, null)!;
-            await task.ConfigureAwait(false);
-            var prop = task.GetType().GetProperty("Result");
-            return (System.Collections.IEnumerable?)prop?.GetValue(task);
-        }
-
-        public async Task<System.Collections.IEnumerable?> GetTestsAsync(IEnumerable<Guid> ids)
-        {
-            var task = (Task)_getTestsWithIdsMethod.Invoke(_service, new object[] { ids })!;
             await task.ConfigureAwait(false);
             var prop = task.GetType().GetProperty("Result");
             return (System.Collections.IEnumerable?)prop?.GetValue(task);
