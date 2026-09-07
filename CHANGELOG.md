@@ -5,7 +5,7 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.8.0] - 2026-09-05
+## [0.1.8.0] - 2026-09-07
 
 ### Added
 - **Test Explorer / VSTest Integration (Direction B / Route 2)**: Added full hybrid Visual Studio Test Explorer integration via MEF services (`ITestsService`, `IOperationState`) and package preload:
@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `vs_cancel_test_run`: Programmatically cancels an active test run via `IOperationState`.
   - Added single-run mutual exclusion guard (`test_run_busy`) and safe fallback error handling (`test_run_not_found`, `test_window_unavailable`).
   - Added sample test suite `sample/SampleTests` (xUnit .NET 8) with 3 unit tests integrated into `SampleSolution.sln` and `SampleSolution.slnx`.
+
+### Fixed
+- Fixed premature test run completion caused by `TestOperationStates.ChangeDetectionFinished (0x40004)` containing the `Finished (0x4)` bitmask flag during solution build phase; narrowed state filter to `TestExecutionFinished`, `TestExecutionCancelAndFinished`, and `OperationSetFinished`.
+- Fixed `ITestsService.RunTestsAsync(targetGuids)` zero-match bug (due to `TestCaseId` vs `TestCaseRecord.Id` internal mismatch) by invoking native `OperationBroker.ExecuteAllTestsAsync` for full runs, and precisely constructing 5-parameter `SearchQuery` in `Microsoft.VisualStudio.TestWindow.Internal.dll` for `ExecuteTestsByFilterAsync` single-test runs.
+- Fixed `OutputWindowProvider.cs` source pane resolution to support `"VsDebugMcp"`, `"tests"`, `"build"`, and general IDE panes.
+
+### Verified
+- Automated unit tests: 68/68 PASS (100% across Protocol and Host test suites).
+- Full end-to-end online acceptance in Visual Studio 2026 (VS 18.x) Experimental Instance against `sample/SampleSolution.slnx`:
+  - `vs_health` & `vs_capabilities`: confirmed all 4 test tools active with `isStub=false`.
+  - `vs_get_tests`: discovered all 3 unit tests in `SampleTests`, verified filter matching (`Multiply`).
+  - `vs_run_tests` (full suite): executed asynchronously, polled from `running` to `completed` in ~2.8s, all 3 tests passed with per-test duration metrics.
+  - `vs_run_tests` (single test): successfully filtered and executed `Multiply_TwoNumbers_ReturnsProduct` independently.
+  - Concurrency & cancellation: verified mutual exclusion (`test_run_busy`) on simultaneous runs and clean termination via `vs_cancel_test_run`.
 
 ## [0.1.7.0] - 2026-09-05
 

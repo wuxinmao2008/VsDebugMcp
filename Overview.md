@@ -32,7 +32,7 @@
 
 ## MCP 工具列表
 
-插件向 AI Agent 暴露以下标准 MCP 工具（共 24 个）：
+插件向 AI Agent 暴露以下标准 MCP 工具（共 28 个）：
 
 | 分类 | 工具名称 | 功能描述 |
 |---|---|---|
@@ -60,6 +60,10 @@
 | | `vs_debugger_get_locals` | 自动识别当前栈帧的全部入参（Arguments）与局部变量（Locals） |
 | | `vs_debugger_evaluate_expr` | 对单项表达式在指定栈帧执行安全求值（支持超时与副作用控制） |
 | | `vs_debugger_evaluate_expressions` | 单次 RPC 批量求值多个表达式，支持单项错误隔离 |
+| **测试资源管理器** | `vs_get_tests` | 发现解决方案中的测试用例，支持按名称/类名/命名空间过滤 |
+| | `vs_run_tests` | 发起测试执行（支持全量运行或指定测试 ID 过滤运行） |
+| | `vs_get_test_run_status` | 轮询测试运行状态、通过/失败统计、耗时指标及单测结果列表 |
+| | `vs_cancel_test_run` | 取消当前正在执行中的测试运行任务 |
 
 ## 快速上手
 
@@ -86,12 +90,12 @@
 
 ## 当前状态与后续规划
 
-- **当前支持（v0.1.7.0）**：
+- **当前支持（v0.1.8.0）**：
   - 工程结构与文件树发现、IDE 构建控制与 Build Output 原始日志提取；
   - 调试器全链路闭环：设计模式下自动 F5 启动、断点智能着陆、局部变量全景探测、单步步过/步入/步出、批量表达式求值、会话终止与并发模式守卫；
-  - 全套 55/55 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
+  - 测试资源管理器集成：解决方案单测自动发现、全量/单用例异步运行、实时状态/结果轮询、测试中断取消与单实例互斥守卫；
+  - 全套 68/68 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
 - **后续规划**：
-  - 单元测试集成（Test Explorer / VSTest 发现与异步运行）；
   - 错误列表（Error List）公开数据源原生 COM 深化；
   - 调试器进程附加（Attach to Process）与高级条件/计数断点。
 - **安全边界**：服务仅监听本机回环地址（`127.0.0.1:43260`），不开放远程网络访问，不执行非受控的外部系统命令。
@@ -122,7 +126,7 @@ The screenshot below demonstrates an AI agent (e.g., VS Code Agent) automaticall
 
 ## Available MCP Tools
 
-The extension exposes the following standard MCP tools (24 tools total):
+The extension exposes the following standard MCP tools (28 tools total):
 
 | Category | Tool Name | Description |
 |---|---|---|
@@ -150,6 +154,10 @@ The extension exposes the following standard MCP tools (24 tools total):
 | | `vs_debugger_get_locals` | Automatically inspect arguments and local variables on current stack frame |
 | | `vs_debugger_evaluate_expr` | Safely evaluate an expression with timeout and side-effect control |
 | | `vs_debugger_evaluate_expressions` | Single-RPC batch expression evaluation with per-item error isolation |
+| **Test Explorer & Execution** | `vs_get_tests` | Discover solution tests with optional display name / FQN filtering |
+| | `vs_run_tests` | Trigger asynchronous test execution (full suite or specified `testIds`) |
+| | `vs_get_test_run_status` | Poll test execution progress, pass/fail metrics, duration, and test results |
+| | `vs_cancel_test_run` | Cancel an active test run task via Test Explorer |
 
 ## Quick Start
 
@@ -176,12 +184,12 @@ Your AI agent will automatically detect and start using Visual Studio tools.
 
 ## Current Status & Roadmap
 
-- **Supported Now (v0.1.7.0)**:
+- **Supported Now (v0.1.8.0)**:
   - Solution and project file discovery, build control and Build Output retrieval;
   - Full debugger automation loop: programmatic F5 start, smart break detection, local variables inspection, stepping control, batch expression evaluation, session termination, and concurrency mode guards;
-  - Complete 55/55 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
+  - Test Explorer integration: native solution test discovery, asynchronous test runs (all or filtered by IDs), real-time progress and duration metrics, cancellation, and concurrency mutex;
+  - Complete 68/68 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
 - **Roadmap**:
-  - Test Explorer / VSTest integration (test discovery, asynchronous test runs);
   - Error List COM provider deepening;
   - Attach to process and advanced conditional/hit-count breakpoints.
 - **Security**: Bound strictly to local loopback (`127.0.0.1:43260`), with no remote access and no arbitrary process execution.

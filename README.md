@@ -42,6 +42,12 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_step_over` / `step_into` / `step_out` — Stepping execution control
 - `vs_debugger_continue` / `pause` / `stop` — Session continuation, pause, and termination
 
+### Test Explorer & Execution (Direction B)
+- `vs_get_tests` — Solution test discovery with optional filters
+- `vs_run_tests` — Asynchronous test execution (full suite or specified `testIds`)
+- `vs_get_test_run_status` — Real-time test run state, progress, execution metrics, and per-test outcomes
+- `vs_cancel_test_run` — Active test run cancellation
+
 ### In action
 
 ![VS Code Agent using VsDebugMcp](assets/screenshot_01.png)
@@ -93,7 +99,9 @@ Ordinary builds do not deploy the extension. Deployment requires closing the rel
 
 ## Validation status
 
-The fixed HTTP/shared Host source builds successfully, and the generated VSIX contains the framework-dependent Host. Live acceptance still requires deploying the VSIX, restarting the intended Visual Studio instance and validating the complete MCP client → HTTP Host → instance router → Named Pipe → VSIX → Visual Studio path.
+- Automated unit tests: 68/68 PASS across Protocol and Host test suites.
+- End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
+- Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation.
 
 ## Security and privacy
 

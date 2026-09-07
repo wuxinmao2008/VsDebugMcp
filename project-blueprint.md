@@ -186,19 +186,23 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 19. `vs_debugger_start`
 20. `vs_debugger_evaluate_expressions`
 21. `vs_debugger_get_locals`
+22. `vs_get_tests`
+23. `vs_run_tests`
+24. `vs_get_test_run_status`
+25. `vs_cancel_test_run`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`8/8` PASS。
-- Host tests 最近一次完整运行：`47/47` PASS。
-- 全套测试通过率：`55/55` PASS (100%)。
+- Protocol tests 最近一次完整运行：`9/9` PASS。
+- Host tests 最近一次完整运行：`59/59` PASS。
+- 全套测试通过率：`68/68` PASS (100%)。
 - VSIX 已使用 VS 18 MSBuild 成功编译与打包（~4 MB）。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；
   - `deploy: vsix`：依赖 `build: vsix`，调用 `scripts/deploy-exp.ps1` 校验实验实例与 Host 状态并完成安全覆盖部署。
-- 已在 Visual Studio 2026 (VS 18.9) 实验实例完成全链路实测验收。
+- 已在 Visual Studio 2026 (VS 18.x) 实验实例完成全链路实测验收（含工程、构建、调试与测试资源管理器四大子系统）。
 
 ## 核心依据
 
@@ -449,15 +453,22 @@ POC 核心原则：
 
 目标：覆盖 Test Explorer 和高级诊断。
 
-任务：
+状态：**方向 B（路线 2：测试资源管理器集成 v0.1.8.0）已完成代码实现并通过全链路在线验收**。
 
-1. `vs_get_tests`
-2. `vs_run_tests`
-3. 测试结果/失败详情。
-4. `vs_debug_test_by_id`
-5. 异常分析。
-6. 并行栈摘要。
-7. 输出窗口 + 错误列表 + 调试状态聚合。
+已完成任务（方向 B：测试资源管理器集成）：
+
+1. ✅ `vs_get_tests`：基于 MEF `ITestsService` 查询测试清单，支持显示名与 FQN 模糊过滤。
+2. ✅ `vs_run_tests`：通过 `OperationBroker`（全量 `ExecuteAllTestsAsync`，单用例通过 `Microsoft.VisualStudio.TestWindow.Internal.Messages.SearchQuery` 过滤 `ExecuteTestsByFilterAsync`）异步触发测试运行。
+3. ✅ `vs_get_test_run_status`：轮询异步测试运行生命周期（`starting → running → completed/failed/cancelled`），返回通过/失败统计、总耗时、以及各项单测的独立测试结果与执行耗时。
+4. ✅ `vs_cancel_test_run`：通过 `OperationBroker.CancelAsync` 取消正在运行的测试任务。
+5. ✅ 单实例并发互斥守卫（`test_run_busy`）与容错状态机。
+6. ✅ 靶场单测工程：`sample/SampleTests`（xUnit .NET 8，包含 3 个单测，已挂载至 `SampleSolution.slnx`）。
+
+后续进阶任务（Phase 3A / 3C）：
+
+7. ⬜ `vs_debug_test_by_id`（测试调试专用接口）
+8. ⬜ 异常分析与高级调用栈摘要
+9. ⬜ 错误列表（Error List）原生 COM 数据源深化
 
 特别约束：
 
