@@ -120,3 +120,14 @@ The project targets `vs2026_5`. The VSIX currently pins `Microsoft.VisualStudio.
 ## Release notes
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
+
+## Acknowledgements & Ecosystem References
+
+We would like to express our gratitude to the open-source community and pioneering IDE integrations, especially to:
+
+- **[GitHub Copilot for Visual Studio](https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-extension)** by [GitHub](https://github.com/) & [Microsoft](https://www.microsoft.com/) — whose native in-IDE agent workflows (including the DebuggerAgent, test runner, and solution diagnostic flows) provided foundational capability taxonomy, domain interaction models, and interface design references for standardizing Visual Studio capabilities into open MCP tools.
+- **[Qt Creator MCP Server](https://doc.qt.io/qtcreator/creator-how-to-mcp-server.html)** by [The Qt Company](https://www.qt.io/) — a pioneering IDE-native MCP implementation. Its modular subsystem provider architecture (organizing project, debugger, test, and editor capabilities into dedicated providers) and communication inspection patterns served as an essential architectural inspiration for designing VsDebugMcp.
+- **[CodingWithCalvin/VS-MCPServer](https://github.com/CodingWithCalvin/VS-MCPServer)** by [Calvin Allen](https://github.com/CalvinAllen) and contributors — an excellent Visual Studio MCP extension for VS 2022/2026. Their transparent issue discussions, architecture evolutions, and battle-tested solutions for IDE concurrency, UI-thread deadlock prevention, and MSBuild/debugger edge cases provided valuable insights for this project. See [docs/ecosystem-reference-vs-mcpserver.md](docs/ecosystem-reference-vs-mcpserver.md) for our detailed ecosystem analysis and lessons learned.
+
+
+

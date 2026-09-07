@@ -162,9 +162,18 @@ Host 以 `win-x64` self-contained 产物随 VSIX 安装，由 VSIX 探测并确�
 3. 纯 VisualStudio.Extensibility OOP：架构最现代、安全边界好，但 API 覆盖可能不足。
 4. Hybrid 推荐路线：`MCP Server/Transport` 尽量放到 out-of-proc 或独立进程；`VS Capability Bridge` 通过 VisualStudio.Extensibility + VSSDK-compatible in-proc provider 暴露必要 VS 服务；对外只暴露标准 MCP tools。
 
+## 生态实战案例对照：CodingWithCalvin/VS-MCPServer
+
+在社区生态中，[CodingWithCalvin/VS-MCPServer](https://github.com/CodingWithCalvin/VS-MCPServer)（由 Calvin Allen 主导）同样致力于为 Visual Studio 2022/2026 提供 MCP 支持。其演进历程与问题排查为本架构提供了极佳的现实对照：
+- **多实例冲突与重构**：初期单端口（5050）HTTP 架构在多 VS 窗口并存时遭遇抢占冲突，后被迫引入 Broker.exe + Shim.exe 重构；印证了本项目一开始采用全局单 Host + 实例级 Named Pipe + `vsInstanceId` 显式隔离设计的正确性。
+- **UI 线程死锁防御**：VSIX Package `Dispose` 路径因缺少 `ConfigureAwait(false)` 导致 `devenv.exe` 进程残留；必须通过 `Task.Run` 脱离 UI 上下文并设置严格超时，同时结合 Windows Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) 级联清理子进程。
+- **非阻塞构建与状态机**：DTE `SolutionBuild.Build` 必须传 `false` 避免冻结 UI 线程；在构建前主动检查调试器模式避免 VS 弹模态确认对话框引发自动化死锁。
+- 详见深度调研分析文档：[docs/ecosystem-reference-vs-mcpserver.md](ecosystem-reference-vs-mcpserver.md)。
+
 ## 新增规划约束
 
 - MCP 2026-07-28 无协议 session 后，VS 调试状态必须作为显式 application handle 管理。
 - 长任务如 build/test/debug wait 应考虑 MCP Tasks extension 或项目自定义 `taskId` + polling 工具。
 - 每个工具应标注 read-only/idempotent/destructive 等 annotations，并在 server 侧执行安全策略，而不是只依赖模型自觉。
 - 第一版设计应包含“工具注册表 + provider 插件模型 + 能力探测 + 工具开关 + 审计日志”。
+
