@@ -75,3 +75,7 @@ obj/
 .vs/
 *.user
 *.suo
+
+# Python
+__pycache__/
+*.pyc

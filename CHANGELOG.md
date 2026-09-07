@@ -5,6 +5,34 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10.0] - 2026-09-07
+
+### Added
+- **Structured Diagnostics Dual-Track & Fallback (`vs_get_errors`) (Phase 3B)**: Refactored error extraction into a resilient dual-track engine:
+  - Primary track: queries `IErrorList.TableControl.Entries` directly for active error snapshots across build sources, avoiding subscription quiescence timeouts.
+  - Secondary track (Build Output fallback): automatically parses raw build output logs via built-in MSVC and MSBuild regex engines (`MsvcOrClangRegex` and `MsBuildGeneralRegex`) when the Error Table is unpopulated or in transit.
+  - Completely eliminates `diagnostics_unavailable` errors, ensuring reliable structured diagnostic feedback.
+- **Exception Diagnosis (`vs_debugger_get_exception_info`) (Phase 3B)**: Added deep exception inspection during break mode:
+  - Evaluates `$exception` to capture `exceptionType` (full qualified CLR type), `message`, hex-formatted `hresult`, `source`, raw `stackTrace`, `innerException`, and `rawDetails`.
+  - Added native/unmanaged break reason fallback for C++ and SEH exceptions.
+  - Added mode guard `debugger_not_paused` when called outside break mode.
+- **Advanced Breakpoints Control (`vs_debugger_set_breakpoints`) (Phase 3B)**:
+  - Added `conditionType` parameter supporting `"whenTrue"` (default) and `"whenChanged"`.
+  - Added hit count parameters `hitCountTarget` (int) and `hitCountType` (`"equal"`, `"greaterOrEqual"`, `"multiple"`).
+  - Enriched `BreakpointInfo` with `currentHitCount`, `conditionType`, `hitCountTarget`, and `hitCountType`.
+
+### Verified
+- Automated unit tests: 78/78 PASS (100% across Protocol and Host test suites).
+- Full end-to-end online acceptance in Visual Studio 2026 (VS 18.x) Experimental Instance against `sample/SampleSolution.slnx` via `scripts/test_acceptance_phase3b.py`:
+  - `vs_health` & `vs_capabilities`: confirmed 28 capabilities active, `vs_debugger_get_exception_info` is active (`isStub=false`).
+  - `vs_get_errors`: verified dual-track fallback, eliminated `diagnostics_unavailable` timeout exceptions.
+  - `vs_debugger_set_breakpoints`: successfully placed conditional breakpoint `a > 0` with hit count target `1` (`whenTrue`, `equal`).
+  - `vs_get_tests`: discovered 4 tests, locked target exception test `Divide_ByZero_ThrowsException`.
+  - `vs_debug_test_by_id`: launched test debugging, landed in break mode on unhandled exception (`mode: break`, `breakReason: exception_unhandled`).
+  - `vs_debugger_get_exception_info`: successfully inspected deep exception state (`System.DivideByZeroException`, stack trace at `Calculator.cs:line 7`).
+  - `vs_debugger_stop`: cleanly terminated debugging and returned to design mode.
+
+
 ## [0.1.9.0] - 2026-09-07
 
 ### Added

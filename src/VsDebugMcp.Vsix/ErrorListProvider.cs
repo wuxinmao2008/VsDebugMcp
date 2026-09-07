@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -40,100 +41,103 @@ internal sealed class ErrorListProvider
         var filters = ValidateRequest(request);
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
+        var diagnostics = new List<VisualStudioDiagnostic>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Track 1: Query ErrorList TableControl entries directly
         try
         {
-            var componentModel = await _package.GetServiceAsync(typeof(SComponentModel)) as IComponentModel
-                ?? throw new DiagnosticsProviderException();
-            var errorList = componentModel.GetService<IErrorList>()
-                ?? throw new DiagnosticsProviderException();
-            var tableControl = errorList.TableControl;
-            await tableControl.ForceUpdateAsync();
-            var manager = tableControl.Manager;
-            var diagnostics = new List<VisualStudioDiagnostic>();
-            var buildDiagnosticCount = 0;
-            var subscriptions = new List<IDisposable>();
-            var sinks = new List<SnapshotSink>();
-
-            try
+            var componentModel = await _package.GetServiceAsync(typeof(SComponentModel)) as IComponentModel;
+            var errorList = componentModel?.GetService<IErrorList>();
+            if (errorList?.TableControl != null)
             {
-                foreach (var source in manager.Sources)
+                var tableControl = errorList.TableControl;
+                await tableControl.ForceUpdateAsync();
+                foreach (var handle in tableControl.Entries)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var sink = new SnapshotSink();
-                    sinks.Add(sink);
-                    subscriptions.Add(source.Subscribe(sink));
-                }
-
-                await Task.WhenAll(
-                    sinks.Select(sink => sink.WaitForQuiescenceAsync(
-                        SnapshotQuietPeriod,
-                        SnapshotWaitTimeout,
-                        cancellationToken))).ConfigureAwait(false);
-
-                foreach (var sink in sinks)
-                {
-                    foreach (var entry in sink.ReadEntries())
+                    ITableEntry? entry = null;
+                    if (handle.TryGetEntry(out var directEntry))
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        if (!TryReadBuildDiagnostic(entry, out var diagnostic))
+                        entry = directEntry;
+                    }
+                    else if (handle.TryGetSnapshot(out var snapshot, out var index))
+                    {
+                        snapshot.StartCaching();
+                        try
                         {
-                            continue;
+                            entry = new SnapshotEntry(snapshot, index);
                         }
-
-                        buildDiagnosticCount++;
-                        if (Matches(diagnostic, filters))
+                        finally
                         {
-                            diagnostics.Add(diagnostic);
+                            snapshot.StopCaching();
+                        }
+                    }
+
+                    if (entry != null && TryReadDiagnostic(entry, out var diag) && Matches(diag, filters))
+                    {
+                        var key = $"{diag.FilePath}:{diag.Line}:{diag.Column}:{diag.Code}:{diag.Message}";
+                        if (seenKeys.Add(key))
+                        {
+                            diagnostics.Add(diag);
                         }
                     }
                 }
             }
-            finally
-            {
-                foreach (var subscription in subscriptions)
-                {
-                    subscription.Dispose();
-                }
-            }
-
-            if (sinks.Count == 0 || sinks.All(sink => !sink.HasSignal))
-            {
-                throw new DiagnosticsProviderException();
-            }
-
-            if (buildDiagnosticCount == 0)
-            {
-                await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-                if (HasVisibleBuildEntries(tableControl.Entries))
-                {
-                    throw new DiagnosticsProviderException();
-                }
-            }
-
-            var returned = diagnostics.Take(filters.MaxCount).ToList();
-            return new GetErrorsResponse
-            {
-                VsInstanceId = _vsInstanceId,
-                BuildTaskId = request.BuildTaskId,
-                SnapshotAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                TotalCount = diagnostics.Count,
-                ReturnedCount = returned.Count,
-                Truncated = returned.Count < diagnostics.Count,
-                Items = returned
-            };
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (DiagnosticsProviderException)
+        catch (Exception)
         {
-            throw;
+            // TableControl read failed or incomplete, continue to Track 2 fallback
         }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
+
+        // Track 2: If diagnostics is empty, read and parse Build Output logs
+        if (diagnostics.Count == 0)
         {
-            throw new DiagnosticsProviderException(exception);
+            try
+            {
+                var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+                if (dte != null)
+                {
+                    var buildOutput = OutputWindowProvider.ReadPaneOutput(dte, "build");
+                    if (!string.IsNullOrWhiteSpace(buildOutput))
+                    {
+                        var parsedDiagnostics = ParseBuildOutput(buildOutput, filters);
+                        foreach (var diag in parsedDiagnostics)
+                        {
+                            var key = $"{diag.FilePath}:{diag.Line}:{diag.Column}:{diag.Code}:{diag.Message}";
+                            if (seenKeys.Add(key))
+                            {
+                                diagnostics.Add(diag);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                // Fallback parsing failed; continue to return whatever we have
+            }
         }
+
+        var returned = diagnostics.Take(filters.MaxCount).ToList();
+        return new GetErrorsResponse
+        {
+            VsInstanceId = _vsInstanceId,
+            BuildTaskId = request.BuildTaskId,
+            SnapshotAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            TotalCount = diagnostics.Count,
+            ReturnedCount = returned.Count,
+            Truncated = returned.Count < diagnostics.Count,
+            Items = returned
+        };
     }
 
     private static ErrorFilters ValidateRequest(GetErrorsRequest request)
@@ -176,6 +180,96 @@ internal sealed class ErrorListProvider
             NormalizeOptional(request.Project),
             NormalizePath(request.File),
             maxCount);
+    }
+
+    private static readonly Regex MsvcOrClangRegex = new(
+        @"^(?:\d+>\s*)?(?<file>[a-zA-Z]:[\\/][^:(]+|\S[^:(]+)\((?<line>\d+)(?:,(?<col>\d+))?(?:,\d+,\d+)?\)\s*:\s*(?<severity>fatal error|error|warning)\s+(?<code>[A-Za-z0-9_]+)\s*:\s*(?<msg>.*?)(?:\s*\[(?<proj>[^\]]+)\])?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+    private static readonly Regex MsBuildGeneralRegex = new(
+        @"^(?:\d+>\s*)?(?<tool>[A-Za-z0-9_.\-]+)\s*:\s*(?<severity>error|warning)\s+(?<code>[A-Za-z0-9_]+)\s*:\s*(?<msg>.*?)(?:\s*\[(?<proj>[^\]]+)\])?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+    private static List<VisualStudioDiagnostic> ParseBuildOutput(string text, ErrorFilters filters)
+    {
+        var result = new List<VisualStudioDiagnostic>();
+        var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            var match = MsvcOrClangRegex.Match(trimmed);
+            if (match.Success)
+            {
+                var sevRaw = match.Groups["severity"].Value.ToLowerInvariant();
+                var severity = sevRaw.Contains("error") ? "error" : "warning";
+                var diag = new VisualStudioDiagnostic
+                {
+                    Severity = severity,
+                    Code = match.Groups["code"].Value.Trim(),
+                    Message = match.Groups["msg"].Value.Trim(),
+                    FilePath = match.Groups["file"].Value.Trim(),
+                    Line = int.TryParse(match.Groups["line"].Value, out var l) ? l : null,
+                    Column = int.TryParse(match.Groups["col"].Value, out var c) ? c : null,
+                    Project = match.Groups["proj"].Success ? Path.GetFileNameWithoutExtension(match.Groups["proj"].Value.Trim()) : string.Empty,
+                    BuildTool = "MSBuild"
+                };
+
+                if (Matches(diag, filters))
+                {
+                    result.Add(diag);
+                }
+                continue;
+            }
+
+            var generalMatch = MsBuildGeneralRegex.Match(trimmed);
+            if (generalMatch.Success)
+            {
+                var sevRaw = generalMatch.Groups["severity"].Value.ToLowerInvariant();
+                var severity = sevRaw.Contains("error") ? "error" : "warning";
+                var diag = new VisualStudioDiagnostic
+                {
+                    Severity = severity,
+                    Code = generalMatch.Groups["code"].Value.Trim(),
+                    Message = generalMatch.Groups["msg"].Value.Trim(),
+                    FilePath = string.Empty,
+                    Line = null,
+                    Column = null,
+                    Project = generalMatch.Groups["proj"].Success ? Path.GetFileNameWithoutExtension(generalMatch.Groups["proj"].Value.Trim()) : string.Empty,
+                    BuildTool = generalMatch.Groups["tool"].Value.Trim()
+                };
+
+                if (Matches(diag, filters))
+                {
+                    result.Add(diag);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static bool TryReadDiagnostic(ITableEntry entry, out VisualStudioDiagnostic diagnostic)
+    {
+        diagnostic = new VisualStudioDiagnostic();
+        var severity = ReadSeverity(entry);
+        if (string.IsNullOrEmpty(severity))
+        {
+            return false;
+        }
+
+        diagnostic = new VisualStudioDiagnostic
+        {
+            Severity = severity,
+            Code = ReadString(entry, StandardTableKeyNames.ErrorCode),
+            Message = ReadString(entry, StandardTableKeyNames.FullText, StandardTableKeyNames.Text),
+            Project = ReadString(entry, StandardTableKeyNames.ProjectName),
+            FilePath = ReadString(entry, StandardTableKeyNames.DocumentName),
+            Line = ReadPosition(entry, StandardTableKeyNames.Line),
+            Column = ReadPosition(entry, StandardTableKeyNames.Column),
+            BuildTool = ReadString(entry, StandardTableKeyNames.BuildTool)
+        };
+        return true;
     }
 
     private static bool TryReadBuildDiagnostic(ITableEntry entry, out VisualStudioDiagnostic diagnostic)

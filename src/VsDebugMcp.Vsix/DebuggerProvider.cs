@@ -188,18 +188,76 @@ internal sealed class DebuggerProvider
 				{
 					var col = spec.Column ?? 1;
 					var condition = spec.Condition ?? string.Empty;
+					var condType = string.Equals(spec.ConditionType, "whenChanged", StringComparison.OrdinalIgnoreCase)
+						? dbgBreakpointConditionType.dbgBreakpointConditionTypeWhenChanged
+						: dbgBreakpointConditionType.dbgBreakpointConditionTypeWhenTrue;
+
+					var hitType = dbgHitCountType.dbgHitCountTypeNone;
+					var hitTarget = 0;
+					if (spec.HitCountTarget.HasValue && spec.HitCountTarget.Value > 0)
+					{
+						hitTarget = spec.HitCountTarget.Value;
+						hitType = string.Equals(spec.HitCountType, "greaterOrEqual", StringComparison.OrdinalIgnoreCase)
+							? dbgHitCountType.dbgHitCountTypeGreaterOrEqual
+							: string.Equals(spec.HitCountType, "multiple", StringComparison.OrdinalIgnoreCase)
+								? dbgHitCountType.dbgHitCountTypeMultiple
+								: dbgHitCountType.dbgHitCountTypeEqual;
+					}
+
 					var addedBreakpoints = debugger.Breakpoints.Add(
 						"",
 						fullPath,
 						spec.Line,
 						col,
-						condition);
+						condition,
+						condType,
+						"",
+						"",
+						1,
+						"",
+						hitTarget,
+						hitType);
 
 					if (addedBreakpoints != null)
 					{
 						foreach (Breakpoint bp in addedBreakpoints)
 						{
 							bp.Enabled = spec.Enabled;
+
+							string? resCondType = null;
+							try
+							{
+								resCondType = bp.ConditionType == dbgBreakpointConditionType.dbgBreakpointConditionTypeWhenChanged ? "whenChanged" : "whenTrue";
+							}
+							catch { }
+
+							int? resHitTarget = null;
+							try
+							{
+								resHitTarget = bp.HitCountTarget;
+							}
+							catch { }
+
+							string? resHitType = null;
+							try
+							{
+								resHitType = bp.HitCountType switch
+								{
+									dbgHitCountType.dbgHitCountTypeEqual => "equal",
+									dbgHitCountType.dbgHitCountTypeGreaterOrEqual => "greaterOrEqual",
+									dbgHitCountType.dbgHitCountTypeMultiple => "multiple",
+									_ => null
+								};
+							}
+							catch { }
+
+							int? currentHits = null;
+							try
+							{
+								currentHits = bp.CurrentHits;
+							}
+							catch { }
+
 							response.Breakpoints.Add(new BreakpointInfo
 							{
 								Id = $"{fullPath}:{bp.FileLine}",
@@ -208,7 +266,11 @@ internal sealed class DebuggerProvider
 								Column = bp.FileColumn,
 								Condition = string.IsNullOrEmpty(bp.Condition) ? null : bp.Condition,
 								Enabled = bp.Enabled,
-								IsBound = true
+								IsBound = true,
+								ConditionType = resCondType,
+								HitCountTarget = resHitTarget,
+								HitCountType = resHitType,
+								CurrentHitCount = currentHits
 							});
 						}
 					}
@@ -904,6 +966,159 @@ internal sealed class DebuggerProvider
 			TotalCount = threadList.Count,
 			Threads = threadList
 		};
+	}
+
+	public async Task<DebuggerGetExceptionInfoResponse> GetExceptionInfoAsync(
+		DebuggerGetExceptionInfoRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				"Cannot get exception info while debugger is not paused in break mode.");
+		}
+
+		var response = new DebuggerGetExceptionInfoResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			HasException = false
+		};
+
+		// 1. Try evaluating $exception (standard for CLR / .NET debugging)
+		try
+		{
+			var expr = debugger.GetExpression("$exception", UseAutoExpandRules: false, Timeout: 2000);
+			if (expr != null && expr.IsValidValue && !string.IsNullOrEmpty(expr.Value) &&
+				!string.Equals(expr.Value, "null", StringComparison.OrdinalIgnoreCase))
+			{
+				response.HasException = true;
+				response.ExceptionType = expr.Type;
+				response.RawDetails = expr.Value;
+
+				// Extract Message
+				try
+				{
+					var msgExpr = debugger.GetExpression("$exception.Message", UseAutoExpandRules: false, Timeout: 1000);
+					if (msgExpr != null && msgExpr.IsValidValue)
+					{
+						var val = msgExpr.Value;
+						if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
+						{
+							val = val.Substring(1, val.Length - 2);
+						}
+						response.Message = val;
+					}
+				}
+				catch { }
+
+				// Extract Full Type Name
+				try
+				{
+					var typeExpr = debugger.GetExpression("$exception.GetType().FullName", UseAutoExpandRules: false, Timeout: 1000);
+					if (typeExpr != null && typeExpr.IsValidValue)
+					{
+						var val = typeExpr.Value;
+						if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
+						{
+							val = val.Substring(1, val.Length - 2);
+						}
+						if (!string.IsNullOrWhiteSpace(val))
+						{
+							response.ExceptionType = val;
+						}
+					}
+				}
+				catch { }
+
+				// Extract HResult
+				try
+				{
+					var hrExpr = debugger.GetExpression("$exception.HResult", UseAutoExpandRules: false, Timeout: 1000);
+					if (hrExpr != null && hrExpr.IsValidValue)
+					{
+						if (int.TryParse(hrExpr.Value, out var hrInt))
+						{
+							response.HResult = string.Format("0x{0:X8}", hrInt);
+						}
+						else
+						{
+							response.HResult = hrExpr.Value;
+						}
+					}
+				}
+				catch { }
+
+				// Extract Source
+				try
+				{
+					var srcExpr = debugger.GetExpression("$exception.Source", UseAutoExpandRules: false, Timeout: 1000);
+					if (srcExpr != null && srcExpr.IsValidValue)
+					{
+						var val = srcExpr.Value;
+						if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
+						{
+							val = val.Substring(1, val.Length - 2);
+						}
+						response.Source = val;
+					}
+				}
+				catch { }
+
+				// Extract StackTrace
+				try
+				{
+					var stExpr = debugger.GetExpression("$exception.StackTrace", UseAutoExpandRules: false, Timeout: 1000);
+					if (stExpr != null && stExpr.IsValidValue)
+					{
+						var val = stExpr.Value;
+						if (val.StartsWith("\"") && val.EndsWith("\"") && val.Length >= 2)
+						{
+							val = System.Text.RegularExpressions.Regex.Unescape(val.Substring(1, val.Length - 2));
+						}
+						response.StackTrace = val;
+					}
+				}
+				catch { }
+
+				// Extract InnerException
+				try
+				{
+					var innerExpr = debugger.GetExpression("$exception.InnerException", UseAutoExpandRules: false, Timeout: 1000);
+					if (innerExpr != null && innerExpr.IsValidValue && !string.Equals(innerExpr.Value, "null", StringComparison.OrdinalIgnoreCase))
+					{
+						response.InnerException = $"{innerExpr.Type}: {innerExpr.Value}";
+					}
+				}
+				catch { }
+
+				return response;
+			}
+		}
+		catch { }
+
+		// 2. Fallback: Check if LastBreakReason was an exception (e.g. C++ or native unhandled)
+		if (debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionThrown ||
+			debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionNotHandled)
+		{
+			response.HasException = true;
+			response.Message = "Debugger paused due to an exception (native/unmanaged or CLR first-chance).";
+			try
+			{
+				var errExpr = debugger.GetExpression("$err,hr", UseAutoExpandRules: false, Timeout: 1000);
+				if (errExpr != null && errExpr.IsValidValue)
+				{
+					response.HResult = errExpr.Value;
+					response.RawDetails = errExpr.Value;
+				}
+			}
+			catch { }
+		}
+
+		return response;
 	}
 
 	internal async Task<DebuggerExecutionResponse> CaptureCurrentStateAsync(

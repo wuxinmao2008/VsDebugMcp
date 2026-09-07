@@ -594,6 +594,23 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerGetExceptionInfo:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetExceptionInfoRequest()
+                        : BridgeJson.Deserialize<DebuggerGetExceptionInfoRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetExceptionInfoAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get exception info request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -928,6 +945,12 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_get_threads",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_exception_info",
                 Version = "0.1",
                 IsStub = false
             }

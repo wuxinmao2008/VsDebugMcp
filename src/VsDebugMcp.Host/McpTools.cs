@@ -189,6 +189,9 @@ public sealed class McpTools
         [Description("Line number to set the breakpoint at.")] int line,
         [Description("Optional column number. Defaults to 1.")] int? column = null,
         [Description("Optional conditional expression for the breakpoint.")] string? condition = null,
+        [Description("Optional condition evaluation mode: 'whenTrue' (default) or 'whenChanged'.")] string? conditionType = null,
+        [Description("Optional hit count target integer (e.g. 5).")] int? hitCountTarget = null,
+        [Description("Optional hit count condition type: 'equal' (default), 'greaterOrEqual', or 'multiple'.")] string? hitCountType = null,
         [Description("Optional flag whether the breakpoint is enabled. Defaults to true.")] bool? enabled = null,
         [Description("Optional flag whether to clear existing breakpoints in this file first. Defaults to false.")] bool? clearExisting = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
@@ -202,6 +205,9 @@ public sealed class McpTools
                     Line = line,
                     Column = column,
                     Condition = condition,
+                    ConditionType = conditionType,
+                    HitCountTarget = hitCountTarget,
+                    HitCountType = hitCountType,
                     Enabled = enabled ?? true
                 }
             },
@@ -496,6 +502,20 @@ public sealed class McpTools
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerGetThreadsAsync(
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_exception_info",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns details of the active exception (type, message, HResult, stack trace, inner exception) when the debugger is paused in break mode.")]
+    public Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetExceptionInfoAsync(
             vsInstanceId,
             cancellationToken));
 

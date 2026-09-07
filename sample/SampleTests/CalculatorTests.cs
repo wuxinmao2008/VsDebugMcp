@@ -25,4 +25,11 @@ public class CalculatorTests
         var result = Calculator.Add(-5, -15);
         Assert.Equal(-20, result);
     }
+
+    [Fact]
+    public void Divide_ByZero_ThrowsException()
+    {
+        var result = Calculator.Divide(10, 0);
+        Assert.Equal(0, result);
+    }
 }

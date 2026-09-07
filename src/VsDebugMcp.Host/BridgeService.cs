@@ -161,6 +161,10 @@ public interface IBridgeService
     Task<DebuggerGetThreadsResponse> DebuggerGetThreadsAsync(
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -580,6 +584,16 @@ public sealed class BridgeService : IBridgeService
             _registry.Resolve(vsInstanceId),
             client => client.DebuggerGetThreadsAsync(
                 new DebuggerGetThreadsRequest(),
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetExceptionInfoAsync(
+                new DebuggerGetExceptionInfoRequest(),
                 cancellationToken),
             cancellationToken);
 

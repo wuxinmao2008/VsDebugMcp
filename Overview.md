@@ -32,7 +32,7 @@
 
 ## MCP 工具列表
 
-插件向 AI Agent 暴露以下标准 MCP 工具（共 30 个）：
+插件向 AI Agent 暴露以下标准 MCP 工具（共 31 个）：
 
 | 分类 | 工具名称 | 功能描述 |
 |---|---|---|
@@ -46,7 +46,7 @@
 | | `vs_get_build_status` | 根据构建任务句柄查询当前构建状态（运行中、成功、失败、已取消） |
 | | `vs_cancel_build` | 取消正在执行的构建任务 |
 | | `vs_get_output_window_logs` | 获取 Visual Studio “输出”窗口指定窗格（如生成日志）的文本 |
-| | `vs_get_errors` | 查询 Visual Studio 错误列表中由构建产生的诊断信息 |
+| | `vs_get_errors` | 查询 Visual Studio 错误列表诊断，支持双轨制原生表格与 Build Output 正则保底 |
 | **调试启动与控制** | `vs_debugger_start` | 程序化启动调试（F5），支持自动着陆探测（`waitForBreak`）与顶层栈帧即时回显 |
 | | `vs_debugger_step_over` | 单步步过（Step Over）当前语句 |
 | | `vs_debugger_step_into` | 单步步入（Step Into）目标函数内部 |
@@ -55,10 +55,11 @@
 | | `vs_debugger_pause` | 暂停（Pause/Break）当前执行中的目标进程 |
 | | `vs_debugger_stop` | 停止调试（Stop Debugging），平稳返回设计模式 |
 | **调试诊断与求值** | `vs_debugger_get_info` | 查询调试器运行模式（design/run/break）、活动 PID/TID 及断点数 |
-| | `vs_debugger_set_breakpoints` | 在指定源码文件与行号设置、切换或清空断点 |
+| | `vs_debugger_set_breakpoints` | 在源码设置断点，支持条件断点（whenTrue/whenChanged）与命中计数过滤 |
 | | `vs_debugger_get_threads` | 提取当前调试目标进程的多线程快照（包含 TID、线程名、存活状态与当前线程指示） |
 | | `vs_debugger_get_call_stack` | 在断点停靠时捕获当前活动线程的调用栈帧列表 |
 | | `vs_debugger_get_locals` | 自动识别当前栈帧的全部入参（Arguments）与局部变量（Locals） |
+| | `vs_debugger_get_exception_info` | 在断点或异常中断停靠时，深度提取当前异常现场（类型、Message、HResult、堆栈及内部异常） |
 | | `vs_debugger_evaluate_expr` | 对单项表达式在指定栈帧执行安全求值（支持超时与副作用控制） |
 | | `vs_debugger_evaluate_expressions` | 单次 RPC 批量求值多个表达式，支持单项错误隔离 |
 | **测试资源管理器** | `vs_get_tests` | 发现解决方案中的测试用例，支持按名称/类名/命名空间过滤 |
@@ -92,14 +93,15 @@
 
 ## 当前状态与后续规划
 
-- **当前支持（v0.1.9.0）**：
-  - 工程结构与文件树发现、IDE 构建控制与 Build Output 原始日志提取；
-  - 调试器全链路闭环：设计模式下自动 F5 启动、断点智能着陆、多线程状态巡检、局部变量全景探测、单步步过/步入/步出、批量表达式求值、会话终止与并发模式守卫；
+- **当前支持（v0.1.10.0）**：
+  - 工程结构与文件树发现、IDE 构建控制、Build Output 原始日志提取与双轨保底结构化错误诊断（`vs_get_errors` 消除 `diagnostics_unavailable`）；
+  - 调试器全链路闭环：设计模式下自动 F5 启动、高级条件与命中计数断点控制、断点智能着陆、多线程状态巡检、局部变量全景探测、单步步过/步入/步出、批量表达式求值、会话终止与并发模式守卫；
+  - 现场异常深度诊断（`vs_debugger_get_exception_info`）：精准提取中断现场 CLR/SEH 异常类型、错误消息、十六进制 HResult 与源码栈帧；
   - 测试驱动联动调试与资源管理器集成：解决方案单测自动发现、全量/单用例异步运行、单测精准下断联动调试、实时状态/结果轮询、测试中断取消与单实例互斥守卫；
-  - 全套 74/74 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
+  - 全套 78/78 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
 - **后续规划**：
-  - 错误列表（Error List）公开数据源原生 COM 深化；
-  - 调试器进程附加（Attach to Process）与高级条件/计数断点。
+  - 调试器进程附加（Attach to Process）与活动解决方案配置切换（Active Solution Configuration）；
+  - 运行时热重载（Hot Reload）与编辑并继续（Edit & Continue）探索。
 - **安全边界**：服务仅监听本机回环地址（`127.0.0.1:43260`），不开放远程网络访问，不执行非受控的外部系统命令。
 
 ---
@@ -142,7 +144,7 @@ The extension exposes the following standard MCP tools (30 tools total):
 | | `vs_get_build_status` | Poll asynchronous build progress (running, succeeded, failed, cancelled) |
 | | `vs_cancel_build` | Cancel an active build task |
 | | `vs_get_output_window_logs` | Retrieve text from the Output Window (e.g. Build pane) |
-| | `vs_get_errors` | Retrieve diagnostics from the Visual Studio Error List |
+| | `vs_get_errors` | Retrieve diagnostics from the Visual Studio Error List with dual-track Build Output fallback |
 | **Debugger Launch & Stepping** | `vs_debugger_start` | Programmatically start debugging (F5) with smart break landing and top frame return |
 | | `vs_debugger_step_over` | Step over the current statement in break mode |
 | | `vs_debugger_step_into` | Step into target functions in break mode |
@@ -151,10 +153,11 @@ The extension exposes the following standard MCP tools (30 tools total):
 | | `vs_debugger_pause` | Pause/break running debuggee process |
 | | `vs_debugger_stop` | Stop debugging and return to design mode |
 | **Debugger Diagnostics & Eval** | `vs_debugger_get_info` | Query debugger mode (design/run/break), active PID/TID, and breakpoints |
-| | `vs_debugger_set_breakpoints` | Set, toggle, or clear breakpoints in source files |
+| | `vs_debugger_set_breakpoints` | Set source breakpoints with conditional (`whenTrue`/`whenChanged`) and hit count filtering |
 | | `vs_debugger_get_threads` | Retrieve snapshot of all threads in the debug target (TID, name, alive, current marker) |
 | | `vs_debugger_get_call_stack` | Capture call stack frames for the active thread |
 | | `vs_debugger_get_locals` | Automatically inspect arguments and local variables on current stack frame |
+| | `vs_debugger_get_exception_info` | Inspect deep exception state on break (CLR type, message, HResult, and stack trace) |
 | | `vs_debugger_evaluate_expr` | Safely evaluate an expression with timeout and side-effect control |
 | | `vs_debugger_evaluate_expressions` | Single-RPC batch expression evaluation with per-item error isolation |
 | **Test Explorer & Test-Driven Debugging** | `vs_get_tests` | Discover solution tests with optional display name / FQN filtering |
@@ -188,12 +191,13 @@ Your AI agent will automatically detect and start using Visual Studio tools.
 
 ## Current Status & Roadmap
 
-- **Supported Now (v0.1.9.0)**:
-  - Solution and project file discovery, build control and Build Output retrieval;
-  - Full debugger automation loop: programmatic F5 start, smart break detection, multi-thread snapshot diagnostics, local variables inspection, stepping control, batch expression evaluation, session termination, and concurrency mode guards;
+- **Supported Now (v0.1.10.0)**:
+  - Solution and project file discovery, build control, Build Output retrieval, and dual-track resilient error diagnostics (`vs_get_errors` eliminates `diagnostics_unavailable`);
+  - Full debugger automation loop: programmatic F5 start, advanced conditional/hit-count breakpoints, smart break detection, multi-thread snapshot diagnostics, local variables inspection, stepping control, batch expression evaluation, session termination, and concurrency mode guards;
+  - Deep exception diagnostics (`vs_debugger_get_exception_info`): accurately extracts CLR/SEH exception types, messages, hex HResult, and source-level stack traces on break mode;
   - Test-Driven Debugging & Test Explorer: native solution test discovery, asynchronous test runs (all or filtered by IDs), precision single-test debug landing, real-time progress and duration metrics, cancellation, and concurrency mutex;
-  - Complete 74/74 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
+  - Complete 78/78 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
 - **Roadmap**:
-  - Error List COM provider deepening;
-  - Attach to process and advanced conditional/hit-count breakpoints.
+  - Attach to process and active solution configuration switching;
+  - Hot reload and Edit & Continue exploration.
 - **Security**: Bound strictly to local loopback (`127.0.0.1:43260`), with no remote access and no arbitrary process execution.

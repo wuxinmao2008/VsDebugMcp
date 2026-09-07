@@ -17,6 +17,9 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerGetInfoAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "column")]
     [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "condition")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "conditionType")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "hitCountTarget")]
+    [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "hitCountType")]
     [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "enabled")]
     [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "clearExisting")]
     [InlineData(nameof(McpTools.DebuggerSetBreakpointsAsync), "vsInstanceId")]
@@ -62,6 +65,7 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebugTestByIdAsync), "timeoutMs")]
     [InlineData(nameof(McpTools.DebugTestByIdAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerGetThreadsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetExceptionInfoAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);

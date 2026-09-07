@@ -245,6 +245,14 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
+        DebuggerGetExceptionInfoRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetExceptionInfoRequest, DebuggerGetExceptionInfoResponse>(
+            BridgeMethods.DebuggerGetExceptionInfo,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

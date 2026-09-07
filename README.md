@@ -28,20 +28,22 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_run_build` — Asynchronous IDE build execution
 - `vs_get_build_status` — Build task state polling
 - `vs_cancel_build` — Active build cancellation
-- `vs_get_errors` — Error list diagnostics extraction
+- `vs_get_errors` — Error list diagnostics extraction with resilient dual-track Build Output fallback
 - `vs_get_output_window_logs` — Raw Build Output and IDE pane logs
 
 ### Debugger Launch, Control & Diagnostics
 - `vs_debugger_start` — Programmatic F5 launch with smart landing break detection
 - `vs_debugger_get_info` — Debugger mode, active process, thread, and break reason
-- `vs_debugger_set_breakpoints` — Source line breakpoint management
+- `vs_debugger_set_breakpoints` — Source line breakpoint management with conditional (`whenTrue`/`whenChanged`) and hit count filtering
 - `vs_debugger_get_threads` — Multi-thread diagnostic snapshot inspection
 - `vs_debugger_get_call_stack` — Call stack capture upon pause/breakpoint
 - `vs_debugger_get_locals` — Arguments and local variables inspection
+- `vs_debugger_get_exception_info` — Deep exception inspection on break mode (CLR type, message, HResult, and stack trace)
 - `vs_debugger_evaluate_expr` — Single expression evaluation with timeout protection
 - `vs_debugger_evaluate_expressions` — Single-RPC batch expressions evaluation
 - `vs_debugger_step_over` / `step_into` / `step_out` — Stepping execution control
 - `vs_debugger_continue` / `pause` / `stop` — Session continuation, pause, and termination
+
 
 ### Test Explorer & Test-Driven Debugging (Phase 3 & 3A)
 - `vs_get_tests` — Solution test discovery with optional filters

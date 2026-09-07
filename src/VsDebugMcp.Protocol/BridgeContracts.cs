@@ -268,6 +268,15 @@ public sealed class BreakpointSpec
 
     [DataMember(Name = "enabled", Order = 4)]
     public bool Enabled { get; set; } = true;
+
+    [DataMember(Name = "conditionType", Order = 5, EmitDefaultValue = false)]
+    public string? ConditionType { get; set; }
+
+    [DataMember(Name = "hitCountTarget", Order = 6, EmitDefaultValue = false)]
+    public int? HitCountTarget { get; set; }
+
+    [DataMember(Name = "hitCountType", Order = 7, EmitDefaultValue = false)]
+    public string? HitCountType { get; set; }
 }
 
 [DataContract]
@@ -293,6 +302,18 @@ public sealed class BreakpointInfo
 
     [DataMember(Name = "isBound", Order = 7)]
     public bool IsBound { get; set; }
+
+    [DataMember(Name = "conditionType", Order = 8, EmitDefaultValue = false)]
+    public string? ConditionType { get; set; }
+
+    [DataMember(Name = "hitCountTarget", Order = 9, EmitDefaultValue = false)]
+    public int? HitCountTarget { get; set; }
+
+    [DataMember(Name = "hitCountType", Order = 10, EmitDefaultValue = false)]
+    public string? HitCountType { get; set; }
+
+    [DataMember(Name = "currentHitCount", Order = 11, EmitDefaultValue = false)]
+    public int? CurrentHitCount { get; set; }
 }
 
 [DataContract]
@@ -1137,4 +1158,42 @@ public sealed class DebuggerGetThreadsResponse
 
     [DataMember(Name = "threads", Order = 4)]
     public List<ThreadInfo> Threads { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetExceptionInfoRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetExceptionInfoResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "hasException", Order = 2)]
+    public bool HasException { get; set; }
+
+    [DataMember(Name = "exceptionType", Order = 3, EmitDefaultValue = false)]
+    public string? ExceptionType { get; set; }
+
+    [DataMember(Name = "message", Order = 4, EmitDefaultValue = false)]
+    public string? Message { get; set; }
+
+    [DataMember(Name = "hresult", Order = 5, EmitDefaultValue = false)]
+    public string? HResult { get; set; }
+
+    [DataMember(Name = "source", Order = 6, EmitDefaultValue = false)]
+    public string? Source { get; set; }
+
+    [DataMember(Name = "stackTrace", Order = 7, EmitDefaultValue = false)]
+    public string? StackTrace { get; set; }
+
+    [DataMember(Name = "innerException", Order = 8, EmitDefaultValue = false)]
+    public string? InnerException { get; set; }
+
+    [DataMember(Name = "rawDetails", Order = 9, EmitDefaultValue = false)]
+    public string? RawDetails { get; set; }
 }

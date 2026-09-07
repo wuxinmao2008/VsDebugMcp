@@ -11,9 +11,27 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积 ~4 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-05 更新）
+## 实施进度（2026-09-07 更新）
 
-### Phase 3（方向 B / 路线 2）：测试资源管理器集成（Test Explorer / VSTest）开发与闭环验证 (v0.1.8.0)
+### Phase 3B：核心诊断与高级调试闭环已完成开发并通过全链路在线实测验收 (v0.1.10.0)
+
+- **`vs_get_errors` 深度攻坚与双轨保底**：
+  - 重构错误发现机制：第一轨直接查询活动 ErrorList 的 `TableControl.Entries`，规避底层事件订阅静默与超时；第二轨通过 `OutputWindowProvider.ReadPaneOutput` 自动提取 Build 窗格原始日志，内嵌 MSVC / MSBuild 双正则表达式语法分析器（`MsvcOrClangRegex` 与 `MsBuildGeneralRegex`），将编译报错与警告即时结构化转译为 `VisualStudioDiagnostic` 项；
+  - 彻底终结 `diagnostics_unavailable` 报错，确保外部 Agent 编译失败时总能稳定获得行号、列号、错误码与描述。
+- **`vs_debugger_get_exception_info` 异常现场深度诊断**：
+  - 新增调试中断期异常信息提取工具：通过在 UI 线程求值 `$exception` 伪变量，提取 `exceptionType`（全限定 CLR 类名）、`message`、十六进制 `hresult`、`source` 模块名、原始 `stackTrace`、`innerException` 与 `rawDetails`；
+  - 严格模式防卫：非中断模式拦截返回 `debugger_not_paused`；
+  - 包含非托管/C++ SEH 异常的兜底分析。
+- **`vs_debugger_set_breakpoints` 高级断点控制增强**：
+  - 扩展输入参数：支持条件评估模式 `conditionType`（`whenTrue` / `whenChanged`）、目标命中次数 `hitCountTarget`（int）与命中条件模式 `hitCountType`（`equal` / `greaterOrEqual` / `multiple`）；
+  - 将原生设置同步至 `EnvDTE.Breakpoint` 并实时回显 `currentHitCount`。
+- **自动化测试与全链路在线实测验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (10/10 PASS) + `VsDebugMcp.Host.Tests` (68/68 PASS)，全套 78 个单元测试 100% 通过；
+  - 在 VS 18.x 实验实例通过 `scripts/test_acceptance_phase3b.py` 验证通过健康检查、双轨错误提取、条件/命中计数断点设置、单测除零异常命中停靠、异常现场栈帧提取（`DivideByZeroException`）以及调试停止恢复完整闭环；
+  - Bridge capability 注册总数升至 **28 个**（MCP 工具总数 30 个）。
+
+
+### Phase 3A：测试资源管理器与测试联动调试 (v0.1.9.0)
 
 - **Test Explorer / VSTest 混合链路集成**：
   - 基于 MEF `ITestsService`（反射 Invoker 封装 internal 访问）与 `IOperationState` 事件监听，实现轻量免引用的测试发现与执行；
@@ -192,15 +210,16 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 25. `vs_cancel_test_run`
 26. `vs_debug_test_by_id`
 27. `vs_debugger_get_threads`
+28. `vs_debugger_get_exception_info`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
 ### 自动化和部署状态
 
 - Protocol tests 最近一次完整运行：`10/10` PASS。
-- Host tests 最近一次完整运行：`64/64` PASS。
-- 全套测试通过率：`74/74` PASS (100%)。
-- 当前扩展与 Host 版本号：`0.1.9.0`。
+- Host tests 最近一次完整运行：`68/68` PASS。
+- 全套测试通过率：`78/78` PASS (100%)。
+- 当前扩展与 Host 版本号：`0.1.10.0`。
 - VSIX 已使用 VS 18 MSBuild 成功编译与打包。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；

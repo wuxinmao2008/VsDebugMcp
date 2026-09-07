@@ -38,6 +38,7 @@ public static class BridgeMethods
 	public const string DebuggerEvaluateExpressions = "debuggerEvaluateExpressions";
 	public const string DebuggerGetLocals = "debuggerGetLocals";
 	public const string DebuggerGetThreads = "debuggerGetThreads";
+	public const string DebuggerGetExceptionInfo = "debuggerGetExceptionInfo";
 	public const string TestGet = "testGet";
 	public const string TestRun = "testRun";
 	public const string TestDebug = "testDebug";

@@ -420,5 +420,62 @@ public sealed class InstanceProtocolTests
         Assert.True(threadsRespCopy.Threads[0].IsCurrent);
         Assert.False(threadsRespCopy.Threads[1].IsCurrent);
         Assert.Equal("Main Thread", threadsRespCopy.Threads[0].Name);
+
+        // Advanced Breakpoint contracts serialization
+        var bpSpec = new BreakpointSpec
+        {
+            Line = 42,
+            Column = 10,
+            Condition = "x > 100",
+            ConditionType = "whenTrue",
+            HitCountTarget = 5,
+            HitCountType = "greaterOrEqual",
+            Enabled = true
+        };
+        var bpSpecCopy = BridgeJson.Deserialize<BreakpointSpec>(BridgeJson.Serialize(bpSpec));
+        Assert.Equal("whenTrue", bpSpecCopy.ConditionType);
+        Assert.Equal(5, bpSpecCopy.HitCountTarget);
+        Assert.Equal("greaterOrEqual", bpSpecCopy.HitCountType);
+
+        var bpInfo = new BreakpointInfo
+        {
+            Id = "test.cs:42",
+            FilePath = "test.cs",
+            Line = 42,
+            Condition = "x > 100",
+            ConditionType = "whenTrue",
+            HitCountTarget = 5,
+            HitCountType = "greaterOrEqual",
+            CurrentHitCount = 3,
+            IsBound = true
+        };
+        var bpInfoCopy = BridgeJson.Deserialize<BreakpointInfo>(BridgeJson.Serialize(bpInfo));
+        Assert.Equal(3, bpInfoCopy.CurrentHitCount);
+        Assert.Equal("whenTrue", bpInfoCopy.ConditionType);
+        Assert.Equal(5, bpInfoCopy.HitCountTarget);
+
+        // Exception Info contracts serialization
+        var exReq = new DebuggerGetExceptionInfoRequest { VsInstanceId = "vs-1" };
+        var exReqCopy = BridgeJson.Deserialize<DebuggerGetExceptionInfoRequest>(BridgeJson.Serialize(exReq));
+        Assert.Equal("vs-1", exReqCopy.VsInstanceId);
+
+        var exResp = new DebuggerGetExceptionInfoResponse
+        {
+            VsInstanceId = "vs-1",
+            HasException = true,
+            ExceptionType = "System.DivideByZeroException",
+            Message = "Attempted to divide by zero.",
+            HResult = "0x80020012",
+            Source = "SampleApp",
+            StackTrace = "   at Calculator.Divide(Int32 a, Int32 b) in Calculator.cs:line 20",
+            InnerException = null,
+            RawDetails = "System.DivideByZeroException: Attempted to divide by zero."
+        };
+        var exRespCopy = BridgeJson.Deserialize<DebuggerGetExceptionInfoResponse>(BridgeJson.Serialize(exResp));
+        Assert.True(exRespCopy.HasException);
+        Assert.Equal("System.DivideByZeroException", exRespCopy.ExceptionType);
+        Assert.Equal("0x80020012", exRespCopy.HResult);
+        Assert.Equal("Attempted to divide by zero.", exRespCopy.Message);
+        Assert.Contains("Calculator.Divide", exRespCopy.StackTrace);
     }
 }

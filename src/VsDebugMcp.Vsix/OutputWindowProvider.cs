@@ -69,7 +69,7 @@ internal sealed class OutputWindowProvider
         }
     }
 
-    private static string ReadPaneOutput(DTE2 dte, string source)
+    internal static string ReadPaneOutput(DTE2 dte, string source)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         OutputWindowPane? matchedPane = null;

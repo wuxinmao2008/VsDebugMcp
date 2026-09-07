@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Configuration = "Debug"
 )
 
@@ -20,7 +20,10 @@ if ($hosts) {
 }
 
 # 3. 确认已编译的 VSIX 包
-$vsixPath = Join-Path $PSScriptRoot "..\src\VsDebugMcp.Vsix\bin\$Configuration\vs2026_5\VsDebugMcp.Vsix.vsix"
+$vsixPath = Join-Path $PSScriptRoot "..\src\VsDebugMcp.Vsix\bin\x64\$Configuration\vs2026_5\VsDebugMcp.Vsix.vsix"
+if (-not (Test-Path $vsixPath)) {
+    $vsixPath = Join-Path $PSScriptRoot "..\src\VsDebugMcp.Vsix\bin\$Configuration\vs2026_5\VsDebugMcp.Vsix.vsix"
+}
 if (-not (Test-Path $vsixPath)) {
     Write-Error "未找到已生成的 VSIX 包: $vsixPath。请先构建项目！"
     exit 1
