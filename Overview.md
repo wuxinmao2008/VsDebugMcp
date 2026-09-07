@@ -32,7 +32,7 @@
 
 ## MCP 工具列表
 
-插件向 AI Agent 暴露以下标准 MCP 工具（共 28 个）：
+插件向 AI Agent 暴露以下标准 MCP 工具（共 30 个）：
 
 | 分类 | 工具名称 | 功能描述 |
 |---|---|---|
@@ -56,6 +56,7 @@
 | | `vs_debugger_stop` | 停止调试（Stop Debugging），平稳返回设计模式 |
 | **调试诊断与求值** | `vs_debugger_get_info` | 查询调试器运行模式（design/run/break）、活动 PID/TID 及断点数 |
 | | `vs_debugger_set_breakpoints` | 在指定源码文件与行号设置、切换或清空断点 |
+| | `vs_debugger_get_threads` | 提取当前调试目标进程的多线程快照（包含 TID、线程名、存活状态与当前线程指示） |
 | | `vs_debugger_get_call_stack` | 在断点停靠时捕获当前活动线程的调用栈帧列表 |
 | | `vs_debugger_get_locals` | 自动识别当前栈帧的全部入参（Arguments）与局部变量（Locals） |
 | | `vs_debugger_evaluate_expr` | 对单项表达式在指定栈帧执行安全求值（支持超时与副作用控制） |
@@ -64,6 +65,7 @@
 | | `vs_run_tests` | 发起测试执行（支持全量运行或指定测试 ID 过滤运行） |
 | | `vs_get_test_run_status` | 轮询测试运行状态、通过/失败统计、耗时指标及单测结果列表 |
 | | `vs_cancel_test_run` | 取消当前正在执行中的测试运行任务 |
+| | `vs_debug_test_by_id` | 指定测试用例 ID 发起调试运行，支持自动着陆探测（`waitForBreak`）与栈顶帧即时返回 |
 
 ## 快速上手
 
@@ -90,11 +92,11 @@
 
 ## 当前状态与后续规划
 
-- **当前支持（v0.1.8.0）**：
+- **当前支持（v0.1.9.0）**：
   - 工程结构与文件树发现、IDE 构建控制与 Build Output 原始日志提取；
-  - 调试器全链路闭环：设计模式下自动 F5 启动、断点智能着陆、局部变量全景探测、单步步过/步入/步出、批量表达式求值、会话终止与并发模式守卫；
-  - 测试资源管理器集成：解决方案单测自动发现、全量/单用例异步运行、实时状态/结果轮询、测试中断取消与单实例互斥守卫；
-  - 全套 68/68 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
+  - 调试器全链路闭环：设计模式下自动 F5 启动、断点智能着陆、多线程状态巡检、局部变量全景探测、单步步过/步入/步出、批量表达式求值、会话终止与并发模式守卫；
+  - 测试驱动联动调试与资源管理器集成：解决方案单测自动发现、全量/单用例异步运行、单测精准下断联动调试、实时状态/结果轮询、测试中断取消与单实例互斥守卫；
+  - 全套 74/74 自动化单元测试覆盖，经由 Visual Studio 2026 实验实例全链路在线实测验收。
 - **后续规划**：
   - 错误列表（Error List）公开数据源原生 COM 深化；
   - 调试器进程附加（Attach to Process）与高级条件/计数断点。
@@ -126,7 +128,7 @@ The screenshot below demonstrates an AI agent (e.g., VS Code Agent) automaticall
 
 ## Available MCP Tools
 
-The extension exposes the following standard MCP tools (28 tools total):
+The extension exposes the following standard MCP tools (30 tools total):
 
 | Category | Tool Name | Description |
 |---|---|---|
@@ -150,14 +152,16 @@ The extension exposes the following standard MCP tools (28 tools total):
 | | `vs_debugger_stop` | Stop debugging and return to design mode |
 | **Debugger Diagnostics & Eval** | `vs_debugger_get_info` | Query debugger mode (design/run/break), active PID/TID, and breakpoints |
 | | `vs_debugger_set_breakpoints` | Set, toggle, or clear breakpoints in source files |
+| | `vs_debugger_get_threads` | Retrieve snapshot of all threads in the debug target (TID, name, alive, current marker) |
 | | `vs_debugger_get_call_stack` | Capture call stack frames for the active thread |
 | | `vs_debugger_get_locals` | Automatically inspect arguments and local variables on current stack frame |
 | | `vs_debugger_evaluate_expr` | Safely evaluate an expression with timeout and side-effect control |
 | | `vs_debugger_evaluate_expressions` | Single-RPC batch expression evaluation with per-item error isolation |
-| **Test Explorer & Execution** | `vs_get_tests` | Discover solution tests with optional display name / FQN filtering |
+| **Test Explorer & Test-Driven Debugging** | `vs_get_tests` | Discover solution tests with optional display name / FQN filtering |
 | | `vs_run_tests` | Trigger asynchronous test execution (full suite or specified `testIds`) |
 | | `vs_get_test_run_status` | Poll test execution progress, pass/fail metrics, duration, and test results |
 | | `vs_cancel_test_run` | Cancel an active test run task via Test Explorer |
+| | `vs_debug_test_by_id` | Debug specific test case by ID with smart breakpoint landing and immediate top frame return |
 
 ## Quick Start
 
@@ -184,11 +188,11 @@ Your AI agent will automatically detect and start using Visual Studio tools.
 
 ## Current Status & Roadmap
 
-- **Supported Now (v0.1.8.0)**:
+- **Supported Now (v0.1.9.0)**:
   - Solution and project file discovery, build control and Build Output retrieval;
-  - Full debugger automation loop: programmatic F5 start, smart break detection, local variables inspection, stepping control, batch expression evaluation, session termination, and concurrency mode guards;
-  - Test Explorer integration: native solution test discovery, asynchronous test runs (all or filtered by IDs), real-time progress and duration metrics, cancellation, and concurrency mutex;
-  - Complete 68/68 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
+  - Full debugger automation loop: programmatic F5 start, smart break detection, multi-thread snapshot diagnostics, local variables inspection, stepping control, batch expression evaluation, session termination, and concurrency mode guards;
+  - Test-Driven Debugging & Test Explorer: native solution test discovery, asynchronous test runs (all or filtered by IDs), precision single-test debug landing, real-time progress and duration metrics, cancellation, and concurrency mutex;
+  - Complete 74/74 automated unit tests pass rate, live accepted against Visual Studio 2026 Experimental Instance.
 - **Roadmap**:
   - Error List COM provider deepening;
   - Attach to process and advanced conditional/hit-count breakpoints.

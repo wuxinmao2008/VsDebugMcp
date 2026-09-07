@@ -1,4 +1,4 @@
-﻿using VsDebugMcp.Host;
+using VsDebugMcp.Host;
 using VsDebugMcp.Protocol;
 using Xunit;
 
@@ -9,6 +9,7 @@ public sealed class BridgeServiceExceptionTests
     [Theory]
     [InlineData(BridgeErrorCodes.TestRunBusy, false)]
     [InlineData(BridgeErrorCodes.TestRunNotFound, false)]
+    [InlineData(BridgeErrorCodes.TestNotFound, false)]
     [InlineData(BridgeErrorCodes.TestWindowUnavailable, true)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {

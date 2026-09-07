@@ -150,6 +150,17 @@ public interface IBridgeService
         string? vsInstanceId,
         string? testRunId,
         CancellationToken cancellationToken);
+
+    Task<DebugTestResponse> DebugTestAsync(
+        string? vsInstanceId,
+        string testId,
+        bool? waitForBreak,
+        int? timeoutMs,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetThreadsResponse> DebuggerGetThreadsAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -544,6 +555,34 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebugTestResponse> DebugTestAsync(
+        string? vsInstanceId,
+        string testId,
+        bool? waitForBreak,
+        int? timeoutMs,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebugTestAsync(
+                new DebugTestRequest
+                {
+                    TestId = testId,
+                    WaitForBreak = waitForBreak,
+                    TimeoutMs = timeoutMs
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetThreadsResponse> DebuggerGetThreadsAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetThreadsAsync(
+                new DebuggerGetThreadsRequest(),
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -707,6 +746,11 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.TestRunNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.TestNotFound => new(
                 exception.Code,
                 exception.Message,
                 false,

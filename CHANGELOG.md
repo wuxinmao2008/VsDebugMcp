@@ -5,6 +5,31 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9.0] - 2026-09-07
+
+### Added
+- **Test-Driven Debugging & Thread Diagnostics (Phase 3A)**: Added integrated test debugging and multi-thread inspection:
+  - `vs_debug_test_by_id`: Launches debugging for a specific unit test via `OperationBroker.DebugTestsByFilterAsync`, with smart breakpoint landing probe (`waitForBreak`). Automatically captures and returns the top stack frame and break reason upon pausing at a breakpoint or unhandled exception.
+  - `vs_debugger_get_threads`: Inspects all threads in the active debugging target process via `EnvDTE.Debugger` (`CurrentProgram.Threads` / `CurrentProcess.Threads`), reporting Thread ID, name, alive status, suspend count, priority, current thread marker (`isCurrent`), and top frame.
+  - Added mode guard `debugger_already_running` when attempting to debug a test while an active debug session exists.
+  - Added test run guard `test_run_busy` and safe fallback `test_not_found`.
+
+### Fixed
+- Fixed blocking `OperationBroker.DebugTestsByFilterAsync` call: Invoking and directly awaiting the task blocked until the entire debugging session terminated; refactored to launch asynchronously via `JoinableTaskFactory.RunAsync` and perform non-blocking 100ms status polling to immediately respond when `debugger.CurrentMode == dbgBreakMode`.
+- Fixed `EnvDTE.Process.Threads` missing property runtime exception by traversing `debugger.CurrentProgram.Threads` first, falling back to `debugger.CurrentProcess.Programs[].Threads`.
+- Fixed .NET Framework 4.7.2 compilation compatibility by providing self-contained clamp utility functions.
+
+### Verified
+- Automated unit tests: 74/74 PASS (100% across Protocol and Host test suites).
+- Full end-to-end online acceptance in Visual Studio 2026 (VS 18.x) Experimental Instance against `sample/SampleSolution.slnx`:
+  - `vs_health` & `vs_capabilities`: confirmed all 27 capabilities discovered with `vs_debug_test_by_id` and `vs_debugger_get_threads` active (`isStub=false`).
+  - `vs_get_tests`: discovered 3 tests, extracted target test `SampleTests.CalculatorTests.Multiply_TwoNumbers_ReturnsProduct`.
+  - `vs_debugger_set_breakpoints`: set breakpoints in business service (`Calculator.cs:6`) and test code (`CalculatorTests.cs:18`).
+  - `vs_debug_test_by_id` (`waitForBreak=True`): launched test debugging, hit breakpoint within ~1.8s, returning `testRunId`, `debuggerMode: "break"`, `lastBreakReason: "breakpoint"`, and top frame.
+  - `vs_debugger_get_threads`: inspected all 32 active threads, correctly identified current thread (TID: 9608).
+  - `vs_debugger_get_locals`: verified locals and arguments on current frame (`this`, `result = 0`).
+  - `vs_debugger_continue` & `vs_debugger_stop`: resumed execution and cleanly returned to design mode.
+
 ## [0.1.8.0] - 2026-09-07
 
 ### Added

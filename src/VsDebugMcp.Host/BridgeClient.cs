@@ -229,6 +229,22 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebugTestResponse> DebugTestAsync(
+        DebugTestRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebugTestRequest, DebugTestResponse>(
+            BridgeMethods.TestDebug,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerGetThreadsResponse> DebuggerGetThreadsAsync(
+        DebuggerGetThreadsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetThreadsRequest, DebuggerGetThreadsResponse>(
+            BridgeMethods.DebuggerGetThreads,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

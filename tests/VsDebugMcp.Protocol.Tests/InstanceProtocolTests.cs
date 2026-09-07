@@ -343,4 +343,82 @@ public sealed class InstanceProtocolTests
         Assert.True(cancelRespCopy.CancelRequested);
         Assert.Equal(TestRunStates.Cancelled, cancelRespCopy.State);
     }
+
+    [Fact]
+    public void DebugTestAndGetThreadsRoundTripThroughSharedSerializer()
+    {
+        var debugReq = new DebugTestRequest
+        {
+            VsInstanceId = "vs-1",
+            TestId = "d3b07384-d113-46fb-ba3a-ec4f67645d12",
+            WaitForBreak = true,
+            TimeoutMs = 5000
+        };
+        var debugReqCopy = BridgeJson.Deserialize<DebugTestRequest>(BridgeJson.Serialize(debugReq));
+        Assert.Equal("d3b07384-d113-46fb-ba3a-ec4f67645d12", debugReqCopy.TestId);
+        Assert.True(debugReqCopy.WaitForBreak);
+        Assert.Equal(5000, debugReqCopy.TimeoutMs);
+
+        var debugResp = new DebugTestResponse
+        {
+            VsInstanceId = "vs-1",
+            TestRunId = "testrun-1234",
+            TestId = "d3b07384-d113-46fb-ba3a-ec4f67645d12",
+            TestDisplayName = "CalculatorTests.Multiply",
+            IsDebugging = true,
+            DebuggerMode = "break",
+            LastBreakReason = "breakpoint",
+            CurrentProcessId = 1234,
+            CurrentThreadId = 5678,
+            TopFrame = new StackFrameInfo
+            {
+                FrameIndex = 0,
+                FunctionName = "Calculator.Multiply",
+                FileName = @"C:\Sample\Calculator.cs",
+                LineNumber = 15
+            }
+        };
+        var debugRespCopy = BridgeJson.Deserialize<DebugTestResponse>(BridgeJson.Serialize(debugResp));
+        Assert.Equal("testrun-1234", debugRespCopy.TestRunId);
+        Assert.Equal("break", debugRespCopy.DebuggerMode);
+        Assert.NotNull(debugRespCopy.TopFrame);
+        Assert.Equal(15, debugRespCopy.TopFrame!.LineNumber);
+
+        var threadsReq = new DebuggerGetThreadsRequest { VsInstanceId = "vs-1" };
+        var threadsReqCopy = BridgeJson.Deserialize<DebuggerGetThreadsRequest>(BridgeJson.Serialize(threadsReq));
+        Assert.Equal("vs-1", threadsReqCopy.VsInstanceId);
+
+        var threadsResp = new DebuggerGetThreadsResponse
+        {
+            VsInstanceId = "vs-1",
+            CurrentThreadId = 5678,
+            TotalCount = 2,
+            Threads = new List<ThreadInfo>
+            {
+                new()
+                {
+                    Id = 5678,
+                    Name = "Main Thread",
+                    IsAlive = true,
+                    IsCurrent = true,
+                    SuspendedCount = 0,
+                    Priority = "Normal",
+                    TopFrame = new StackFrameInfo { FunctionName = "Calculator.Multiply" }
+                },
+                new()
+                {
+                    Id = 5679,
+                    Name = "Worker Thread",
+                    IsAlive = true,
+                    IsCurrent = false,
+                    SuspendedCount = 0
+                }
+            }
+        };
+        var threadsRespCopy = BridgeJson.Deserialize<DebuggerGetThreadsResponse>(BridgeJson.Serialize(threadsResp));
+        Assert.Equal(2, threadsRespCopy.TotalCount);
+        Assert.True(threadsRespCopy.Threads[0].IsCurrent);
+        Assert.False(threadsRespCopy.Threads[1].IsCurrent);
+        Assert.Equal("Main Thread", threadsRespCopy.Threads[0].Name);
+    }
 }

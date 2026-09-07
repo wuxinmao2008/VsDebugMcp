@@ -58,6 +58,10 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.GetTestRunStatusAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.CancelTestRunAsync), "testRunId")]
     [InlineData(nameof(McpTools.CancelTestRunAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebugTestByIdAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebugTestByIdAsync), "timeoutMs")]
+    [InlineData(nameof(McpTools.DebugTestByIdAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetThreadsAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);

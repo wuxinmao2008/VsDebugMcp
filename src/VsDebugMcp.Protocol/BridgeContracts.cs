@@ -1034,3 +1034,107 @@ public sealed class CancelTestRunResponse
     [DataMember(Name = "cancelRequested", Order = 4)]
     public bool CancelRequested { get; set; }
 }
+
+[DataContract]
+public sealed class DebugTestRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "testId", Order = 2)]
+    public string TestId { get; set; } = string.Empty;
+
+    [DataMember(Name = "waitForBreak", Order = 3, EmitDefaultValue = false)]
+    public bool? WaitForBreak { get; set; }
+
+    [DataMember(Name = "timeoutMs", Order = 4, EmitDefaultValue = false)]
+    public int? TimeoutMs { get; set; }
+}
+
+[DataContract]
+public sealed class DebugTestResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testRunId", Order = 2)]
+    public string TestRunId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testId", Order = 3)]
+    public string TestId { get; set; } = string.Empty;
+
+    [DataMember(Name = "testDisplayName", Order = 4)]
+    public string TestDisplayName { get; set; } = string.Empty;
+
+    [DataMember(Name = "isDebugging", Order = 5)]
+    public bool IsDebugging { get; set; }
+
+    [DataMember(Name = "debuggerMode", Order = 6)]
+    public string DebuggerMode { get; set; } = "design";
+
+    [DataMember(Name = "lastBreakReason", Order = 7, EmitDefaultValue = false)]
+    public string? LastBreakReason { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 8, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
+
+    [DataMember(Name = "currentProcessId", Order = 9, EmitDefaultValue = false)]
+    public int? CurrentProcessId { get; set; }
+
+    [DataMember(Name = "currentThreadId", Order = 10, EmitDefaultValue = false)]
+    public int? CurrentThreadId { get; set; }
+
+    [DataMember(Name = "startedAt", Order = 11)]
+    public string StartedAt { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 12, EmitDefaultValue = false)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetThreadsRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class ThreadInfo
+{
+    [DataMember(Name = "id", Order = 1)]
+    public int Id { get; set; }
+
+    [DataMember(Name = "name", Order = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "isAlive", Order = 3)]
+    public bool IsAlive { get; set; }
+
+    [DataMember(Name = "isCurrent", Order = 4)]
+    public bool IsCurrent { get; set; }
+
+    [DataMember(Name = "suspendedCount", Order = 5)]
+    public int SuspendedCount { get; set; }
+
+    [DataMember(Name = "priority", Order = 6, EmitDefaultValue = false)]
+    public string? Priority { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 7, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetThreadsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "currentThreadId", Order = 2, EmitDefaultValue = false)]
+    public int? CurrentThreadId { get; set; }
+
+    [DataMember(Name = "totalCount", Order = 3)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "threads", Order = 4)]
+    public List<ThreadInfo> Threads { get; set; } = new();
+}

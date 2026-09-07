@@ -787,6 +787,134 @@ internal sealed class DebuggerProvider
 		};
 	}
 
+	public async Task<DebuggerGetThreadsResponse> GetThreadsAsync(
+		DebuggerGetThreadsRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"The debugger is not active (design mode). Threads inspection is only available during debugging.");
+		}
+
+		int? currentThreadId = null;
+		try
+		{
+			currentThreadId = debugger.CurrentThread?.ID;
+		}
+		catch
+		{
+		}
+
+		var threadList = new List<ThreadInfo>();
+
+		try
+		{
+			var threads = debugger.CurrentProgram?.Threads;
+			if (threads == null && debugger.CurrentProcess?.Programs != null)
+			{
+				foreach (Program prog in debugger.CurrentProcess.Programs)
+				{
+					if (prog.Threads != null)
+					{
+						threads = prog.Threads;
+						break;
+					}
+				}
+			}
+
+			if (threads != null)
+			{
+				foreach (EnvDTE.Thread th in threads)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+
+					int id = 0;
+					string name = string.Empty;
+					bool isAlive = true;
+					int suspendedCount = 0;
+					string? priority = null;
+					StackFrameInfo? topFrame = null;
+
+					try { id = th.ID; } catch { }
+					try { name = th.Name ?? string.Empty; } catch { }
+					try { isAlive = th.IsAlive; } catch { }
+					try { suspendedCount = th.SuspendCount; } catch { }
+					try { priority = th.Priority; } catch { }
+
+					if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode && th.StackFrames != null)
+					{
+						try
+						{
+							foreach (StackFrame sf in th.StackFrames)
+							{
+								topFrame = ReadStackFrame(sf, 0);
+								break;
+							}
+						}
+						catch
+						{
+						}
+					}
+
+					threadList.Add(new ThreadInfo
+					{
+						Id = id,
+						Name = name,
+						IsAlive = isAlive,
+						IsCurrent = currentThreadId.HasValue && id == currentThreadId.Value,
+						SuspendedCount = suspendedCount,
+						Priority = priority,
+						TopFrame = topFrame
+					});
+				}
+			}
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+		{
+			if (threadList.Count == 0 && debugger.CurrentThread != null)
+			{
+				try
+				{
+					var th = debugger.CurrentThread;
+					threadList.Add(new ThreadInfo
+					{
+						Id = th.ID,
+						Name = th.Name ?? string.Empty,
+						IsAlive = th.IsAlive,
+						IsCurrent = true,
+						SuspendedCount = th.SuspendCount,
+						Priority = th.Priority
+					});
+				}
+				catch
+				{
+				}
+			}
+		}
+
+		return new DebuggerGetThreadsResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			CurrentThreadId = currentThreadId,
+			TotalCount = threadList.Count,
+			Threads = threadList
+		};
+	}
+
+	internal async Task<DebuggerExecutionResponse> CaptureCurrentStateAsync(
+		string action,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+		return CaptureExecutionResult(debugger, action, GetModeString(debugger.CurrentMode));
+	}
+
 	private async Task<DebuggerExecutionResponse> ExecuteControlCommandAsync(
 		string actionName,
 		CancellationToken cancellationToken,
@@ -896,7 +1024,7 @@ internal sealed class DebuggerProvider
 		return (dte, debugger);
 	}
 
-	private async Task<Debugger> GetDebuggerAsync(CancellationToken cancellationToken)
+	internal async Task<Debugger> GetDebuggerAsync(CancellationToken cancellationToken)
 	{
 		var (_, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 		return debugger;

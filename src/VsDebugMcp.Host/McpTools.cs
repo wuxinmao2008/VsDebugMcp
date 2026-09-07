@@ -465,6 +465,40 @@ public sealed class McpTools
             testRunId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debug_test_by_id",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Asynchronously triggers debugging for a specific unit test in Test Explorer, with optional breakpoint landing wait.")]
+    public Task<DebugTestResponse> DebugTestByIdAsync(
+        [Description("The test ID (GUID) to debug.")] string testId,
+        [Description("Optional flag whether to wait for the debugger to pause at a breakpoint or exception before returning. Defaults to true.")] bool? waitForBreak = null,
+        [Description("Optional timeout in milliseconds to wait for break mode when waitForBreak is true. Defaults to 10000.")] int? timeoutMs = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebugTestAsync(
+            vsInstanceId,
+            testId,
+            waitForBreak ?? true,
+            timeoutMs,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_threads",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the list of threads and their state in the current debugging target process.")]
+    public Task<DebuggerGetThreadsResponse> DebuggerGetThreadsAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetThreadsAsync(
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

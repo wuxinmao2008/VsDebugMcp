@@ -190,19 +190,22 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 23. `vs_run_tests`
 24. `vs_get_test_run_status`
 25. `vs_cancel_test_run`
+26. `vs_debug_test_by_id`
+27. `vs_debugger_get_threads`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`9/9` PASS。
-- Host tests 最近一次完整运行：`59/59` PASS。
-- 全套测试通过率：`68/68` PASS (100%)。
-- VSIX 已使用 VS 18 MSBuild 成功编译与打包（~4 MB）。
+- Protocol tests 最近一次完整运行：`10/10` PASS。
+- Host tests 最近一次完整运行：`64/64` PASS。
+- 全套测试通过率：`74/74` PASS (100%)。
+- 当前扩展与 Host 版本号：`0.1.9.0`。
+- VSIX 已使用 VS 18 MSBuild 成功编译与打包。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；
   - `deploy: vsix`：依赖 `build: vsix`，调用 `scripts/deploy-exp.ps1` 校验实验实例与 Host 状态并完成安全覆盖部署。
-- 已在 Visual Studio 2026 (VS 18.x) 实验实例完成全链路实测验收（含工程、构建、调试与测试资源管理器四大子系统）。
+- 已在 Visual Studio 2026 (VS 18.x) 实验实例完成全链路实测验收（含工程、构建、高级调试、测试资源管理器及 Phase 3A 单测联动调试与多线程巡检）。
 
 ## 核心依据
 
@@ -410,65 +413,63 @@ MCP Client / Agent
 - 构建失败后能获取 Build Output 原始输出窗口文本。
 - 所有只读工具不需要用户确认。
 
-### Phase 2：基础调试闭环
+### Phase 2：基础调试与全生命周期闭环
 
-目标：让 agent 能进入基础调试诊断与现场分析。
+目标：让 agent 能进入基础调试诊断、现场分析与单步执行控制。
 
-状态：**Debugger POC（只读观测轨道）代码实现完成，待在线部署验收**。
+状态：**已完成全部代码实现并通过全链路在线验收（v0.1.7.0）**。
 
-POC 核心原则：
+POC 与控制核心原则：
 - **只读观测先行**：优先提供状态探测（`get_info`）、断点管理（`set_breakpoints`）、中断现场栈帧提取（`get_call_stack`）与表达式探针（`evaluate_expr`）。
-- **模式防卫（Mode Guard）**：未暂停时严格拦截并返回结构化错误码 `debugger_not_paused`。
+- **模式防卫（Mode Guard）**：未暂停时严格拦截并返回结构化错误码 `debugger_not_paused`；已调试时拦截重复启动并返回 `debugger_already_running`。
 - **超时保护**：表达式求值设置有界超时（默认 2000ms），防止死循环或耗时 getter 冻结 VS UI。
 
-已实现 POC 任务：
+已完成任务：
 
 1. ✅ `vs_debugger_get_info`
 2. ✅ `vs_debugger_set_breakpoints`
 3. ✅ `vs_debugger_get_call_stack`
 4. ✅ `vs_debugger_evaluate_expr`
-
-后续控制任务（Phase 2B）：
-
-5. ⬜ `vs_debugger_launch_project`
-6. ⬜ `vs_debugger_attach_process`
-7. ⬜ `vs_debugger_get_threads`
-8. ⬜ `vs_debugger_evaluate_expressions`
-9. ⬜ `vs_debugger_continue`
-10. ⬜ `vs_debugger_pause`
-11. ⬜ `vs_debugger_step_over`
-12. ⬜ `vs_debugger_step_into`
-13. ⬜ `vs_debugger_step_out`
+5. ✅ `vs_debugger_start`（F5 原生启动，支持 `waitForBreak` 着陆）
+6. ✅ `vs_debugger_step_over`
+7. ✅ `vs_debugger_step_into`
+8. ✅ `vs_debugger_step_out`
+9. ✅ `vs_debugger_continue`
+10. ✅ `vs_debugger_pause`
+11. ✅ `vs_debugger_stop`
+12. ✅ `vs_debugger_get_locals`
+13. ✅ `vs_debugger_evaluate_expressions`（单次 RPC 批量求值）
 
 验收：
 
-- 能设置断点。
-- 能启动或附加调试。
-- 程序暂停后能拿线程、调用栈、当前帧。
-- 能在当前帧求值表达式。
-- 能继续、暂停、单步。
-- 表达式求值必须明确是否允许副作用。
+- 能设置与清空断点。
+- 能程序化拉起调试（F5）。
+- 程序暂停后能提取线程、调用栈与当前栈帧局部变量。
+- 能在当前帧安全求值单项或批量表达式。
+- 能继续、暂停、单步步过/步入/步出，并安全返回设计模式。
 
-### Phase 3：测试与诊断增强
+### Phase 3：测试与调试联动（Test-Driven Debugging）
 
-目标：覆盖 Test Explorer 和高级诊断。
+目标：覆盖 Test Explorer、单测联动调试与高级现场诊断。
 
-状态：**方向 B（路线 2：测试资源管理器集成 v0.1.8.0）已完成代码实现并通过全链路在线验收**。
+状态：**方向 B（测试资源管理器集成 v0.1.8.0）与 Phase 3A（测试驱动调试与多线程巡检 v0.1.9.0）均已完成代码实现并全链路在线实测验收**。
 
-已完成任务（方向 B：测试资源管理器集成）：
+已完成任务：
 
 1. ✅ `vs_get_tests`：基于 MEF `ITestsService` 查询测试清单，支持显示名与 FQN 模糊过滤。
 2. ✅ `vs_run_tests`：通过 `OperationBroker`（全量 `ExecuteAllTestsAsync`，单用例通过 `Microsoft.VisualStudio.TestWindow.Internal.Messages.SearchQuery` 过滤 `ExecuteTestsByFilterAsync`）异步触发测试运行。
 3. ✅ `vs_get_test_run_status`：轮询异步测试运行生命周期（`starting → running → completed/failed/cancelled`），返回通过/失败统计、总耗时、以及各项单测的独立测试结果与执行耗时。
 4. ✅ `vs_cancel_test_run`：通过 `OperationBroker.CancelAsync` 取消正在运行的测试任务。
-5. ✅ 单实例并发互斥守卫（`test_run_busy`）与容错状态机。
-6. ✅ 靶场单测工程：`sample/SampleTests`（xUnit .NET 8，包含 3 个单测，已挂载至 `SampleSolution.slnx`）。
+5. ✅ `vs_debug_test_by_id`：基于 `OperationBroker.DebugTestsByFilterAsync` 异步发起指定单测调试，支持 `waitForBreak` 探测循环，命中时毫秒级捕获顶层栈帧 `topFrame` 与 `lastBreakReason`。
+6. ✅ `vs_debugger_get_threads`：通过 `EnvDTE.Debugger` 提取调试目标多线程诊断快照，标明 `isCurrent`、线程名及状态。
+7. ✅ 单实例并发互斥守卫（`test_run_busy`）、调试冲突守卫（`debugger_already_running`）与容错状态机。
+8. ✅ 靶场单测工程：`sample/SampleTests`（xUnit .NET 8，包含 3 个单测，已挂载至 `SampleSolution.slnx`）。
 
-后续进阶任务（Phase 3A / 3C）：
+后续进阶任务（Phase 3C）：
 
-7. ⬜ `vs_debug_test_by_id`（测试调试专用接口）
-8. ⬜ 异常分析与高级调用栈摘要
-9. ⬜ 错误列表（Error List）原生 COM 数据源深化
+9. ⬜ 异常分析与高级调用栈摘要
+10. ⬜ 错误列表（Error List）原生 COM 数据源深化
+11. ⬜ 进程附加（Attach to Process）与高级条件/命中断点
 
 特别约束：
 

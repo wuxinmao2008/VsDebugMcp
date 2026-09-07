@@ -35,6 +35,7 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_start` — Programmatic F5 launch with smart landing break detection
 - `vs_debugger_get_info` — Debugger mode, active process, thread, and break reason
 - `vs_debugger_set_breakpoints` — Source line breakpoint management
+- `vs_debugger_get_threads` — Multi-thread diagnostic snapshot inspection
 - `vs_debugger_get_call_stack` — Call stack capture upon pause/breakpoint
 - `vs_debugger_get_locals` — Arguments and local variables inspection
 - `vs_debugger_evaluate_expr` — Single expression evaluation with timeout protection
@@ -42,11 +43,12 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_step_over` / `step_into` / `step_out` — Stepping execution control
 - `vs_debugger_continue` / `pause` / `stop` — Session continuation, pause, and termination
 
-### Test Explorer & Execution (Direction B)
+### Test Explorer & Test-Driven Debugging (Phase 3 & 3A)
 - `vs_get_tests` — Solution test discovery with optional filters
 - `vs_run_tests` — Asynchronous test execution (full suite or specified `testIds`)
 - `vs_get_test_run_status` — Real-time test run state, progress, execution metrics, and per-test outcomes
 - `vs_cancel_test_run` — Active test run cancellation
+- `vs_debug_test_by_id` — Programmatic test debugging by test ID with smart breakpoint landing probe
 
 ### In action
 
@@ -99,9 +101,9 @@ Ordinary builds do not deploy the extension. Deployment requires closing the rel
 
 ## Validation status
 
-- Automated unit tests: 68/68 PASS across Protocol and Host test suites.
+- Automated unit tests: 74/74 PASS across Protocol and Host test suites.
 - End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
-- Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation.
+- Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / multi-thread inspection / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 
 ## Security and privacy
 

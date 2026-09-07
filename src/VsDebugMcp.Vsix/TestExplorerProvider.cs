@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using EnvDTE;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -28,13 +29,19 @@ internal sealed class TestExplorerProvider : IDisposable
     private bool _subscribedToOperationState;
     private bool _disposed;
 
+    private readonly DebuggerProvider _debuggerProvider;
     private ActiveTestRunContext? _activeRun;
     private ActiveTestRunContext? _lastRun;
 
-    public TestExplorerProvider(AsyncPackage package, string vsInstanceId, VsDiagnosticService? diagnostics = null)
+    public TestExplorerProvider(
+        AsyncPackage package,
+        string vsInstanceId,
+        DebuggerProvider debuggerProvider,
+        VsDiagnosticService? diagnostics = null)
     {
         _package = package;
         _vsInstanceId = vsInstanceId;
+        _debuggerProvider = debuggerProvider;
         _diagnostics = diagnostics;
     }
 
@@ -396,6 +403,200 @@ internal sealed class TestExplorerProvider : IDisposable
         };
     }
 
+    public async Task<DebugTestResponse> DebugTestAsync(DebugTestRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.TestId))
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.InvalidRequest,
+                "The 'testId' parameter is required.",
+                false);
+        }
+
+        var testsService = await EnsureServicesAsync(cancellationToken);
+        await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+        var debugger = await _debuggerProvider.GetDebuggerAsync(cancellationToken);
+        if (debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.DebuggerAlreadyRunning,
+                $"The debugger is already running (current mode: {debugger.CurrentMode}). Stop or finish the current session before debugging tests.",
+                false);
+        }
+
+        lock (_sync)
+        {
+            if (_activeRun != null && (_activeRun.State == TestRunStates.Starting || _activeRun.State == TestRunStates.Running))
+            {
+                throw new TestExplorerProviderException(
+                    BridgeErrorCodes.TestRunBusy,
+                    $"A test run '{_activeRun.TestRunId}' is already in progress.",
+                    false);
+            }
+        }
+
+        var allTests = await testsService.GetTestsAsync();
+        object? targetTest = null;
+        if (allTests != null)
+        {
+            foreach (var t in allTests)
+            {
+                if (string.Equals(TestAccessor.GetId(t).ToString(), request.TestId, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetTest = t;
+                    break;
+                }
+            }
+        }
+
+        if (targetTest == null)
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.TestNotFound,
+                $"Test with ID '{request.TestId}' was not found.",
+                false);
+        }
+
+        var testGuid = TestAccessor.GetId(targetTest);
+        var testFqn = TestAccessor.GetFullyQualifiedName(targetTest);
+        var testDisplayName = TestAccessor.GetDisplayName(targetTest);
+
+        var runId = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        var now = DateTimeOffset.UtcNow;
+        var runContext = new ActiveTestRunContext(runId, new List<Guid> { testGuid }, now);
+
+        lock (_sync)
+        {
+            _activeRun = runContext;
+            _lastRun = runContext;
+        }
+
+        runContext.State = TestRunStates.Running;
+
+        if (_operationBroker == null)
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.TestWindowUnavailable,
+                "Test OperationBroker service is not available.",
+                true);
+        }
+
+        // Trigger test debugging asynchronously on UI thread
+        _ = _package.JoinableTaskFactory.RunAsync(async () =>
+        {
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
+            try
+            {
+                bool started = false;
+                if (_operationBroker != null)
+                {
+                    started = await _operationBroker.DebugTestsByFilterAsync(new List<string> { testFqn }, CancellationToken.None);
+                }
+                _diagnostics?.LogInfo($"[TestExplorer] DebugTestsByFilterAsync finished for {testFqn}, started={started}");
+                if (!started)
+                {
+                    lock (_sync)
+                    {
+                        runContext.State = TestRunStates.Failed;
+                        runContext.CompletedAt = DateTimeOffset.UtcNow;
+                        if (_activeRun == runContext)
+                        {
+                            _activeRun = null;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogError($"[TestExplorer] Error in DebugTestsByFilterAsync for {testFqn}: {ex.Message}");
+                lock (_sync)
+                {
+                    runContext.State = TestRunStates.Failed;
+                    runContext.CompletedAt = DateTimeOffset.UtcNow;
+                    if (_activeRun == runContext)
+                    {
+                        _activeRun = null;
+                    }
+                }
+            }
+        });
+
+        // Safety watchdog: finalize after 120s if event is never received
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(120));
+            lock (_sync)
+            {
+                if (_activeRun == runContext && runContext.State == TestRunStates.Running)
+                {
+                    _diagnostics?.LogWarning($"[TestExplorer] Safety watchdog reached for debug run {runId}; finalizing.");
+                    _ = FinalizeRunAsync(runContext);
+                }
+            }
+        });
+
+        bool waitForBreak = request.WaitForBreak ?? true;
+        int timeoutMs = Clamp(request.TimeoutMs ?? 10000, 500, 60000);
+        var warnings = new List<BridgeWarning>();
+
+        if (waitForBreak)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(100, cancellationToken);
+                await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+                if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+                {
+                    break;
+                }
+
+                if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode && runContext.State != TestRunStates.Running)
+                {
+                    warnings.Add(new BridgeWarning
+                    {
+                        Code = "test_completed_without_break",
+                        Message = $"The test '{testDisplayName}' executed and completed without triggering a breakpoint or exception."
+                    });
+                    break;
+                }
+            }
+
+            if (debugger.CurrentMode == dbgDebugMode.dbgRunMode && sw.ElapsedMilliseconds >= timeoutMs)
+            {
+                warnings.Add(new BridgeWarning
+                {
+                    Code = "break_wait_timeout",
+                    Message = $"Timed out after {timeoutMs}ms waiting for the debugger to enter break mode. The test process may still be running."
+                });
+            }
+        }
+
+        var executionResult = await _debuggerProvider.CaptureCurrentStateAsync("debug_test", cancellationToken);
+
+        return new DebugTestResponse
+        {
+            VsInstanceId = _vsInstanceId,
+            TestRunId = runId,
+            TestId = testGuid.ToString(),
+            TestDisplayName = testDisplayName,
+            IsDebugging = executionResult.IsDebugging,
+            DebuggerMode = executionResult.CurrentMode,
+            LastBreakReason = executionResult.LastBreakReason,
+            TopFrame = executionResult.TopFrame,
+            CurrentProcessId = executionResult.CurrentProcessId,
+            CurrentThreadId = executionResult.CurrentThreadId,
+            StartedAt = now.ToString("O"),
+            Warnings = warnings
+        };
+    }
+
+    private static int Clamp(int value, int min, int max) =>
+        value < min ? min : (value > max ? max : value);
+
     public async Task<TestRunStatusResponse> GetTestRunStatusAsync(GetTestRunStatusRequest request, CancellationToken cancellationToken)
     {
         ActiveTestRunContext? run;
@@ -672,6 +873,7 @@ internal sealed class TestExplorerProvider : IDisposable
         private readonly VsDiagnosticService? _diagnostics;
         private readonly MethodInfo? _executeAllTestsMethod;
         private readonly MethodInfo? _executeTestsByFilterMethod;
+        private readonly MethodInfo? _debugTestsByFilterMethod;
         private readonly MethodInfo? _cancelAsyncMethod;
 
         public OperationBrokerInvoker(object broker, VsDiagnosticService? diagnostics = null)
@@ -681,6 +883,7 @@ internal sealed class TestExplorerProvider : IDisposable
             var type = broker.GetType();
             _executeAllTestsMethod = type.GetMethod("ExecuteAllTestsAsync", new[] { typeof(int?), typeof(CancellationToken) });
             _executeTestsByFilterMethod = type.GetMethod("ExecuteTestsByFilterAsync", BindingFlags.Public | BindingFlags.Instance);
+            _debugTestsByFilterMethod = type.GetMethod("DebugTestsByFilterAsync", BindingFlags.Public | BindingFlags.Instance);
             _cancelAsyncMethod = type.GetMethod("CancelAsync", new[] { typeof(CancellationToken) });
         }
 
@@ -745,6 +948,52 @@ internal sealed class TestExplorerProvider : IDisposable
             catch (Exception ex)
             {
                 _diagnostics?.LogError($"[TestExplorer] ExecuteTestsByFilterAsync error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> DebugTestsByFilterAsync(List<string> fqns, CancellationToken cancellationToken)
+        {
+            if (_debugTestsByFilterMethod == null)
+            {
+                _diagnostics?.LogWarning("[TestExplorer] DebugTestsByFilterAsync method not found on broker.");
+                return false;
+            }
+
+            try
+            {
+                var messagesAsm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "Microsoft.VisualStudio.TestWindow.Internal")
+                    ?? Assembly.Load("Microsoft.VisualStudio.TestWindow.Internal");
+                var searchQueryType = messagesAsm?.GetType("Microsoft.VisualStudio.TestWindow.Messages.SearchQuery");
+                var filterMatchKindType = typeof(IOperationState).Assembly.GetType("Microsoft.VisualStudio.TestWindow.Extensibility.FilterMatchKind");
+
+                if (searchQueryType == null || filterMatchKindType == null)
+                {
+                    _diagnostics?.LogWarning($"[TestExplorer] Cannot resolve SearchQuery ({searchQueryType != null}) or FilterMatchKind ({filterMatchKindType != null}).");
+                    return false;
+                }
+
+                var exactMatchVal = Enum.Parse(filterMatchKindType, "ExactMatch");
+                var listType = typeof(List<>).MakeGenericType(searchQueryType);
+                var filterList = (System.Collections.IList)Activator.CreateInstance(listType)!;
+
+                var ctors = searchQueryType.GetConstructors();
+                if (ctors.Length > 0 && fqns != null && fqns.Count > 0)
+                {
+                    var ctor = ctors[0];
+                    var queryObj = ctor.Invoke(new object?[] { "TestWindow_FullyQualifiedName", null, fqns, null, exactMatchVal });
+                    filterList.Add(queryObj);
+                }
+
+                var task = (Task)_debugTestsByFilterMethod.Invoke(_broker, new object[] { filterList, cancellationToken })!;
+                await task.ConfigureAwait(false);
+                var prop = task.GetType().GetProperty("Result");
+                if (prop != null && prop.GetValue(task) is bool b) return b;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogError($"[TestExplorer] DebugTestsByFilterAsync error: {ex.Message}");
                 return false;
             }
         }

@@ -44,7 +44,7 @@ internal sealed class BridgeServer : IDisposable
         _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
         _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId);
-        _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId, diagnostics);
+        _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId, _debuggerProvider, diagnostics);
     }
 
     public void Start()
@@ -560,6 +560,40 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
                 }
+            case BridgeMethods.TestDebug:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? throw new TestExplorerProviderException(BridgeErrorCodes.InvalidRequest, "The debug test request payload is required.", false)
+                        : BridgeJson.Deserialize<DebugTestRequest>(request.PayloadJson!);
+                    var result = await _testExplorerProvider.DebugTestAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The debug test request payload is invalid.", false), false);
+                }
+                catch (TestExplorerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
+            case BridgeMethods.DebuggerGetThreads:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetThreadsRequest()
+                        : BridgeJson.Deserialize<DebuggerGetThreadsRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetThreadsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get threads request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -882,6 +916,18 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_cancel_test_run",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debug_test_by_id",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_threads",
                 Version = "0.1",
                 IsStub = false
             }
