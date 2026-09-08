@@ -51,6 +51,9 @@ public static class BridgeMethods
 	public const string GetActiveDocument = "getActiveDocument";
 	public const string NavigateTo = "navigateTo";
 	public const string GetSolutionConfigurations = "getSolutionConfigurations";
+	public const string DebuggerFreezeThread = "debuggerFreezeThread";
+	public const string DebuggerThawThread = "debuggerThawThread";
+	public const string DebuggerSetNextStatement = "debuggerSetNextStatement";
 	public const string Shutdown = "shutdown";
 }
 
@@ -93,6 +96,8 @@ public static class BridgeErrorCodes
 	public const string InvalidNavigationTarget = "invalid_navigation_target";
 	public const string ActiveDocumentUnavailable = "active_document_unavailable";
 	public const string DebuggerRunningCannotBuild = "debugger_running_cannot_build";
+	public const string ThreadNotFound = "thread_not_found";
+	public const string InvalidNextStatement = "invalid_next_statement";
 	public const string InternalError = "internal_error";
 }
 

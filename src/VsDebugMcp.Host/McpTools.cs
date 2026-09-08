@@ -650,6 +650,58 @@ public sealed class McpTools
             vsInstanceId,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_debugger_freeze_thread",
+        ReadOnly = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Freezes (suspends) a specific thread during debugging so it will not run until thawed.")]
+    public Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
+        [Description("The ID of the thread to freeze.")] int threadId,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerFreezeThreadAsync(
+            threadId,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_thaw_thread",
+        ReadOnly = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Thaws (resumes) a previously frozen thread during debugging.")]
+    public Task<DebuggerThreadControlResponse> DebuggerThawThreadAsync(
+        [Description("The ID of the thread to thaw.")] int threadId,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerThawThreadAsync(
+            threadId,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_set_next_statement",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Sets the next instruction to be executed by the debugger (instruction pointer) to the specified line/column in a file or the active document.")]
+    public Task<DebuggerSetNextStatementResponse> DebuggerSetNextStatementAsync(
+        [Description("Optional target source file path. If omitted, uses the currently active document in Visual Studio.")] string? filePath = null,
+        [Description("Optional 1-based target line number. Required if filePath is provided; if omitted without filePath, uses the cursor position.")] int? line = null,
+        [Description("Optional 1-based target column number. Defaults to 1.")] int? column = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerSetNextStatementAsync(
+            filePath,
+            line,
+            column,
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

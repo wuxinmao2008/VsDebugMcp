@@ -903,11 +903,14 @@ internal sealed class DebuggerProvider
 					string? priority = null;
 					StackFrameInfo? topFrame = null;
 
+					bool isFrozen = false;
+
 					try { id = th.ID; } catch { }
 					try { name = th.Name ?? string.Empty; } catch { }
 					try { isAlive = th.IsAlive; } catch { }
 					try { suspendedCount = th.SuspendCount; } catch { }
 					try { priority = th.Priority; } catch { }
+					try { isFrozen = th.IsFrozen; } catch { }
 
 					if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode && th.StackFrames != null)
 					{
@@ -932,7 +935,8 @@ internal sealed class DebuggerProvider
 						IsCurrent = currentThreadId.HasValue && id == currentThreadId.Value,
 						SuspendedCount = suspendedCount,
 						Priority = priority,
-						TopFrame = topFrame
+						TopFrame = topFrame,
+						IsFrozen = isFrozen
 					});
 				}
 			}
@@ -944,6 +948,8 @@ internal sealed class DebuggerProvider
 				try
 				{
 					var th = debugger.CurrentThread;
+					bool fallbackFrozen = false;
+					try { fallbackFrozen = th.IsFrozen; } catch { }
 					threadList.Add(new ThreadInfo
 					{
 						Id = th.ID,
@@ -951,7 +957,8 @@ internal sealed class DebuggerProvider
 						IsAlive = th.IsAlive,
 						IsCurrent = true,
 						SuspendedCount = th.SuspendCount,
-						Priority = th.Priority
+						Priority = th.Priority,
+						IsFrozen = fallbackFrozen
 					});
 				}
 				catch
@@ -966,6 +973,221 @@ internal sealed class DebuggerProvider
 			CurrentThreadId = currentThreadId,
 			TotalCount = threadList.Count,
 			Threads = threadList
+		};
+	}
+
+	public async Task<DebuggerThreadControlResponse> FreezeThreadAsync(
+		DebuggerThreadControlRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (request.ThreadId <= 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "A valid positive ThreadId is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"The debugger is not active (design mode). Thread freezing is only available during debugging.");
+		}
+
+		var thread = FindExactThread(debugger, request.ThreadId)
+			?? throw new DebuggerProviderException(
+				BridgeErrorCodes.ThreadNotFound,
+				$"Thread with ID {request.ThreadId} was not found.");
+
+		try
+		{
+			thread.Freeze();
+		}
+		catch (Exception ex)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InternalError,
+				$"Failed to freeze thread {request.ThreadId}: {ex.Message}",
+				ex);
+		}
+
+		bool isFrozen = false;
+		int suspendCount = 0;
+		try { isFrozen = thread.IsFrozen; } catch { }
+		try { suspendCount = thread.SuspendCount; } catch { }
+
+		return new DebuggerThreadControlResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ThreadId = request.ThreadId,
+			Action = "freeze",
+			IsFrozen = isFrozen,
+			SuspendedCount = suspendCount,
+			Success = true
+		};
+	}
+
+	public async Task<DebuggerThreadControlResponse> ThawThreadAsync(
+		DebuggerThreadControlRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (request.ThreadId <= 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "A valid positive ThreadId is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"The debugger is not active (design mode). Thread thawing is only available during debugging.");
+		}
+
+		var thread = FindExactThread(debugger, request.ThreadId)
+			?? throw new DebuggerProviderException(
+				BridgeErrorCodes.ThreadNotFound,
+				$"Thread with ID {request.ThreadId} was not found.");
+
+		try
+		{
+			thread.Thaw();
+		}
+		catch (Exception ex)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InternalError,
+				$"Failed to thaw thread {request.ThreadId}: {ex.Message}",
+				ex);
+		}
+
+		bool isFrozen = false;
+		int suspendCount = 0;
+		try { isFrozen = thread.IsFrozen; } catch { }
+		try { suspendCount = thread.SuspendCount; } catch { }
+
+		return new DebuggerThreadControlResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ThreadId = request.ThreadId,
+			Action = "thaw",
+			IsFrozen = isFrozen,
+			SuspendedCount = suspendCount,
+			Success = true
+		};
+	}
+
+	public async Task<DebuggerSetNextStatementResponse> SetNextStatementAsync(
+		DebuggerSetNextStatementRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				"The debugger must be paused (break mode) to set the next statement.");
+		}
+
+		string finalFilePath = string.Empty;
+		int finalLine = request.Line;
+		int finalColumn = request.Column ?? 1;
+
+		if (!string.IsNullOrWhiteSpace(request.FilePath))
+		{
+			if (request.Line <= 0)
+			{
+				throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "A valid line number (>= 1) is required when specifying filePath.");
+			}
+
+			var navTarget = request.FilePath.Trim();
+			if (!Path.IsPathRooted(navTarget) && !string.IsNullOrEmpty(dte.Solution?.FullName))
+			{
+				var slnDir = Path.GetDirectoryName(dte.Solution.FullName);
+				if (!string.IsNullOrEmpty(slnDir))
+				{
+					navTarget = Path.Combine(slnDir, navTarget);
+				}
+			}
+
+			if (!File.Exists(navTarget))
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.FileNotFound,
+					$"Target file does not exist: {request.FilePath}");
+			}
+
+			finalFilePath = Path.GetFullPath(navTarget);
+			var window = dte.ItemOperations.OpenFile(finalFilePath);
+			window?.Activate();
+
+			if (dte.ActiveDocument?.Selection is TextSelection selection)
+			{
+				selection.GotoLine(finalLine, true);
+				selection.MoveToDisplayColumn(finalLine, finalColumn, false);
+			}
+		}
+		else
+		{
+			if (dte.ActiveDocument?.Selection is TextSelection selection)
+			{
+				finalFilePath = dte.ActiveDocument.FullName ?? string.Empty;
+				if (request.Line > 0)
+				{
+					selection.GotoLine(finalLine, true);
+					selection.MoveToDisplayColumn(finalLine, finalColumn, false);
+				}
+				else
+				{
+					finalLine = selection.CurrentLine;
+					finalColumn = selection.CurrentColumn;
+				}
+			}
+			else
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.ActiveDocumentUnavailable,
+					"No active document found to set next statement.");
+			}
+		}
+
+		try
+		{
+			debugger.SetNextStatement();
+		}
+		catch (Exception ex)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InvalidNextStatement,
+				$"Cannot set next statement to line {finalLine}: {ex.Message}",
+				ex);
+		}
+
+		StackFrameInfo? topFrame = null;
+		try
+		{
+			if (debugger.CurrentStackFrame != null)
+			{
+				topFrame = ReadStackFrame(debugger.CurrentStackFrame, 0);
+			}
+		}
+		catch
+		{
+		}
+
+		return new DebuggerSetNextStatementResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			FilePath = finalFilePath,
+			Line = finalLine,
+			Column = finalColumn,
+			Success = true,
+			TopFrame = topFrame
 		};
 	}
 
@@ -1695,6 +1917,44 @@ internal sealed class DebuggerProvider
 		}
 
 		return debugger.CurrentThread;
+	}
+
+	private static EnvDTE.Thread? FindExactThread(Debugger debugger, int threadId)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		try
+		{
+			var threads = debugger.CurrentProgram?.Threads;
+			if (threads == null && debugger.CurrentProcess?.Programs != null)
+			{
+				foreach (Program prog in debugger.CurrentProcess.Programs)
+				{
+					if (prog.Threads != null)
+					{
+						threads = prog.Threads;
+						break;
+					}
+				}
+			}
+
+			if (threads != null)
+			{
+				foreach (EnvDTE.Thread th in threads)
+				{
+					int id = 0;
+					try { id = th.ID; } catch { }
+					if (id == threadId)
+					{
+						return th;
+					}
+				}
+			}
+		}
+		catch
+		{
+		}
+
+		return null;
 	}
 
 	private static StackFrameInfo ReadStackFrame(StackFrame frame, int index)

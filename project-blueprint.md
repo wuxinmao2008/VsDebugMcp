@@ -13,7 +13,24 @@
 
 ## 实施进度（2026-09-08 更新）
 
-### Phase 4B：工程防御加固与多实例智能路由已完成开发 (v0.1.13.0)
+### Phase 4C：高级调试控制深化已完成开发 (v0.1.14.0)
+
+- **线程精细化挂起与解冻 (`vs_debugger_freeze_thread` / `vs_debugger_thaw_thread`)**：
+  - 基于 Visual Studio COM 原生 `EnvDTE.Thread.Freeze()` 与 `Thaw()`，支持按 `threadId` 挂起或恢复指定线程；
+  - 解决多线程调试时无法重现或隔离竞态条件的痛点；
+  - 在 `ThreadInfo` 与 `vs_debugger_get_threads` 中新增 `isFrozen` 属性回显。
+- **设置下一语句 / 跳转执行点 (`vs_debugger_set_next_statement`)**：
+  - 联动前台编辑器光标定位与 `EnvDTE.Debugger.SetNextStatement()`，在调试中断期间动态调整程序计数器（Instruction Pointer）；
+  - 支持跳过崩溃代码行或重新执行上一语句；无缝享受 Phase 4B 的工作目录路径路由；
+  - 成功调整后返回更新后的顶层堆栈栈帧（`topFrame`）。
+- **健壮性防卫与错误映射**：
+  - 新增 `thread_not_found`、`invalid_next_statement` 结构化错误码；
+  - 严格拦截非调试/非中断态调用（`debugger_not_paused` / `debugger_not_debugging`）。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (13/13 PASS) + `VsDebugMcp.Host.Tests` (105/105 PASS)，全套 118 个单元测试 100% 通过；
+  - Bridge capability 注册总数扩充至 **38 个**。
+
+### Phase 4B：工程防御加固与多实例智能路由已完成开发并通过全链路在线实测验收 (v0.1.13.0)
 
 - **多实例工作目录智能路由 (`FindByWorkingDirectory`)**：
   - 扩展 `VisualStudioInstanceRegistry.Resolve(string? vsInstanceId, string? targetPath = null)`，支持将请求的目标文件/目录路径与各 VS 实例报告的解决方案物理路径及目录进行包含与前缀匹配；

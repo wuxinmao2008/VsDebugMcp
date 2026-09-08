@@ -1142,6 +1142,9 @@ public sealed class ThreadInfo
 
     [DataMember(Name = "topFrame", Order = 7, EmitDefaultValue = false)]
     public StackFrameInfo? TopFrame { get; set; }
+
+    [DataMember(Name = "isFrozen", Order = 8)]
+    public bool IsFrozen { get; set; }
 }
 
 [DataContract]
@@ -1543,4 +1546,74 @@ public sealed class GetSolutionConfigurationsResponse
 
     [DataMember(Name = "configurations", Order = 6)]
     public List<SolutionConfigurationInfo> Configurations { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerThreadControlRequest
+{
+    [DataMember(Name = "threadId", Order = 1)]
+    public int ThreadId { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerThreadControlResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "threadId", Order = 2)]
+    public int ThreadId { get; set; }
+
+    [DataMember(Name = "action", Order = 3)]
+    public string Action { get; set; } = string.Empty;
+
+    [DataMember(Name = "isFrozen", Order = 4)]
+    public bool IsFrozen { get; set; }
+
+    [DataMember(Name = "suspendedCount", Order = 5)]
+    public int SuspendedCount { get; set; }
+
+    [DataMember(Name = "success", Order = 6)]
+    public bool Success { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerSetNextStatementRequest
+{
+    [DataMember(Name = "filePath", Order = 1, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "line", Order = 2, EmitDefaultValue = false)]
+    public int Line { get; set; }
+
+    [DataMember(Name = "column", Order = 3, EmitDefaultValue = false)]
+    public int? Column { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 4, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerSetNextStatementResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "filePath", Order = 2)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "line", Order = 3)]
+    public int Line { get; set; }
+
+    [DataMember(Name = "column", Order = 4)]
+    public int Column { get; set; }
+
+    [DataMember(Name = "success", Order = 5)]
+    public bool Success { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 6, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
 }

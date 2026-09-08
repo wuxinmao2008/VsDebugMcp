@@ -210,6 +210,23 @@ public interface IBridgeService
     Task<GetSolutionConfigurationsResponse> GetSolutionConfigurationsAsync(
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerThreadControlResponse> DebuggerThawThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerSetNextStatementResponse> DebuggerSetNextStatementAsync(
+        string? filePath,
+        int? line,
+        int? column,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -756,6 +773,55 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerFreezeThreadAsync(
+                new DebuggerThreadControlRequest
+                {
+                    ThreadId = threadId,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerThreadControlResponse> DebuggerThawThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerThawThreadAsync(
+                new DebuggerThreadControlRequest
+                {
+                    ThreadId = threadId,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerSetNextStatementResponse> DebuggerSetNextStatementAsync(
+        string? filePath,
+        int? line,
+        int? column,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId, filePath),
+            client => client.DebuggerSetNextStatementAsync(
+                new DebuggerSetNextStatementRequest
+                {
+                    FilePath = filePath,
+                    Line = line ?? 0,
+                    Column = column,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -954,6 +1020,16 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.DebuggerRunningCannotBuild => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.ThreadNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.InvalidNextStatement => new(
                 exception.Code,
                 exception.Message,
                 false,

@@ -681,6 +681,61 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerFreezeThread:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The freeze thread request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerThreadControlRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.FreezeThreadAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The freeze thread request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerThawThread:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The thaw thread request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerThreadControlRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ThawThreadAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The thaw thread request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerSetNextStatement:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerSetNextStatementRequest()
+                        : BridgeJson.Deserialize<DebuggerSetNextStatementRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.SetNextStatementAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The set next statement request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.GetActiveDocument:
                 try
                 {
@@ -1117,6 +1172,24 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_solution_configurations",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_freeze_thread",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_thaw_thread",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_set_next_statement",
                 Version = "0.1",
                 IsStub = false
             }

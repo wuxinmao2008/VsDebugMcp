@@ -5,6 +5,19 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14.0] - 2026-09-08
+
+### Added
+- **Advanced Debugger Controls (Phase 4C)**:
+  - `vs_debugger_freeze_thread`: Freezes (suspends) a specific thread by ID during debugging using native `EnvDTE.Thread.Freeze()`, allowing agents to isolate race conditions and lock interfering threads.
+  - `vs_debugger_thaw_thread`: Thaws (resumes) a previously frozen thread during debugging via `EnvDTE.Thread.Thaw()`.
+  - `vs_debugger_set_next_statement`: Sets the next instruction to be executed by the debugger (instruction pointer) to a designated source line/column or active document cursor position using `EnvDTE.Debugger.SetNextStatement()`, allowing agents to dynamically skip failing lines or re-execute statements without recompilation.
+  - Added `isFrozen` property in `ThreadInfo` and `vs_debugger_get_threads` response.
+  - Added structured bridge error codes: `thread_not_found`, `invalid_next_statement`.
+
+### Verified
+- Automated unit tests: 118/118 PASS (100% across Protocol and Host test suites, 13/13 Protocol tests, 105/105 Host tests).
+
 ## [0.1.13.0] - 2026-09-08
 
 ### Added

@@ -722,4 +722,74 @@ public sealed class InstanceProtocolTests
         Assert.True(slnCfgRespCopy.Configurations[0].IsActive);
         Assert.False(slnCfgRespCopy.Configurations[1].IsActive);
     }
+
+    [Fact]
+    public void DebuggerAdvancedControlsContractsRoundTripThroughSharedSerializer()
+    {
+        var threadInfo = new ThreadInfo
+        {
+            Id = 1234,
+            Name = "WorkerThread",
+            IsAlive = true,
+            IsCurrent = false,
+            SuspendedCount = 1,
+            Priority = "Normal",
+            IsFrozen = true
+        };
+        var threadInfoCopy = BridgeJson.Deserialize<ThreadInfo>(BridgeJson.Serialize(threadInfo));
+        Assert.Equal(1234, threadInfoCopy.Id);
+        Assert.True(threadInfoCopy.IsFrozen);
+        Assert.Equal(1, threadInfoCopy.SuspendedCount);
+
+        var freezeReq = new DebuggerThreadControlRequest { ThreadId = 4321, VsInstanceId = "vs-1" };
+        var freezeReqCopy = BridgeJson.Deserialize<DebuggerThreadControlRequest>(BridgeJson.Serialize(freezeReq));
+        Assert.Equal(4321, freezeReqCopy.ThreadId);
+        Assert.Equal("vs-1", freezeReqCopy.VsInstanceId);
+
+        var freezeResp = new DebuggerThreadControlResponse
+        {
+            VsInstanceId = "vs-1",
+            ThreadId = 4321,
+            Action = "freeze",
+            IsFrozen = true,
+            SuspendedCount = 1,
+            Success = true
+        };
+        var freezeRespCopy = BridgeJson.Deserialize<DebuggerThreadControlResponse>(BridgeJson.Serialize(freezeResp));
+        Assert.Equal("freeze", freezeRespCopy.Action);
+        Assert.True(freezeRespCopy.IsFrozen);
+        Assert.True(freezeRespCopy.Success);
+
+        var nextStmtReq = new DebuggerSetNextStatementRequest
+        {
+            FilePath = "C:\\src\\Test.cs",
+            Line = 42,
+            Column = 5,
+            VsInstanceId = "vs-1"
+        };
+        var nextStmtReqCopy = BridgeJson.Deserialize<DebuggerSetNextStatementRequest>(BridgeJson.Serialize(nextStmtReq));
+        Assert.Equal("C:\\src\\Test.cs", nextStmtReqCopy.FilePath);
+        Assert.Equal(42, nextStmtReqCopy.Line);
+        Assert.Equal(5, nextStmtReqCopy.Column);
+
+        var nextStmtResp = new DebuggerSetNextStatementResponse
+        {
+            VsInstanceId = "vs-1",
+            FilePath = "C:\\src\\Test.cs",
+            Line = 42,
+            Column = 5,
+            Success = true,
+            TopFrame = new StackFrameInfo
+            {
+                FrameIndex = 0,
+                FunctionName = "Test.DoWork",
+                LineNumber = 42
+            }
+        };
+        var nextStmtRespCopy = BridgeJson.Deserialize<DebuggerSetNextStatementResponse>(BridgeJson.Serialize(nextStmtResp));
+        Assert.Equal(42, nextStmtRespCopy.Line);
+        Assert.True(nextStmtRespCopy.Success);
+        Assert.NotNull(nextStmtRespCopy.TopFrame);
+        Assert.Equal("Test.DoWork", nextStmtRespCopy.TopFrame.FunctionName);
+    }
 }
