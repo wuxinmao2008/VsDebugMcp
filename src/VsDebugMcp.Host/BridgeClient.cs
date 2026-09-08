@@ -333,6 +333,22 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<SetSolutionConfigurationResponse> SetSolutionConfigurationAsync(
+        SetSolutionConfigurationRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<SetSolutionConfigurationRequest, SetSolutionConfigurationResponse>(
+            BridgeMethods.SetSolutionConfiguration,
+            request,
+            cancellationToken);
+
+    public Task<GetOutputPanesResponse> GetOutputPanesAsync(
+        GetOutputPanesRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetOutputPanesRequest, GetOutputPanesResponse>(
+            BridgeMethods.GetOutputPanes,
+            request,
+            cancellationToken);
+
     public Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
         DebuggerThreadControlRequest request,
         CancellationToken cancellationToken) =>

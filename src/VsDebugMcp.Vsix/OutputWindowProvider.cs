@@ -69,6 +69,61 @@ internal sealed class OutputWindowProvider
         }
     }
 
+    public async Task<GetOutputPanesResponse> GetPanesAsync(
+        GetOutputPanesRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        try
+        {
+            var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2
+                ?? throw new OutputWindowProviderException();
+
+            var response = new GetOutputPanesResponse
+            {
+                VsInstanceId = _vsInstanceId
+            };
+
+            foreach (OutputWindowPane pane in dte.ToolWindows.OutputWindow.OutputWindowPanes)
+            {
+                string paneGuidStr = pane.Guid ?? string.Empty;
+                bool isBuiltIn = false;
+                if (Guid.TryParse(paneGuidStr, out var paneGuid))
+                {
+                    if (paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid ||
+                        paneGuid == VSConstants.OutputWindowPaneGuid.DebugPane_guid ||
+                        paneGuid == VSConstants.OutputWindowPaneGuid.GeneralPane_guid ||
+                        paneGuid == VSConstants.OutputWindowPaneGuid.SortedBuildOutputPane_guid)
+                    {
+                        isBuiltIn = true;
+                    }
+                }
+
+                response.Panes.Add(new OutputPaneInfo
+                {
+                    Name = pane.Name ?? string.Empty,
+                    Guid = paneGuidStr,
+                    IsBuiltIn = isBuiltIn
+                });
+            }
+
+            response.TotalCount = response.Panes.Count;
+            return response;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (OutputWindowProviderException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            throw new OutputWindowProviderException(exception);
+        }
+    }
+
     internal static string ReadPaneOutput(DTE2 dte, string source)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
@@ -79,6 +134,15 @@ internal sealed class OutputWindowProvider
             {
                 if (Guid.TryParse(pane.Guid, out var paneGuid) &&
                     paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid)
+                {
+                    matchedPane = pane;
+                    break;
+                }
+            }
+            else if (string.Equals(source, "debug", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Guid.TryParse(pane.Guid, out var paneGuid) &&
+                    paneGuid == VSConstants.OutputWindowPaneGuid.DebugPane_guid)
                 {
                     matchedPane = pane;
                     break;
@@ -98,9 +162,16 @@ internal sealed class OutputWindowProvider
             return string.Empty;
         }
 
-        var document = matchedPane.TextDocument;
-        var editPoint = document.StartPoint.CreateEditPoint();
-        return editPoint.GetText(document.EndPoint);
+        try
+        {
+            var document = matchedPane.TextDocument;
+            var editPoint = document.StartPoint.CreateEditPoint();
+            return editPoint.GetText(document.EndPoint);
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 }
 

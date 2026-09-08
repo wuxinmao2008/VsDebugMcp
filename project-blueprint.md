@@ -13,6 +13,24 @@
 
 ## 实施进度（2026-09-08 更新）
 
+### Phase 5B：解决方案配置切换、多窗格日志与优化提醒已完成开发并通过全链路在线实测验收 (v0.1.17.0)
+
+- **解决方案构建配置一键切换 (`vs_set_solution_configuration`)**：
+  - 基于 Visual Studio COM 原生 `cfg.Activate()`，支持按 `configuration`（`Debug`/`Release`）与可选 `platform`（`x64`/`Any CPU`/`Win32`）一键切换活动构建配置；
+  - 接入调试器状态防死锁与状态防卫机制：若调试器处于运行态（`dbgRunMode`）或中断态（`dbgBreakMode`），严格拦截并返回结构化错误码 `cannot_switch_configuration_while_debugging`，杜绝破坏调试状态与符号加载；
+  - 切换完成后回显 `previousConfiguration`、`previousPlatform` 与 `activeConfiguration`、`activePlatform`。
+- **输出窗口多窗格与日志自省 (`vs_get_output_panes` + `vs_get_output_window_logs` 升级)**：
+  - **`vs_get_output_panes`**：枚举当前输出窗口中所有活动窗格（Name、GUID、`isBuiltIn`），支持工控场景中应用自定义窗格（如 `UILOG`、`数据库输出`、`VsDebugMcp`）的自主发现；
+  - **`vs_get_output_window_logs` 接入标准调试窗格**：在 `OutputWindowProvider` 中接入标准 `VSConstants.OutputWindowPaneGuid.DebugPane_guid`（`{FC076020-078A-11D1-A7DF-00A0C9110051}`），语言无关兼容中文版 Visual Studio（`调试` 窗格），实时抓取 Qt 的 `qDebug()`、Windows 原生 `OutputDebugString` 与 CLR 调试输出；
+  - 增强未初始化或空窗格读取的容错防崩保护。
+- **变量优化态智能诊断建议（Smart Optimization Warnings）**：
+  - 在 `vs_debugger_evaluate_expr`、`vs_debugger_evaluate_expressions` 和 `vs_debugger_get_locals` 中，当求值结果包含 `<optimized away>`、`<not available>` 或变量求值无效时，检测当前 Visual Studio 活动方案配置；
+  - 若检测到处于 `Release` 配置，自动在响应的 `warnings` 列表中附加结构化诊断提示：`variable_optimized_in_release`，指引 Agent 使用 `vs_set_solution_configuration(configuration: "Debug")` 进行重新编译与调试。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (19/19 PASS) + `VsDebugMcp.Host.Tests` (132/132 PASS)，全套 151 个单元测试 100% 通过；
+  - MCP 工具总数扩充至 **46 个**；
+  - 组件版本统一升级至 **`0.1.17.0`**。
+
 ### Phase 5A：调用栈强类型修复与断点全生命周期治理已完成开发 (v0.1.16.0)
 
 - **调用栈原生强类型属性提取 (`vs_debugger_get_call_stack`)**：

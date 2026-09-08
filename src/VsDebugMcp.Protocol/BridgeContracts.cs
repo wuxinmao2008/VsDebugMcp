@@ -441,6 +441,9 @@ public sealed class DebuggerEvaluateExprResponse
 
     [DataMember(Name = "frameIndex", Order = 6)]
     public int FrameIndex { get; set; }
+
+    [DataMember(Name = "warnings", Order = 7)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
 }
 
 [DataContract]
@@ -1715,6 +1718,80 @@ public sealed class DebuggerToggleBreakpointResponse
 
     [DataMember(Name = "breakpoints", Order = 3)]
     public List<BreakpointInfo> Breakpoints { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class SetSolutionConfigurationRequest
+{
+    [DataMember(Name = "configuration", Order = 1)]
+    public string Configuration { get; set; } = string.Empty;
+
+    [DataMember(Name = "platform", Order = 2, EmitDefaultValue = false)]
+    public string? Platform { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 3, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class SetSolutionConfigurationResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "success", Order = 2)]
+    public bool Success { get; set; }
+
+    [DataMember(Name = "previousConfiguration", Order = 3)]
+    public string PreviousConfiguration { get; set; } = string.Empty;
+
+    [DataMember(Name = "previousPlatform", Order = 4)]
+    public string PreviousPlatform { get; set; } = string.Empty;
+
+    [DataMember(Name = "activeConfiguration", Order = 5)]
+    public string ActiveConfiguration { get; set; } = string.Empty;
+
+    [DataMember(Name = "activePlatform", Order = 6)]
+    public string ActivePlatform { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 7)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class OutputPaneInfo
+{
+    [DataMember(Name = "name", Order = 1)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "guid", Order = 2)]
+    public string Guid { get; set; } = string.Empty;
+
+    [DataMember(Name = "isBuiltIn", Order = 3)]
+    public bool IsBuiltIn { get; set; }
+}
+
+[DataContract]
+public sealed class GetOutputPanesRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class GetOutputPanesResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "panes", Order = 2)]
+    public List<OutputPaneInfo> Panes { get; set; } = new();
+
+    [DataMember(Name = "totalCount", Order = 3)]
+    public int TotalCount { get; set; }
 
     [DataMember(Name = "warnings", Order = 4)]
     public List<BridgeWarning> Warnings { get; set; } = new();

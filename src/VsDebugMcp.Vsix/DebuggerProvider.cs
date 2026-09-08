@@ -685,7 +685,7 @@ internal sealed class DebuggerProvider
 		}
 
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-		var debugger = await GetDebuggerAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 
 		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 		{
@@ -722,7 +722,7 @@ internal sealed class DebuggerProvider
 			var expr = debugger.GetExpression(request.Expression, UseAutoExpandRules: false, Timeout: timeoutMs);
 			if (expr == null)
 			{
-				return new DebuggerEvaluateExprResponse
+				var nullResp = new DebuggerEvaluateExprResponse
 				{
 					VsInstanceId = _vsInstanceId,
 					Expression = request.Expression,
@@ -731,13 +731,15 @@ internal sealed class DebuggerProvider
 					IsValid = false,
 					FrameIndex = targetFrameIndex
 				};
+				CheckOptimizationWarning(dte, nullResp.Value, false, nullResp.Warnings);
+				return nullResp;
 			}
 
 			string val = expr.Value ?? string.Empty;
 			string type = expr.Type ?? string.Empty;
 			bool isValid = expr.IsValidValue;
 
-			return new DebuggerEvaluateExprResponse
+			var resp = new DebuggerEvaluateExprResponse
 			{
 				VsInstanceId = _vsInstanceId,
 				Expression = request.Expression,
@@ -746,10 +748,12 @@ internal sealed class DebuggerProvider
 				IsValid = isValid,
 				FrameIndex = targetFrameIndex
 			};
+			CheckOptimizationWarning(dte, val, isValid, resp.Warnings);
+			return resp;
 		}
 		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
 		{
-			return new DebuggerEvaluateExprResponse
+			var errResp = new DebuggerEvaluateExprResponse
 			{
 				VsInstanceId = _vsInstanceId,
 				Expression = request.Expression,
@@ -758,6 +762,8 @@ internal sealed class DebuggerProvider
 				IsValid = false,
 				FrameIndex = targetFrameIndex
 			};
+			CheckOptimizationWarning(dte, ex.Message, false, errResp.Warnings);
+			return errResp;
 		}
 		finally
 		{
@@ -952,7 +958,7 @@ internal sealed class DebuggerProvider
 		}
 
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-		var debugger = await GetDebuggerAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 
 		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 		{
@@ -1032,11 +1038,22 @@ internal sealed class DebuggerProvider
 				}
 			}
 
+			var warnings = new List<BridgeWarning>();
+			foreach (var res in results)
+			{
+				CheckOptimizationWarning(dte, res.Value, res.IsValid, warnings);
+				if (warnings.Count > 0)
+				{
+					break;
+				}
+			}
+
 			return new DebuggerEvaluateExpressionsResponse
 			{
 				VsInstanceId = _vsInstanceId,
 				FrameIndex = targetFrameIndex,
-				Results = results
+				Results = results,
+				Warnings = warnings
 			};
 		}
 		finally
@@ -1059,7 +1076,7 @@ internal sealed class DebuggerProvider
 		CancellationToken cancellationToken)
 	{
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-		var debugger = await GetDebuggerAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 
 		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 		{
@@ -1157,6 +1174,15 @@ internal sealed class DebuggerProvider
 				Code = "locals_read_failed",
 				Message = $"Failed to read function locals: {ex.Message}"
 			});
+		}
+
+		foreach (var v in variables)
+		{
+			CheckOptimizationWarning(dte, v.Value, true, warnings);
+			if (warnings.Exists(w => w.Code == "variable_optimized_in_release"))
+			{
+				break;
+			}
 		}
 
 		return new DebuggerGetLocalsResponse
@@ -2405,6 +2431,54 @@ internal sealed class DebuggerProvider
 
 	private static int Clamp(int value, int min, int max) =>
 		value < min ? min : (value > max ? max : value);
+
+	private static string GetActiveSolutionConfigurationName(DTE2 dte)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		try
+		{
+			if (dte.Solution?.SolutionBuild?.ActiveConfiguration is SolutionConfiguration2 sc2)
+			{
+				return sc2.Name ?? string.Empty;
+			}
+			if (dte.Solution?.SolutionBuild?.ActiveConfiguration is SolutionConfiguration sc)
+			{
+				return sc.Name ?? string.Empty;
+			}
+		}
+		catch
+		{
+		}
+		return string.Empty;
+	}
+
+	private static void CheckOptimizationWarning(DTE2 dte, string? value, bool isValid, List<BridgeWarning> warnings)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		var text = value ?? string.Empty;
+		bool isOptimizedOrUnavailable =
+			!isValid ||
+			text.IndexOf("optimized away", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			text.IndexOf("not available", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			text.IndexOf("cannot be evaluated", StringComparison.OrdinalIgnoreCase) >= 0;
+
+		if (isOptimizedOrUnavailable)
+		{
+			var activeConfig = GetActiveSolutionConfigurationName(dte);
+			if (!string.IsNullOrEmpty(activeConfig) &&
+			    activeConfig.IndexOf("Release", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				if (!warnings.Exists(w => w.Code == "variable_optimized_in_release"))
+				{
+					warnings.Add(new BridgeWarning
+					{
+						Code = "variable_optimized_in_release",
+						Message = $"Evaluation yielded an unavailable or optimized result ('{text}'). Visual Studio is currently in '{activeConfig}' configuration. Consider switching to 'Debug' using 'vs_set_solution_configuration(configuration: \"Debug\")' and rebuilding to inspect unoptimized locals."
+					});
+				}
+			}
+		}
+	}
 }
 
 internal sealed class DebuggerProviderException : Exception

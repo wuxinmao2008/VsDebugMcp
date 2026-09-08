@@ -101,6 +101,9 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "line")]
     [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "enabled")]
     [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.SetSolutionConfigurationAsync), "platform")]
+    [InlineData(nameof(McpTools.SetSolutionConfigurationAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetOutputPanesAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -158,5 +161,31 @@ public sealed class McpToolSchemaTests
         Assert.Equal(expectedToolName, attr.Name);
         Assert.Equal(expectedReadOnly, attr.ReadOnly);
         Assert.True(attr.UseStructuredContent);
+    }
+
+    [Theory]
+    [InlineData("vs_set_solution_configuration", nameof(McpTools.SetSolutionConfigurationAsync), false)]
+    [InlineData("vs_get_output_panes", nameof(McpTools.GetOutputPanesAsync), true)]
+    public void AllPhase5BToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
+    [Fact]
+    public void Exactly46ToolsAreRegisteredOnMcpTools()
+    {
+        var toolMethods = typeof(McpTools)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+            .Where(m => m.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>() != null)
+            .ToList();
+
+        Assert.Equal(46, toolMethods.Count);
     }
 }

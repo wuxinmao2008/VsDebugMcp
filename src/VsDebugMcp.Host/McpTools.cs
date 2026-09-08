@@ -157,9 +157,9 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the tail of the current Visual Studio Output window pane. The initial version supports the build pane only.")]
+    [Description("Returns the tail of the current Visual Studio Output window pane. Supports \"build\" (default), \"debug\" (for qDebug, OutputDebugString, CLR logs), or custom pane names such as \"UILOG\".")]
     public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
-        [Description("Optional output source. The only supported value is build, which is also the default.")] string? source = null,
+        [Description("Optional output source pane name or type. Defaults to \"build\". Supports \"build\", \"debug\", or a custom pane name.")] string? source = null,
         [Description("Optional maximum number of trailing characters from 1 through 500000. Defaults to 20000.")] int? maxChars = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
@@ -709,6 +709,38 @@ public sealed class McpTools
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.GetSolutionConfigurationsAsync(
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_set_solution_configuration",
+        ReadOnly = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Activates the specified build configuration and optional platform for the open solution (e.g., Debug/Release, x64/Any CPU).")]
+    public Task<SetSolutionConfigurationResponse> SetSolutionConfigurationAsync(
+        [Description("The target configuration name (e.g., 'Debug', 'Release').")] string configuration,
+        [Description("Optional target platform name (e.g., 'x64', 'Any CPU', 'Win32').")] string? platform = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.SetSolutionConfigurationAsync(
+            configuration,
+            platform,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_get_output_panes",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves all available panes in the Visual Studio Output window, including built-in and custom panes (e.g. Build, Debug, General, UILOG).")]
+    public Task<GetOutputPanesResponse> GetOutputPanesAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetOutputPanesAsync(
             vsInstanceId,
             cancellationToken));
 

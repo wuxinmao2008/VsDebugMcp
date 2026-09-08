@@ -253,6 +253,108 @@ internal sealed class ActiveContextEditorProvider
 
         return response;
     }
+
+    public async Task<SetSolutionConfigurationResponse> SetSolutionConfigurationAsync(
+        SetSolutionConfigurationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Configuration))
+        {
+            throw new ActiveContextEditorException(BridgeErrorCodes.InvalidRequest, "Configuration name must be specified.", false);
+        }
+
+        await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2
+            ?? throw new ActiveContextEditorException(BridgeErrorCodes.SolutionStateUnavailable, "Visual Studio DTE is unavailable.", true);
+
+        if (dte.Solution == null || !dte.Solution.IsOpen)
+        {
+            throw new ActiveContextEditorException(BridgeErrorCodes.SolutionNotOpen, "No solution is currently open in Visual Studio.", false);
+        }
+
+        if (dte.Debugger != null && dte.Debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
+        {
+            throw new ActiveContextEditorException(BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging, "Cannot switch solution configuration while debugging is active.", false);
+        }
+
+        var solutionBuild = dte.Solution.SolutionBuild
+            ?? throw new ActiveContextEditorException(BridgeErrorCodes.SolutionStateUnavailable, "Solution build manager is unavailable.", true);
+
+        string prevCfg = string.Empty;
+        string prevPlat = string.Empty;
+        if (solutionBuild.ActiveConfiguration is SolutionConfiguration2 activeCfg2)
+        {
+            prevCfg = activeCfg2.Name ?? string.Empty;
+            prevPlat = activeCfg2.PlatformName ?? string.Empty;
+        }
+        else if (solutionBuild.ActiveConfiguration is SolutionConfiguration activeCfg)
+        {
+            prevCfg = activeCfg.Name ?? string.Empty;
+        }
+
+        SolutionConfiguration? matchedCfg = null;
+        if (solutionBuild.SolutionConfigurations is SolutionConfigurations cfgs)
+        {
+            foreach (SolutionConfiguration cfg in cfgs)
+            {
+                string name = cfg.Name ?? string.Empty;
+                string platform = string.Empty;
+                if (cfg is SolutionConfiguration2 c2)
+                {
+                    platform = c2.PlatformName ?? string.Empty;
+                }
+
+                if (string.Equals(name, request.Configuration.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(request.Platform) ||
+                        string.Equals(platform, request.Platform.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedCfg = cfg;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (matchedCfg == null)
+        {
+            string msg = string.IsNullOrWhiteSpace(request.Platform)
+                ? $"Configuration '{request.Configuration}' was not found in the solution."
+                : $"Configuration '{request.Configuration}' with platform '{request.Platform}' was not found in the solution.";
+            throw new ActiveContextEditorException(BridgeErrorCodes.ConfigurationNotFound, msg, false);
+        }
+
+        try
+        {
+            matchedCfg.Activate();
+        }
+        catch (Exception ex)
+        {
+            throw new ActiveContextEditorException(BridgeErrorCodes.InternalError, $"Failed to activate solution configuration: {ex.Message}", false, ex);
+        }
+
+        string newCfg = string.Empty;
+        string newPlat = string.Empty;
+        if (solutionBuild.ActiveConfiguration is SolutionConfiguration2 newActive2)
+        {
+            newCfg = newActive2.Name ?? string.Empty;
+            newPlat = newActive2.PlatformName ?? string.Empty;
+        }
+        else if (solutionBuild.ActiveConfiguration is SolutionConfiguration newActive)
+        {
+            newCfg = newActive.Name ?? string.Empty;
+        }
+
+        return new SetSolutionConfigurationResponse
+        {
+            VsInstanceId = _vsInstanceId,
+            Success = true,
+            PreviousConfiguration = prevCfg,
+            PreviousPlatform = prevPlat,
+            ActiveConfiguration = newCfg,
+            ActivePlatform = newPlat
+        };
+    }
 }
 
 internal sealed class ActiveContextEditorException : Exception

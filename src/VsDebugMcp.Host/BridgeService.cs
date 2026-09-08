@@ -233,6 +233,16 @@ public interface IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
+    Task<SetSolutionConfigurationResponse> SetSolutionConfigurationAsync(
+        string configuration,
+        string? platform,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<GetOutputPanesResponse> GetOutputPanesAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
     Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
         int threadId,
         string? vsInstanceId,
@@ -854,6 +864,36 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<SetSolutionConfigurationResponse> SetSolutionConfigurationAsync(
+        string configuration,
+        string? platform,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.SetSolutionConfigurationAsync(
+                new SetSolutionConfigurationRequest
+                {
+                    Configuration = configuration,
+                    Platform = platform,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<GetOutputPanesResponse> GetOutputPanesAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetOutputPanesAsync(
+                new GetOutputPanesRequest
+                {
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
     public Task<DebuggerThreadControlResponse> DebuggerFreezeThreadAsync(
         int threadId,
         string? vsInstanceId,
@@ -1121,6 +1161,21 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.InvalidBreakpointTarget => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.ConfigurationNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.OutputPaneNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging => new(
                 exception.Code,
                 exception.Message,
                 false,

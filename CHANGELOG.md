@@ -5,6 +5,33 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17.0] - 2026-09-08
+
+### Added
+- **Solution Configuration Activation, Multi-Pane Output Logs & Smart Optimization Warnings (Phase 5B)**:
+  - **Solution Configuration Switching (`vs_set_solution_configuration`)**:
+    - Switches active build configuration and platform across the solution (e.g. `Debug` <-> `Release`, `x64` <-> `Any CPU`) via COM `cfg.Activate()`.
+    - Enforces defensive safety checks: rejects configuration switching while debugging is active (`dbgRunMode` or `dbgBreakMode`) with `cannot_switch_configuration_while_debugging`.
+  - **Output Window Multi-Pane Introspection (`vs_get_output_panes`)**:
+    - Enumerates all available panes in the Visual Studio Output window (Name, GUID, isBuiltIn), allowing agents to discover both built-in panes and custom application panes (e.g. `UILOG`, `Database`, `VsDebugMcp`).
+  - **Debug Output Window Pane Support (`vs_get_output_window_logs`)**:
+    - Upgraded `ReadPaneOutput` with language-independent `VSConstants.OutputWindowPaneGuid.DebugPane_guid` (`{FC076020-078A-11D1-A7DF-00A0C9110051}`).
+    - Allows agents to capture live debug output including Qt `qDebug()`, native `OutputDebugString`, and CLR trace messages on localized Visual Studio installations (e.g. Chinese `调试`).
+    - Added resilient fallback for uninitialized/empty output window panes.
+  - **Smart Optimization Warnings in Debugger**:
+    - Automatically detects `<optimized away>` or unavailable evaluation results while the active solution configuration is `Release`.
+    - Attaches structured `BridgeWarning` with guidance to switch to `Debug` configuration via `vs_set_solution_configuration(configuration: "Debug")`.
+  - Added new error codes: `configuration_not_found`, `output_pane_not_found`, `cannot_switch_configuration_while_debugging`.
+
+### Verified
+- Automated unit tests: 151/151 PASS (100% across Protocol and Host test suites: 19/19 Protocol tests, 132/132 Host tests).
+- Total registered MCP tools expanded from 44 to 46.
+- Live verified against Visual Studio 18 Experimental Instance:
+  - `vs_get_solution_configurations` / `vs_set_solution_configuration`: Switched `Debug` -> `Release` -> `Debug` with full state fidelity.
+  - Guard verification: configuration switching successfully rejected while debugging with `cannot_switch_configuration_while_debugging`.
+  - `vs_get_output_panes`: Discovered 11 panes (including Chinese `生成`, `调试`, `VsDebugMcp`, `GitHub Copilot`).
+  - `vs_get_output_window_logs`: Successfully retrieved both build logs and live debug output (CoreCLR module load traces).
+
 ## [0.1.16.0] - 2026-09-08
 
 ### Added

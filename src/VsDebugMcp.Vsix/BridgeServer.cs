@@ -840,6 +840,40 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
                 }
+            case BridgeMethods.SetSolutionConfiguration:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new SetSolutionConfigurationRequest()
+                        : BridgeJson.Deserialize<SetSolutionConfigurationRequest>(request.PayloadJson!);
+                    var result = await _activeContextEditorProvider.SetSolutionConfigurationAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The set solution configuration request payload is invalid.", false), false);
+                }
+                catch (ActiveContextEditorException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
+            case BridgeMethods.GetOutputPanes:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new GetOutputPanesRequest()
+                        : BridgeJson.Deserialize<GetOutputPanesRequest>(request.PayloadJson!);
+                    var result = await _outputWindowProvider.GetPanesAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get output panes request payload is invalid.", false), false);
+                }
+                catch (OutputWindowProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -1259,6 +1293,18 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_toggle_breakpoint",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_set_solution_configuration",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_output_panes",
                 Version = "0.1",
                 IsStub = false
             }

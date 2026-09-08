@@ -919,4 +919,78 @@ public sealed class InstanceProtocolTests
         Assert.Equal(1, toggleRespCopy.MatchedCount);
         Assert.False(toggleRespCopy.Breakpoints[0].Enabled);
     }
+
+    [Fact]
+    public void Phase5BSolutionConfigurationAndOutputPanesRoundTripThroughSharedSerializer()
+    {
+        var setCfgReq = new SetSolutionConfigurationRequest
+        {
+            Configuration = "Release",
+            Platform = "x64",
+            VsInstanceId = "vs-1"
+        };
+        var setCfgReqCopy = BridgeJson.Deserialize<SetSolutionConfigurationRequest>(BridgeJson.Serialize(setCfgReq));
+        Assert.Equal("Release", setCfgReqCopy.Configuration);
+        Assert.Equal("x64", setCfgReqCopy.Platform);
+        Assert.Equal("vs-1", setCfgReqCopy.VsInstanceId);
+
+        var setCfgResp = new SetSolutionConfigurationResponse
+        {
+            VsInstanceId = "vs-1",
+            Success = true,
+            PreviousConfiguration = "Debug",
+            PreviousPlatform = "x64",
+            ActiveConfiguration = "Release",
+            ActivePlatform = "x64"
+        };
+        var setCfgRespCopy = BridgeJson.Deserialize<SetSolutionConfigurationResponse>(BridgeJson.Serialize(setCfgResp));
+        Assert.True(setCfgRespCopy.Success);
+        Assert.Equal("Debug", setCfgRespCopy.PreviousConfiguration);
+        Assert.Equal("Release", setCfgRespCopy.ActiveConfiguration);
+
+        var panesReq = new GetOutputPanesRequest { VsInstanceId = "vs-1" };
+        var panesReqCopy = BridgeJson.Deserialize<GetOutputPanesRequest>(BridgeJson.Serialize(panesReq));
+        Assert.Equal("vs-1", panesReqCopy.VsInstanceId);
+
+        var panesResp = new GetOutputPanesResponse
+        {
+            VsInstanceId = "vs-1",
+            TotalCount = 3,
+            Panes = new List<OutputPaneInfo>
+            {
+                new() { Name = "Build", Guid = "1bd8a850-02d1-11d1-bee7-00a0c913d1f8", IsBuiltIn = true },
+                new() { Name = "Debug", Guid = "fc076020-078a-11d1-a7df-00a0c9110051", IsBuiltIn = true },
+                new() { Name = "UILOG", Guid = "c4b4d682-1678-4eb1-9988-66236bdf483b", IsBuiltIn = false }
+            }
+        };
+        var panesRespCopy = BridgeJson.Deserialize<GetOutputPanesResponse>(BridgeJson.Serialize(panesResp));
+        Assert.Equal(3, panesRespCopy.TotalCount);
+        Assert.Equal("Build", panesRespCopy.Panes[0].Name);
+        Assert.True(panesRespCopy.Panes[1].IsBuiltIn);
+        Assert.False(panesRespCopy.Panes[2].IsBuiltIn);
+
+        var evalResp = new DebuggerEvaluateExprResponse
+        {
+            VsInstanceId = "vs-1",
+            Expression = "m_plcDriver",
+            Value = "<optimized away>",
+            Type = "QModbusRtuSerialMaster*",
+            IsValid = false,
+            FrameIndex = 0,
+            Warnings = new List<BridgeWarning>
+            {
+                new()
+                {
+                    Code = "variable_optimized_in_release",
+                    Message = "Consider switching to Debug configuration."
+                }
+            }
+        };
+        var evalRespCopy = BridgeJson.Deserialize<DebuggerEvaluateExprResponse>(BridgeJson.Serialize(evalResp));
+        Assert.Equal("m_plcDriver", evalRespCopy.Expression);
+        Assert.Equal("<optimized away>", evalRespCopy.Value);
+        Assert.False(evalRespCopy.IsValid);
+        Assert.Single(evalRespCopy.Warnings);
+        Assert.Equal("variable_optimized_in_release", evalRespCopy.Warnings[0].Code);
+    }
 }
