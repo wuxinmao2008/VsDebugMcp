@@ -13,6 +13,26 @@
 
 ## 实施进度（2026-09-08 更新）
 
+### Phase 4D：生态集成与开箱即用体验已完成开发 (v0.1.15.0)
+
+- **IDE 原生配置中心第一触点 (`扩展 -> VsDebugMcp`)**：
+  - 参考 Qt VS Tools 等现代扩展规范，在 Visual Studio 顶部菜单栏 **`扩展 (Extensions) -> VsDebugMcp`** 建立常驻入口；
+  - 点击弹出独立模态 WPF 对话框 `ClientConfigWindow`，绑定 VS 主窗口宿主，界面直观聚焦当前监听端口（默认 `43260`）；
+  - 提供快捷 IDE 切换按钮（`[ VS Code ]` `[ Cursor ]` `[ Claude Desktop ]` `[ Antigravity ]` `[ Codex/Windsurf ]`）。
+- **零侵入、无风险安全原则**：
+  - 严禁自动注入或篡改用户机器的任何已有配置文件，避免格式破坏、参数丢失或格式冒犯；
+  - 仅提供规范可视化 Sample JSON 与推荐目标路径，由开发者一键复制并自主粘贴保存。
+- **作用域区分 (Global vs. Local)**：
+  - **全局配置 (Global)**：清晰指引 `%USERPROFILE%` / `%APPDATA%` 下的系统绝对路径，适用跨工程无缝使用；
+  - **本地项目配置 (Local)**：提供工作区相对路径（如 `.vscode/mcp.json`、`.cursor/mcp.json`），便于提交 Git 共享；
+  - 针对 Claude Desktop 等仅支持全局配置的客户端自动提示并置灰本地选项。
+- **极简克制的协议面**：
+  - 剔除多余的跨 Agent 代配 MCP 工具，避免外部 Agent 上下文遭受元配置工具污染；
+  - 保持 MCP 工具面（38 个工具）完全聚焦于 IDE 构建、诊断、测试与调试核心能力。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (17/17 PASS) + `VsDebugMcp.Host.Tests` (105/105 PASS)，全套 122 个单测 100% 通过；
+  - 组件版本统一升级至 **`0.1.15.0`**。
+
 ### Phase 4C：高级调试控制深化已完成开发 (v0.1.14.0)
 
 - **线程精细化挂起与解冻 (`vs_debugger_freeze_thread` / `vs_debugger_thaw_thread`)**：

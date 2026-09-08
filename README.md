@@ -43,7 +43,19 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_evaluate_expressions` — Single-RPC batch expressions evaluation
 - `vs_debugger_step_over` / `step_into` / `step_out` — Stepping execution control
 - `vs_debugger_continue` / `pause` / `stop` — Session continuation, pause, and termination
+- `vs_debugger_freeze_thread` / `thaw_thread` — Precise thread suspension and resumption during pause
+- `vs_debugger_set_next_statement` — Dynamic instruction pointer repositioning without recompilation
 
+### Process Attach & Module Diagnostics (Phase 3C)
+- `vs_debugger_get_processes` — Local process enumeration with debugger attachment eligibility
+- `vs_debugger_attach_process` — Programmatic debugger attach to running processes by PID
+- `vs_debugger_detach` — Graceful debugger detachment leaving processes running
+- `vs_debugger_get_modules` — Loaded module enumeration with symbol load status (PDB), file paths, and memory addresses
+
+### Active Context & Editor Navigation (Phase 4A)
+- `vs_get_active_document` — Foreground active editor document inspection with dirty flag, language, line count, cursor position, and text selection
+- `vs_navigate_to` — Smooth navigation to files with precise line/column positioning
+- `vs_get_solution_configurations` — Solution configuration and platform discovery
 
 ### Test Explorer & Test-Driven Debugging (Phase 3 & 3A)
 - `vs_get_tests` — Solution test discovery with optional filters
@@ -51,6 +63,12 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_get_test_run_status` — Real-time test run state, progress, execution metrics, and per-test outcomes
 - `vs_cancel_test_run` — Active test run cancellation
 - `vs_debug_test_by_id` — Programmatic test debugging by test ID with smart breakpoint landing probe
+
+### Client Onboarding & Ecosystem Guide (Phase 4D)
+- Native Visual Studio top-level menu: **`Extensions (扩展) -> VsDebugMcp`**
+- Interactive WPF Configuration Guide with presets for **VS Code**, **Cursor**, **Claude Desktop**, **Antigravity**, and **Codex/Windsurf**
+- Clear **Global vs. Local (Workspace)** scope differentiation with one-click clipboard copying
+- Strictly zero-intrusion: 100% human-controlled, never modifies user configuration files automatically
 
 ### In action
 
