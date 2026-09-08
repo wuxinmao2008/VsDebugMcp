@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
@@ -21,14 +24,36 @@ internal sealed class DebuggerProvider
 	private const int DefaultTimeoutMs = 2000;
 	private const int MaxAllowedTimeoutMs = 10000;
 
+	private const uint PROCESS_VM_READ = 0x0010;
+	private const uint PROCESS_QUERY_INFORMATION = 0x0400;
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern bool CloseHandle(IntPtr hObject);
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern bool ReadProcessMemory(
+		IntPtr hProcess,
+		IntPtr lpBaseAddress,
+		[Out] byte[] lpBuffer,
+		int dwSize,
+		out IntPtr lpNumberOfBytesRead);
+
 	private readonly AsyncPackage _package;
 	private readonly string _vsInstanceId;
+	private readonly OutputWindowProvider? _outputWindowProvider;
 	private readonly SemaphoreSlim _executionLock = new(1, 1);
 
-	public DebuggerProvider(AsyncPackage package, string vsInstanceId)
+	public DebuggerProvider(
+		AsyncPackage package,
+		string vsInstanceId,
+		OutputWindowProvider? outputWindowProvider = null)
 	{
 		_package = package;
 		_vsInstanceId = vsInstanceId;
+		_outputWindowProvider = outputWindowProvider;
 	}
 
 	public async Task<DebuggerGetInfoResponse> GetInfoAsync(
@@ -104,6 +129,182 @@ internal sealed class DebuggerProvider
 			CurrentThreadName = threadName,
 			BreakpointCount = breakpointCount,
 			LastBreakReason = breakReason
+		};
+	}
+
+	public async Task<DebuggerGetSnapshotResponse> GetSnapshotAsync(
+		DebuggerGetSnapshotRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
+		var mode = GetModeString(debugger.CurrentMode);
+
+		int? processId = null;
+		string? processName = null;
+		int? threadId = null;
+		string? threadName = null;
+		string? breakReason = null;
+		StackFrameInfo? topFrame = null;
+		var callStack = new List<StackFrameInfo>();
+		var locals = new List<DebuggerVariableInfo>();
+		var warnings = new List<BridgeWarning>();
+		string? recentLogs = null;
+
+		if (isDebugging)
+		{
+			try
+			{
+				var proc = debugger.CurrentProcess;
+				if (proc != null)
+				{
+					processId = proc.ProcessID;
+					processName = proc.Name;
+				}
+			}
+			catch { }
+
+			try
+			{
+				var thread = debugger.CurrentThread;
+				if (thread != null)
+				{
+					threadId = thread.ID;
+					threadName = thread.Name;
+				}
+			}
+			catch { }
+
+			try
+			{
+				breakReason = GetBreakReasonString(debugger.LastBreakReason);
+			}
+			catch { }
+		}
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+		{
+			try
+			{
+				var frame = debugger.CurrentStackFrame;
+				if (frame != null)
+				{
+					topFrame = ReadStackFrame(frame, 0);
+				}
+			}
+			catch { }
+
+			if (request.IncludeCallStack)
+			{
+				try
+				{
+					var maxFrames = Clamp(request.MaxFrames ?? 10, 1, MaxAllowedFrames);
+					var th = debugger.CurrentThread;
+					if (th?.StackFrames != null)
+					{
+						var idx = 0;
+						foreach (StackFrame sf in th.StackFrames)
+						{
+							cancellationToken.ThrowIfCancellationRequested();
+							if (idx >= maxFrames) break;
+							callStack.Add(ReadStackFrame(sf, idx));
+							idx++;
+						}
+					}
+				}
+				catch { }
+			}
+
+			if (request.IncludeLocals)
+			{
+				try
+				{
+					var maxLocals = Clamp(request.MaxLocals ?? 50, 1, 200);
+					var frame = debugger.CurrentStackFrame;
+					if (frame?.Locals != null)
+					{
+						var idx = 0;
+						foreach (Expression expr in frame.Locals)
+						{
+							cancellationToken.ThrowIfCancellationRequested();
+							if (idx >= maxLocals) break;
+							var val = string.Empty;
+							var type = string.Empty;
+							var isValid = false;
+							try { val = expr.Value ?? string.Empty; } catch { }
+							try { type = expr.Type ?? string.Empty; } catch { }
+							try { isValid = expr.IsValidValue; } catch { }
+
+							CheckOptimizationWarning(dte, val, isValid, warnings);
+
+							locals.Add(new DebuggerVariableInfo
+							{
+								Name = expr.Name ?? string.Empty,
+								Value = val,
+								Type = type,
+								IsArgument = false
+							});
+							idx++;
+						}
+					}
+				}
+				catch { }
+			}
+		}
+
+		if (request.IncludeRecentLogs && _outputWindowProvider != null)
+		{
+			try
+			{
+				var logLines = Clamp(request.RecentLogLines ?? 30, 1, 200);
+				var source = string.IsNullOrWhiteSpace(request.LogSource) ? "debug" : request.LogSource.Trim();
+				var logResp = await _outputWindowProvider.GetLogsAsync(new GetOutputWindowLogsRequest
+				{
+					Source = source,
+					MaxChars = logLines * 200
+				}, cancellationToken);
+
+				if (!string.IsNullOrEmpty(logResp.Text))
+				{
+					var lines = logResp.Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+					if (lines.Length > logLines)
+					{
+						recentLogs = string.Join(Environment.NewLine, lines.Skip(lines.Length - logLines));
+					}
+					else
+					{
+						recentLogs = logResp.Text;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				warnings.Add(new BridgeWarning
+				{
+					Code = "recent_logs_unavailable",
+					Message = $"Failed to retrieve recent logs: {ex.Message}"
+				});
+			}
+		}
+
+		return new DebuggerGetSnapshotResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			Mode = mode,
+			IsDebugging = isDebugging,
+			CurrentProcessId = processId,
+			CurrentProcessName = processName,
+			CurrentThreadId = threadId,
+			CurrentThreadName = threadName,
+			LastBreakReason = breakReason,
+			TopFrame = topFrame,
+			CallStack = callStack,
+			Locals = locals,
+			RecentLogs = recentLogs,
+			LogSource = request.IncludeRecentLogs ? (request.LogSource ?? "debug") : null,
+			Warnings = warnings
 		};
 	}
 
@@ -1193,6 +1394,172 @@ internal sealed class DebuggerProvider
 			Variables = variables,
 			TotalCount = totalCount,
 			Truncated = totalCount > variables.Count,
+			Warnings = warnings
+		};
+	}
+
+	public async Task<DebuggerReadMemoryResponse> ReadMemoryAsync(
+		DebuggerReadMemoryRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.Address))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "Address is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"Cannot read process memory when not debugging (debugger is in design mode).");
+		}
+
+		var currentProcess = debugger.CurrentProcess;
+		if (currentProcess == null)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.ProcessNotFound,
+				"No debugged process is currently active.");
+		}
+
+		var pid = currentProcess.ProcessID;
+		var rawAddress = request.Address.Trim();
+		ulong resolvedAddr = 0;
+		var parsed = false;
+
+		// 1. Try parse direct hex number e.g. "0x00401000", "0x7FFE1234", "00401000"
+		if (rawAddress.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+		{
+			parsed = ulong.TryParse(rawAddress.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
+		}
+		else if (rawAddress.All(c => Uri.IsHexDigit(c)) && rawAddress.Length >= 4)
+		{
+			parsed = ulong.TryParse(rawAddress, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
+		}
+
+		// 2. If not parsed directly, try evaluate as expression (e.g. pointer variable "pBuffer" or "&variable")
+		if (!parsed)
+		{
+			try
+			{
+				var expr = debugger.GetExpression(rawAddress, UseAutoExpandRules: false, Timeout: 2000);
+				if (expr != null && expr.IsValidValue && !string.IsNullOrWhiteSpace(expr.Value))
+				{
+					var val = expr.Value.Trim();
+					var match = Regex.Match(val, @"0x[0-9a-fA-F]+");
+					if (match.Success)
+					{
+						parsed = ulong.TryParse(match.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
+					}
+					else if (ulong.TryParse(val, out var decAddr))
+					{
+						resolvedAddr = decAddr;
+						parsed = true;
+					}
+				}
+			}
+			catch { }
+		}
+
+		if (!parsed || resolvedAddr == 0)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InvalidMemoryAddress,
+				$"Unable to resolve memory address from '{request.Address}'. Ensure the variable or address is accessible in the current scope.");
+		}
+
+		var byteCount = Clamp(request.ByteCount, 1, 4096);
+		var warnings = new List<BridgeWarning>();
+
+		// 3. Read memory via Windows ReadProcessMemory
+		var hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid);
+		if (hProcess == IntPtr.Zero)
+		{
+			var lastError = Marshal.GetLastWin32Error();
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.MemoryReadFailed,
+				$"Failed to open process (PID: {pid}) for reading memory. Win32 error code: {lastError}");
+		}
+
+		byte[] buffer = new byte[byteCount];
+		int bytesRead = 0;
+
+		try
+		{
+			var success = ReadProcessMemory(hProcess, (IntPtr)(long)resolvedAddr, buffer, byteCount, out var bytesReadPtr);
+			bytesRead = (int)bytesReadPtr;
+
+			if (!success && bytesRead == 0)
+			{
+				var lastError = Marshal.GetLastWin32Error();
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.MemoryReadFailed,
+					$"ReadProcessMemory failed at address 0x{resolvedAddr:X16} (size: {byteCount}). Win32 error code: {lastError}");
+			}
+
+			if (bytesRead < byteCount)
+			{
+				Array.Resize(ref buffer, bytesRead);
+				warnings.Add(new BridgeWarning
+				{
+					Code = "partial_memory_read",
+					Message = $"Requested {byteCount} bytes, but only {bytesRead} bytes could be read (likely reached end of valid virtual memory page)."
+				});
+			}
+		}
+		finally
+		{
+			CloseHandle(hProcess);
+		}
+
+		// 4. Format representations
+		var hexBytes = string.Join(" ", buffer.Select(b => b.ToString("X2")));
+		var base64Data = Convert.ToBase64String(buffer);
+		var asciiRep = new string(buffer.Select(b => b >= 32 && b <= 126 ? (char)b : '.').ToArray());
+
+		var sb = new StringBuilder();
+		for (int i = 0; i < buffer.Length; i += 16)
+		{
+			var lineAddr = resolvedAddr + (ulong)i;
+			var lineBytesCount = Math.Min(16, buffer.Length - i);
+			sb.AppendFormat("{0:X8}  ", lineAddr);
+
+			for (int j = 0; j < 16; j++)
+			{
+				if (j == 8) sb.Append(' ');
+				if (j < lineBytesCount)
+				{
+					sb.AppendFormat("{0:X2} ", buffer[i + j]);
+				}
+				else
+				{
+					sb.Append("   ");
+				}
+			}
+
+			sb.Append(" |");
+			for (int j = 0; j < lineBytesCount; j++)
+			{
+				var b = buffer[i + j];
+				sb.Append(b >= 32 && b <= 126 ? (char)b : '.');
+			}
+			sb.Append('|');
+			if (i + 16 < buffer.Length) sb.AppendLine();
+		}
+
+		return new DebuggerReadMemoryResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ProcessId = pid,
+			ResolvedAddress = $"0x{resolvedAddr:X16}",
+			ByteCount = bytesRead,
+			HexBytes = hexBytes,
+			HexDump = sb.ToString(),
+			AsciiRepresentation = asciiRep,
+			Base64Data = base64Data,
 			Warnings = warnings
 		};
 	}

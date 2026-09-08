@@ -44,7 +44,7 @@ internal sealed class BridgeServer : IDisposable
         _solutionBuildProvider = solutionBuildProvider;
         _errorListProvider = new ErrorListProvider(package, instance.VsInstanceId);
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
-        _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId);
+        _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId, _outputWindowProvider);
         _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId, _debuggerProvider, diagnostics);
         _activeContextEditorProvider = new ActiveContextEditorProvider(package, instance.VsInstanceId);
     }
@@ -732,6 +732,40 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerGetSnapshot:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetSnapshotRequest()
+                        : BridgeJson.Deserialize<DebuggerGetSnapshotRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetSnapshotAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The debugger get snapshot request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerReadMemory:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerReadMemoryRequest()
+                        : BridgeJson.Deserialize<DebuggerReadMemoryRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ReadMemoryAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The debugger read memory request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.DebuggerDetach:
                 try
                 {
@@ -1351,6 +1385,18 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_auto_attach",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_snapshot",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_read_memory",
                 Version = "0.1",
                 IsStub = false
             }

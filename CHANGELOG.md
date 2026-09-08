@@ -5,6 +5,36 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19.0] - 2026-09-08
+
+### Added
+- **Aggregated Debugger Diagnostic Snapshot & Process Virtual Memory Read (Phase 5D)**:
+  - **Aggregated Debugger Snapshot (`vs_debugger_get_snapshot`)**:
+    - Single-call aggregation of full debugging diagnostics: execution mode, debugged process PID & path, thread ID, last break reason, top stack frame, full call stack, local variables/arguments, and recent Output window logs.
+    - Integrates smart Release mode `<optimized away>` warning detection on local variables.
+    - Gracefully handles design mode (`isDebugging: false`, empty collections, zero errors).
+    - Captures language-independent Output window debug logs (`VSConstants.OutputWindowPaneGuid.DebugPane_guid`) including `qDebug()`, `OutputDebugString`, and CoreCLR runtime logs.
+  - **Process Virtual Memory Read (`vs_debugger_read_memory`)**:
+    - Safely inspects raw virtual memory bytes from the debugged target process via Win32 `ReadProcessMemory` with `PROCESS_VM_READ | PROCESS_QUERY_INFORMATION`.
+    - Automatically resolves both direct hexadecimal addresses (`0x00007FFE354A0000`) and pointer/variable expressions (`pBuffer`, `&myStruct`, `m_buffer`).
+    - Produces multiple consumable formats:
+      - `hexBytes`: Space-separated uppercase hex byte string.
+      - `hexDump`: Standard formatted hex dump with 16-byte aligned offsets, 8-byte spacer, and ASCII sidebar.
+      - `asciiRepresentation`: Human-readable ASCII preview with unprintable characters replaced by dots.
+      - `base64Data`: Raw bytes encoded in Base64 for binary data transfers.
+    - Enforces safety limits: byte count restricted to 1 - 4096 bytes.
+    - Structured error handling: `invalid_memory_address`, `memory_read_failed`, `debugger_not_debugging`.
+  - **Industrial PLC & Qt Best Practices Guide (`docs/qt-plc-debugging-guide.md`)**:
+    - Provides detailed Agent SOP for diagnosing Qt cross-thread ownership issues (`((QObject*)x)->thread()`) and industrial Modbus/PLC packet reverse debugging using memory primitives.
+  - Added new error codes: `invalid_memory_address`, `memory_read_failed`.
+
+### Verified
+- Automated unit tests: 180/180 PASS (100% across Protocol and Host test suites: 21/21 Protocol tests, 159/159 Host tests).
+- Total registered MCP tools expanded from 48 to 50 (all `isStub: false`).
+- Live verified against Visual Studio 18 Experimental Instance:
+  - `vs_debugger_get_snapshot`: Single-call capture in break mode returning process, thread, stack, locals (`item`, `sum`, `args`), and recent CoreCLR debug logs. Verified design mode safe return.
+  - `vs_debugger_read_memory`: Read 64 bytes of PE header from `System.Private.CoreLib.dll` base address (`0x00007FFE354A0000`), verifying `MZ` header, formatted hex dump with ASCII bar, and base64 payload. Verified `debugger_not_debugging` guard in design mode.
+
 ## [0.1.18.0] - 2026-09-08
 
 ### Added

@@ -25,6 +25,8 @@ public sealed class BridgeServiceExceptionTests
     [InlineData(BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging, false)]
     [InlineData(BridgeErrorCodes.EngineNotFound, false)]
     [InlineData(BridgeErrorCodes.NoSolutionProcessesFound, false)]
+    [InlineData(BridgeErrorCodes.InvalidMemoryAddress, false)]
+    [InlineData(BridgeErrorCodes.MemoryReadFailed, false)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {
         var rpcException = new BridgeRpcException(code, $"Error for {code}", expectedRetryable);

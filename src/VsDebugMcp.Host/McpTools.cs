@@ -668,6 +668,52 @@ public sealed class McpTools
             cancellationToken));
 
     [McpServerTool(
+        Name = "vs_debugger_get_snapshot",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Captures a comprehensive diagnostic snapshot of the debugger state in a single call, aggregating mode, process, thread, call stack, locals, and recent debug output window logs.")]
+    public Task<DebuggerGetSnapshotResponse> DebuggerGetSnapshotAsync(
+        [Description("Optional flag whether to include the call stack frames. Defaults to true.")] bool? includeCallStack = null,
+        [Description("Optional maximum number of call stack frames to return. Defaults to 10.")] int? maxFrames = null,
+        [Description("Optional flag whether to include local variables and arguments. Defaults to true.")] bool? includeLocals = null,
+        [Description("Optional maximum number of local variables to return. Defaults to 50.")] int? maxLocals = null,
+        [Description("Optional flag whether to include recent logs from the output window. Defaults to true.")] bool? includeRecentLogs = null,
+        [Description("Optional maximum number of recent output log lines to return. Defaults to 30.")] int? recentLogLines = null,
+        [Description("Optional output window pane source (e.g. 'debug' or 'build'). Defaults to 'debug'.")] string? logSource = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetSnapshotAsync(
+            includeCallStack ?? true,
+            maxFrames,
+            includeLocals ?? true,
+            maxLocals,
+            includeRecentLogs ?? true,
+            recentLogLines,
+            logSource,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_read_memory",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Reads raw virtual memory bytes from the active debugged process at a specified address or pointer expression, returning hex bytes, formatted hex dump, ASCII preview, and base64 data.")]
+    public Task<DebuggerReadMemoryResponse> DebuggerReadMemoryAsync(
+        [Description("Target memory address in hexadecimal (e.g. '0x00007FFE12345678') or pointer expression/variable name (e.g. 'pBuffer', '&myStruct').")] string address,
+        [Description("Optional number of bytes to read (1-4096). Defaults to 64.")] int? byteCount = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerReadMemoryAsync(
+            address,
+            byteCount ?? 64,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
         Name = "vs_debugger_detach",
         ReadOnly = false,
         Idempotent = false,

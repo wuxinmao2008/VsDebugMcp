@@ -219,6 +219,23 @@ public interface IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
+    Task<DebuggerGetSnapshotResponse> DebuggerGetSnapshotAsync(
+        bool includeCallStack,
+        int? maxFrames,
+        bool includeLocals,
+        int? maxLocals,
+        bool includeRecentLogs,
+        int? recentLogLines,
+        string? logSource,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerReadMemoryResponse> DebuggerReadMemoryAsync(
+        string address,
+        int byteCount,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
     Task<DebuggerDetachResponse> DebuggerDetachAsync(
         string? vsInstanceId,
         int? processId,
@@ -843,6 +860,48 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerGetSnapshotResponse> DebuggerGetSnapshotAsync(
+        bool includeCallStack,
+        int? maxFrames,
+        bool includeLocals,
+        int? maxLocals,
+        bool includeRecentLogs,
+        int? recentLogLines,
+        string? logSource,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetSnapshotAsync(
+                new DebuggerGetSnapshotRequest
+                {
+                    IncludeCallStack = includeCallStack,
+                    MaxFrames = maxFrames,
+                    IncludeLocals = includeLocals,
+                    MaxLocals = maxLocals,
+                    IncludeRecentLogs = includeRecentLogs,
+                    RecentLogLines = recentLogLines,
+                    LogSource = logSource
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerReadMemoryResponse> DebuggerReadMemoryAsync(
+        string address,
+        int byteCount,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerReadMemoryAsync(
+                new DebuggerReadMemoryRequest
+                {
+                    Address = address,
+                    ByteCount = byteCount
+                },
+                cancellationToken),
+            cancellationToken);
+
     public Task<DebuggerDetachResponse> DebuggerDetachAsync(
         string? vsInstanceId,
         int? processId,
@@ -1239,6 +1298,16 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.NoSolutionProcessesFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.InvalidMemoryAddress => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.MemoryReadFailed => new(
                 exception.Code,
                 exception.Message,
                 false,

@@ -1106,4 +1106,107 @@ public sealed class InstanceProtocolTests
         Assert.Equal("engine_not_found", BridgeErrorCodes.EngineNotFound);
         Assert.Equal("no_solution_processes_found", BridgeErrorCodes.NoSolutionProcessesFound);
     }
+
+    [Fact]
+    public void Phase5DContractsRoundTripThroughSharedSerializer()
+    {
+        var snapReq = new DebuggerGetSnapshotRequest
+        {
+            IncludeCallStack = true,
+            MaxFrames = 5,
+            IncludeLocals = true,
+            MaxLocals = 20,
+            IncludeRecentLogs = true,
+            RecentLogLines = 25,
+            LogSource = "debug",
+            VsInstanceId = "vs-1"
+        };
+        var snapReqCopy = BridgeJson.Deserialize<DebuggerGetSnapshotRequest>(BridgeJson.Serialize(snapReq));
+        Assert.True(snapReqCopy.IncludeCallStack);
+        Assert.Equal(5, snapReqCopy.MaxFrames);
+        Assert.True(snapReqCopy.IncludeLocals);
+        Assert.Equal(20, snapReqCopy.MaxLocals);
+        Assert.True(snapReqCopy.IncludeRecentLogs);
+        Assert.Equal(25, snapReqCopy.RecentLogLines);
+        Assert.Equal("debug", snapReqCopy.LogSource);
+        Assert.Equal("vs-1", snapReqCopy.VsInstanceId);
+
+        var snapResp = new DebuggerGetSnapshotResponse
+        {
+            VsInstanceId = "vs-1",
+            Mode = "break",
+            IsDebugging = true,
+            CurrentProcessId = 5555,
+            CurrentProcessName = "PlcWorker.exe",
+            CurrentThreadId = 1,
+            CurrentThreadName = "Main Thread",
+            LastBreakReason = "breakpoint",
+            TopFrame = new StackFrameInfo
+            {
+                FrameIndex = 0,
+                FunctionName = "ModbusHandler.ProcessPacket",
+                FileName = @"C:\src\ModbusHandler.cpp",
+                LineNumber = 128
+            },
+            CallStack = new List<StackFrameInfo>
+            {
+                new() { FrameIndex = 0, FunctionName = "ModbusHandler.ProcessPacket", LineNumber = 128 }
+            },
+            Locals = new List<DebuggerVariableInfo>
+            {
+                new() { Name = "pBuffer", Value = "0x00007FFE12345678", Type = "uint8_t*", IsArgument = false }
+            },
+            RecentLogs = "[INFO] Modbus RX 16 bytes: 01 03 00 00 00 02 C4 0B\n",
+            LogSource = "debug",
+            Warnings = new List<BridgeWarning>
+            {
+                new() { Code = "test_warning", Message = "Snapshot OK" }
+            }
+        };
+        var snapRespCopy = BridgeJson.Deserialize<DebuggerGetSnapshotResponse>(BridgeJson.Serialize(snapResp));
+        Assert.Equal("vs-1", snapRespCopy.VsInstanceId);
+        Assert.Equal("break", snapRespCopy.Mode);
+        Assert.True(snapRespCopy.IsDebugging);
+        Assert.Equal(5555, snapRespCopy.CurrentProcessId);
+        Assert.NotNull(snapRespCopy.TopFrame);
+        Assert.Equal("ModbusHandler.ProcessPacket", snapRespCopy.TopFrame.FunctionName);
+        Assert.Single(snapRespCopy.CallStack);
+        Assert.Single(snapRespCopy.Locals);
+        Assert.NotNull(snapRespCopy.RecentLogs);
+        Assert.Contains("Modbus RX", snapRespCopy.RecentLogs);
+        Assert.Single(snapRespCopy.Warnings);
+
+        var memReq = new DebuggerReadMemoryRequest
+        {
+            Address = "0x00007FFE12345678",
+            ByteCount = 16,
+            VsInstanceId = "vs-1"
+        };
+        var memReqCopy = BridgeJson.Deserialize<DebuggerReadMemoryRequest>(BridgeJson.Serialize(memReq));
+        Assert.Equal("0x00007FFE12345678", memReqCopy.Address);
+        Assert.Equal(16, memReqCopy.ByteCount);
+        Assert.Equal("vs-1", memReqCopy.VsInstanceId);
+
+        var memResp = new DebuggerReadMemoryResponse
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 5555,
+            ResolvedAddress = "0x00007FFE12345678",
+            ByteCount = 4,
+            HexBytes = "01 03 00 00",
+            HexDump = "00007FFE12345678  01 03 00 00                                      |....|",
+            AsciiRepresentation = "....",
+            Base64Data = "AQMAAA==",
+            Warnings = new List<BridgeWarning>()
+        };
+        var memRespCopy = BridgeJson.Deserialize<DebuggerReadMemoryResponse>(BridgeJson.Serialize(memResp));
+        Assert.Equal(5555, memRespCopy.ProcessId);
+        Assert.Equal("0x00007FFE12345678", memRespCopy.ResolvedAddress);
+        Assert.Equal(4, memRespCopy.ByteCount);
+        Assert.Equal("01 03 00 00", memRespCopy.HexBytes);
+        Assert.Equal("AQMAAA==", memRespCopy.Base64Data);
+
+        Assert.Equal("invalid_memory_address", BridgeErrorCodes.InvalidMemoryAddress);
+        Assert.Equal("memory_read_failed", BridgeErrorCodes.MemoryReadFailed);
+    }
 }

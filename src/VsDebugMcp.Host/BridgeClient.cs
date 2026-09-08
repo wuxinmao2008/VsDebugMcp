@@ -309,6 +309,22 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetSnapshotResponse> DebuggerGetSnapshotAsync(
+        DebuggerGetSnapshotRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetSnapshotRequest, DebuggerGetSnapshotResponse>(
+            BridgeMethods.DebuggerGetSnapshot,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerReadMemoryResponse> DebuggerReadMemoryAsync(
+        DebuggerReadMemoryRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerReadMemoryRequest, DebuggerReadMemoryResponse>(
+            BridgeMethods.DebuggerReadMemory,
+            request,
+            cancellationToken);
+
     public Task<DebuggerDetachResponse> DebuggerDetachAsync(
         DebuggerDetachRequest request,
         CancellationToken cancellationToken) =>

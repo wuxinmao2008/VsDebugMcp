@@ -1891,3 +1891,121 @@ public sealed class DebuggerAutoAttachResponse
     [DataMember(Name = "warnings", Order = 4)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }
+
+[DataContract]
+public sealed class DebuggerGetSnapshotRequest
+{
+    [DataMember(Name = "includeCallStack", Order = 1, EmitDefaultValue = false)]
+    public bool IncludeCallStack { get; set; } = true;
+
+    [DataMember(Name = "maxFrames", Order = 2, EmitDefaultValue = false)]
+    public int? MaxFrames { get; set; }
+
+    [DataMember(Name = "includeLocals", Order = 3, EmitDefaultValue = false)]
+    public bool IncludeLocals { get; set; } = true;
+
+    [DataMember(Name = "maxLocals", Order = 4, EmitDefaultValue = false)]
+    public int? MaxLocals { get; set; }
+
+    [DataMember(Name = "includeRecentLogs", Order = 5, EmitDefaultValue = false)]
+    public bool IncludeRecentLogs { get; set; } = true;
+
+    [DataMember(Name = "recentLogLines", Order = 6, EmitDefaultValue = false)]
+    public int? RecentLogLines { get; set; }
+
+    [DataMember(Name = "logSource", Order = 7, EmitDefaultValue = false)]
+    public string? LogSource { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 8, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetSnapshotResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "mode", Order = 2)]
+    public string Mode { get; set; } = string.Empty;
+
+    [DataMember(Name = "isDebugging", Order = 3)]
+    public bool IsDebugging { get; set; }
+
+    [DataMember(Name = "currentProcessId", Order = 4, EmitDefaultValue = false)]
+    public int? CurrentProcessId { get; set; }
+
+    [DataMember(Name = "currentProcessName", Order = 5, EmitDefaultValue = false)]
+    public string? CurrentProcessName { get; set; }
+
+    [DataMember(Name = "currentThreadId", Order = 6, EmitDefaultValue = false)]
+    public int? CurrentThreadId { get; set; }
+
+    [DataMember(Name = "currentThreadName", Order = 7, EmitDefaultValue = false)]
+    public string? CurrentThreadName { get; set; }
+
+    [DataMember(Name = "lastBreakReason", Order = 8, EmitDefaultValue = false)]
+    public string? LastBreakReason { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 9, EmitDefaultValue = false)]
+    public StackFrameInfo? TopFrame { get; set; }
+
+    [DataMember(Name = "callStack", Order = 10, EmitDefaultValue = false)]
+    public List<StackFrameInfo> CallStack { get; set; } = new();
+
+    [DataMember(Name = "locals", Order = 11, EmitDefaultValue = false)]
+    public List<DebuggerVariableInfo> Locals { get; set; } = new();
+
+    [DataMember(Name = "recentLogs", Order = 12, EmitDefaultValue = false)]
+    public string? RecentLogs { get; set; }
+
+    [DataMember(Name = "logSource", Order = 13, EmitDefaultValue = false)]
+    public string? LogSource { get; set; }
+
+    [DataMember(Name = "warnings", Order = 14)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerReadMemoryRequest
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "byteCount", Order = 2, EmitDefaultValue = false)]
+    public int ByteCount { get; set; } = 64;
+
+    [DataMember(Name = "vsInstanceId", Order = 3, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerReadMemoryResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "processId", Order = 2)]
+    public int ProcessId { get; set; }
+
+    [DataMember(Name = "resolvedAddress", Order = 3)]
+    public string ResolvedAddress { get; set; } = string.Empty;
+
+    [DataMember(Name = "byteCount", Order = 4)]
+    public int ByteCount { get; set; }
+
+    [DataMember(Name = "hexBytes", Order = 5)]
+    public string HexBytes { get; set; } = string.Empty;
+
+    [DataMember(Name = "hexDump", Order = 6)]
+    public string HexDump { get; set; } = string.Empty;
+
+    [DataMember(Name = "asciiRepresentation", Order = 7)]
+    public string AsciiRepresentation { get; set; } = string.Empty;
+
+    [DataMember(Name = "base64Data", Order = 8)]
+    public string Base64Data { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 9)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}

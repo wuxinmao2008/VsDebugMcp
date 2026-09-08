@@ -13,6 +13,43 @@
 
 ## 实施进度（2026-09-08 更新）
 
+### Phase 5D：聚合调试快照与进程虚拟内存透视已完成开发并通过全链路在线实测验收 (v0.1.19.0)
+
+- **聚合调试诊断快照 (`vs_debugger_get_snapshot`)**：
+  - 单次调用一站式原子聚合调试器全维度诊断现场：调试模式、调试进程 PID 与完整可执行程序物理路径、活动线程 TID、中断原因、顶层栈帧、完整调用栈列表、当前作用域局部变量与参数清单，以及最近输出窗口 Debug 日志（如 Qt 的 `qDebug()`、Windows 原生 `OutputDebugString` 与 CoreCLR 运行时日志）；
+  - 自动集成 Release 配置 `<optimized away>` 优化诊断建议；
+  - 非调试（Design）模式安全优雅返回（`isDebugging: false`，空集合），杜绝抛出异常打断 Agent 会话；
+  - 彻底将多轮诊断交互从 5 次以上 IPC 往返压缩至单次请求，极大提高 Agent 自主排障效率与上下文一致性。
+- **进程虚拟内存安全透视 (`vs_debugger_read_memory`)**：
+  - 基于 Windows 原生 Win32 API `ReadProcessMemory`（`PROCESS_VM_READ | PROCESS_QUERY_INFORMATION`），直接在目标进程地址空间安全读取裸字节流；
+  - 双重地址解析机制：既支持直接传入 16/32/64 位绝对十六进制地址（如 `0x00007FFE354A0000`），也支持传入指针变量名或 C++/C# 表达式（如 `pBuffer`、`&data[0]`），由 VSIX 自动提取真实内存基址并读取；
+  - 丰富易用的多维数据格式转换：同时提供 `hexBytes`（空格分隔 16 进制序列）、`hexDump`（16 字节对齐 + ASCII 侧边栏转储视图）、`asciiRepresentation`（ASCII 文本预览）及 `base64Data`（二进制传输）；
+  - 安全边界防护：读取长度硬性约束为 1 - 4096 字节，防止巨量内存拉取引发内存溢出；设计模式严格返回 `debugger_not_debugging`；
+  - 配套最佳实践指南：在 `docs/qt-plc-debugging-guide.md` 中固化 Qt 跨线程所有权诊断（`((QObject*)x)->thread()`）与 Modbus/PLC 通信报文逆向实战手册。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (21/21 PASS) + `VsDebugMcp.Host.Tests` (159/159 PASS)，全套 180 个单元测试 100% 通过；
+  - MCP 工具总数扩充至 **50 个**（全部 `isStub: false`）；
+  - 组件版本统一升级至 **`0.1.19.0`**。
+
+### Phase 5C：混合模式引擎支持与关联进程自动发现已完成开发并通过全链路在线实测验收 (v0.1.18.0)
+
+- **混合模式调试引擎支持 (`vs_debugger_attach_process` 升级)**：
+  - 扩展 `vs_debugger_attach_process` 支持可选的 `engines` 引擎列表（如 `["Native", "Managed"]` 或 `["本机", "托管"]`）；
+  - 基于 `EnvDTE80.Process2.Attach2(engines)` 实现不区分大小写的模糊匹配，精准兼容中英文不同本地化 Visual Studio 调试引擎名称；
+  - 附加成功后回显 `attachedEngines` 绑定的引擎全称；若指定了不存在的引擎，返回 `engine_not_found` 并附带该进程可用的全部引擎清单。
+- **解决方案活动运行进程自动发现 (`vs_debugger_find_solution_processes`)**：
+  - 智能扫描当前打开解决方案中的全部工程，提取工程名、输出程序集名及可执行文件名；
+  - 遍历当前操作系统中所有运行中的进程，自动匹配属于当前解决方案的进程，识别启动工程（`isStartupProject: true`）及是否已在调试中（`isBeingDebugged`）；
+  - 支持 `startupOnly` 过滤，无需人工手动查找或指定 PID。
+- **一键批量自动附加 (`vs_debugger_auto_attach`)**：
+  - 自动发现解决方案匹配进程并自动执行 `Attach2` 附加；
+  - 幂等防卫：若进程已被调试自动输出 `already_debugged` 警告而不中断其余进程附加；
+  - 支持 `waitForBreak` 中断探测与顶层栈帧即时着陆回显。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (20/20 PASS) + `VsDebugMcp.Host.Tests` (145/145 PASS)，全套 165 个单元测试 100% 通过；
+  - MCP 工具总数扩充至 **48 个**；
+  - 组件版本统一升级至 **`0.1.18.0`**。
+
 ### Phase 5B：解决方案配置切换、多窗格日志与优化提醒已完成开发并通过全链路在线实测验收 (v0.1.17.0)
 
 - **解决方案构建配置一键切换 (`vs_set_solution_configuration`)**：
