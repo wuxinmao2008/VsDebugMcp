@@ -19,7 +19,7 @@
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x64</Platforms>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <Version>0.1.14.0</Version>
+    <Version>0.1.15.0</Version>
   </PropertyGroup>
 
 </Project>

@@ -5,6 +5,21 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15.0] - 2026-09-08
+
+### Added
+- **Ecosystem Integration & Client Onboarding (Phase 4D)**:
+  - **IDE Native Configuration Guide**: Added a dedicated top-level entry in Visual Studio menu: `Extensions (扩展) -> VsDebugMcp` that opens a clean, modern WPF dialog (`ClientConfigWindow`).
+  - **Zero-Intrusion Safety Principle**: Non-intrusive by design—strictly read-only presentation of ready-to-use configuration samples and recommended paths; never automatically modifies or overwrites user configuration files.
+  - **Scope Differentiation (Global vs. Local)**: Supports both Global (User-level) and Local (Workspace-level) scope selection across major AI coding clients.
+  - **Multi-Client Support**: Out-of-the-box presets for **VS Code**, **Cursor**, **Claude Desktop**, **Antigravity**, and **Codex/Windsurf**.
+  - **One-Click Clipboard Copying**: High-visibility copy-to-clipboard functionality with live confirmation feedback ("已复制 ✓").
+  - **Clean Protocol Surface**: Onboarding is purely IDE-facing; keeps the external MCP tool surface clean and unpolluted without injecting unnecessary configuration tools to connected agents.
+  - **`ClientConfigGenerator` in Protocol**: Unified internal configuration engine powering the WPF window.
+
+### Verified
+- Automated unit tests: 122/122 PASS (100% across Protocol and Host test suites, 17/17 Protocol tests, 105/105 Host tests).
+
 ## [0.1.14.0] - 2026-09-08
 
 ### Added

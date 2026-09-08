@@ -12,7 +12,7 @@
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
     <Platforms>AnyCPU;x64</Platforms>
     <IsPackable>false</IsPackable>
-    <Version>0.1.14.0</Version>
+    <Version>0.1.15.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>
@@ -31,6 +31,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
     <Reference Include="Microsoft.VisualStudio.TestWindow.Interfaces">
       <HintPath>$(TestWindowDir)Microsoft.VisualStudio.TestWindow.Interfaces.dll</HintPath>
       <Private>false</Private>
