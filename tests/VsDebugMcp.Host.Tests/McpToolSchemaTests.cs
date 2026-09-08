@@ -73,6 +73,7 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerGetProcessesAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "processId")]
     [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "processName")]
+    [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "engines")]
     [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "waitForBreak")]
     [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "breakTimeoutMs")]
     [InlineData(nameof(McpTools.DebuggerAttachProcessAsync), "vsInstanceId")]
@@ -104,6 +105,14 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.SetSolutionConfigurationAsync), "platform")]
     [InlineData(nameof(McpTools.SetSolutionConfigurationAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.GetOutputPanesAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerFindSolutionProcessesAsync), "startupOnly")]
+    [InlineData(nameof(McpTools.DebuggerFindSolutionProcessesAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "startupOnly")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "processNames")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "engines")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "waitForBreak")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "breakTimeoutMs")]
+    [InlineData(nameof(McpTools.DebuggerAutoAttachAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -178,14 +187,29 @@ public sealed class McpToolSchemaTests
         Assert.True(attr.UseStructuredContent);
     }
 
+    [Theory]
+    [InlineData("vs_debugger_find_solution_processes", nameof(McpTools.DebuggerFindSolutionProcessesAsync), true)]
+    [InlineData("vs_debugger_auto_attach", nameof(McpTools.DebuggerAutoAttachAsync), false)]
+    public void AllPhase5CToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
     [Fact]
-    public void Exactly46ToolsAreRegisteredOnMcpTools()
+    public void Exactly48ToolsAreRegisteredOnMcpTools()
     {
         var toolMethods = typeof(McpTools)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public)
             .Where(m => m.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>() != null)
             .ToList();
 
-        Assert.Equal(46, toolMethods.Count);
+        Assert.Equal(48, toolMethods.Count);
     }
 }

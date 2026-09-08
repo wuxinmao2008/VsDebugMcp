@@ -23,6 +23,8 @@ public sealed class BridgeServiceExceptionTests
     [InlineData(BridgeErrorCodes.ConfigurationNotFound, false)]
     [InlineData(BridgeErrorCodes.OutputPaneNotFound, false)]
     [InlineData(BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging, false)]
+    [InlineData(BridgeErrorCodes.EngineNotFound, false)]
+    [InlineData(BridgeErrorCodes.NoSolutionProcessesFound, false)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {
         var rpcException = new BridgeRpcException(code, $"Error for {code}", expectedRetryable);

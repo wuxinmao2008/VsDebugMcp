@@ -613,6 +613,7 @@ public sealed class McpTools
     public Task<DebuggerAttachResponse> DebuggerAttachProcessAsync(
         [Description("Optional target process ID to attach to. One of processId or processName must be specified.")] int? processId = null,
         [Description("Optional process name to find and attach to if processId is omitted.")] string? processName = null,
+        [Description("Optional list of debugger engine names (e.g. ['Native', 'Managed']) for mixed-mode debugging. If omitted, default engine is used.")] List<string>? engines = null,
         [Description("Optional flag whether to wait for the debugger to pause at a breakpoint or exception. Defaults to false.")] bool? waitForBreak = null,
         [Description("Optional timeout in milliseconds to wait for break mode when waitForBreak is true. Defaults to 3000.")] int? breakTimeoutMs = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
@@ -621,8 +622,49 @@ public sealed class McpTools
             vsInstanceId,
             processId,
             processName,
+            engines,
             waitForBreak ?? false,
             breakTimeoutMs,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_find_solution_processes",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Finds running OS processes corresponding to projects in the currently opened solution.")]
+    public Task<DebuggerFindSolutionProcessesResponse> DebuggerFindSolutionProcessesAsync(
+        [Description("Optional flag whether to only return startup projects. Defaults to false.")] bool? startupOnly = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerFindSolutionProcessesAsync(
+            startupOnly ?? false,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_auto_attach",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Automatically finds and attaches the Visual Studio debugger to running processes associated with the active solution projects.")]
+    public Task<DebuggerAutoAttachResponse> DebuggerAutoAttachAsync(
+        [Description("Optional flag whether to attach only to startup projects. Defaults to false.")] bool? startupOnly = null,
+        [Description("Optional filter for specific process or project names to attach to.")] List<string>? processNames = null,
+        [Description("Optional list of debugger engine names (e.g. ['Native', 'Managed']) for mixed-mode debugging.")] List<string>? engines = null,
+        [Description("Optional flag whether to wait for the debugger to pause at a breakpoint or exception. Defaults to false.")] bool? waitForBreak = null,
+        [Description("Optional timeout in milliseconds to wait for break mode when waitForBreak is true. Defaults to 3000.")] int? breakTimeoutMs = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerAutoAttachAsync(
+            startupOnly ?? false,
+            processNames,
+            engines,
+            waitForBreak ?? false,
+            breakTimeoutMs,
+            vsInstanceId,
             cancellationToken));
 
     [McpServerTool(

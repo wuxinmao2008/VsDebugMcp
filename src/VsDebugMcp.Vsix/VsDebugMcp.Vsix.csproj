@@ -12,7 +12,7 @@
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
     <Platforms>AnyCPU;x64</Platforms>
     <IsPackable>false</IsPackable>
-    <Version>0.1.17.0</Version>
+    <Version>0.1.18.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>true</VsixDeployOnDebug>

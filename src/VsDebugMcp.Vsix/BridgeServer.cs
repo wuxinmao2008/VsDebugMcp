@@ -698,6 +698,40 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerFindSolutionProcesses:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerFindSolutionProcessesRequest()
+                        : BridgeJson.Deserialize<DebuggerFindSolutionProcessesRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.FindSolutionProcessesAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The find solution processes request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerAutoAttach:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerAutoAttachRequest()
+                        : BridgeJson.Deserialize<DebuggerAutoAttachRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.AutoAttachAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The auto attach request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.DebuggerDetach:
                 try
                 {
@@ -1305,6 +1339,18 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_get_output_panes",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_find_solution_processes",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_auto_attach",
                 Version = "0.1",
                 IsStub = false
             }

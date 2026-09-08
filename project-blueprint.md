@@ -716,21 +716,14 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 - [vs2026_copilot.md](docs/vs2026_copilot.md)
 - [phase5-mixed-mode-qt-plc-debugging-blueprint.md](docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md)
 - [phase5a-callstack-breakpoints-report.md](docs/phase5a-callstack-breakpoints-report.md)
+- [phase5b-configuration-output-panes-report.md](docs/phase5b-configuration-output-panes-report.md)
+- [phase5c-mixed-mode-auto-attach-report.md](docs/phase5c-mixed-mode-auto-attach-report.md)
 
-## 下一步规划：Phase 5B 解决方案配置切换与多窗格日志联动
+## 下一步规划：Phase 5D 工控与 Qt 专项诊断拓展
 
-当前状态：Phase 0 ~ Phase 5A 全部开发完成并通过 141 个单元测试 (100%) 与实验实例在线实测闭环验收（当前版本：v0.1.16.0，41 个 MCP 工具）。
+当前状态：Phase 0 ~ Phase 5C 全部开发完成并通过 165 个单元测试 (100%) 与实验实例在线实测闭环验收（当前版本：v0.1.18.0，48 个 MCP 工具）。
 
 根据 [docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md](docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md)，下一迭代聚焦于：
-
-### Phase 5B（P1 级 · 调试环境联动与多窗格日志）
-1. **构建配置一键切换 (`vs_set_solution_configuration`)**：支持切换 Debug/Release 及平台（x64/Win32/Any CPU），解决 Release 下变量优化无法求值的问题。
-2. **输出窗口 Debug 窗格与多窗格支持**：扩展 `vs_get_output_window_logs` 支持 Debug 窗格（`qDebug()`、`OutputDebugString`、CLR 日志）；新增 `vs_get_output_panes` 列出包括工控 `UILOG` 在内的所有输出窗格。
-3. **变量优化态智能诊断建议**：求值失败或显示 `<optimized away>` 时，在响应中提供配置切换与 PDB 符号检查建议。
-
-### Phase 5C（P1 级 · 混合进程自动发现与智能附加）
-1. **混合模式引擎支持**：`vs_debugger_attach_process` 增加 `engines: ["Native", "Managed"]`，确保 C# 与 Qt/C++ 双引擎同时生效。
-2. **解决方案关联进程自动附加 (`vs_debugger_auto_attach`)**：根据启动项目产物名或名称模式自动匹配系统进程并批量附加。
 
 ### Phase 5D（P2 级 · 工控与 Qt 专项诊断拓展）
 1. **Qt 线程归属诊断 (`vs_debugger_qt_diagnose_affinity`)**：复合求值 `QObject::thread()` 与当前执行线程对比，智能探测跨线程直接调用风险。

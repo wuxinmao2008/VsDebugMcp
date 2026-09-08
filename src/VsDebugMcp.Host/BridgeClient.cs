@@ -293,6 +293,22 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerFindSolutionProcessesResponse> DebuggerFindSolutionProcessesAsync(
+        DebuggerFindSolutionProcessesRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerFindSolutionProcessesRequest, DebuggerFindSolutionProcessesResponse>(
+            BridgeMethods.DebuggerFindSolutionProcesses,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerAutoAttachResponse> DebuggerAutoAttachAsync(
+        DebuggerAutoAttachRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerAutoAttachRequest, DebuggerAutoAttachResponse>(
+            BridgeMethods.DebuggerAutoAttach,
+            request,
+            cancellationToken);
+
     public Task<DebuggerDetachResponse> DebuggerDetachAsync(
         DebuggerDetachRequest request,
         CancellationToken cancellationToken) =>

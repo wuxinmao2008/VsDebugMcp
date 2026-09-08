@@ -1281,6 +1281,9 @@ public sealed class DebuggerAttachRequest
 
     [DataMember(Name = "breakTimeoutMs", Order = 5, EmitDefaultValue = false)]
     public int? BreakTimeoutMs { get; set; }
+
+    [DataMember(Name = "engines", Order = 6, EmitDefaultValue = false)]
+    public List<string>? Engines { get; set; }
 }
 
 [DataContract]
@@ -1309,6 +1312,9 @@ public sealed class DebuggerAttachResponse
 
     [DataMember(Name = "warnings", Order = 8, EmitDefaultValue = false)]
     public List<BridgeWarning> Warnings { get; set; } = new();
+
+    [DataMember(Name = "attachedEngines", Order = 9, EmitDefaultValue = false)]
+    public List<string> AttachedEngines { get; set; } = new();
 }
 
 [DataContract]
@@ -1792,6 +1798,95 @@ public sealed class GetOutputPanesResponse
 
     [DataMember(Name = "totalCount", Order = 3)]
     public int TotalCount { get; set; }
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class SolutionProcessInfo
+{
+    [DataMember(Name = "processId", Order = 1)]
+    public int ProcessId { get; set; }
+
+    [DataMember(Name = "processName", Order = 2)]
+    public string ProcessName { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectName", Order = 3)]
+    public string ProjectName { get; set; } = string.Empty;
+
+    [DataMember(Name = "projectFilePath", Order = 4, EmitDefaultValue = false)]
+    public string? ProjectFilePath { get; set; }
+
+    [DataMember(Name = "isStartupProject", Order = 5)]
+    public bool IsStartupProject { get; set; }
+
+    [DataMember(Name = "isBeingDebugged", Order = 6)]
+    public bool IsBeingDebugged { get; set; }
+
+    [DataMember(Name = "userName", Order = 7, EmitDefaultValue = false)]
+    public string? UserName { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerFindSolutionProcessesRequest
+{
+    [DataMember(Name = "startupOnly", Order = 1, EmitDefaultValue = false)]
+    public bool StartupOnly { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerFindSolutionProcessesResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "processes", Order = 2)]
+    public List<SolutionProcessInfo> Processes { get; set; } = new();
+
+    [DataMember(Name = "totalCount", Order = 3)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerAutoAttachRequest
+{
+    [DataMember(Name = "startupOnly", Order = 1, EmitDefaultValue = false)]
+    public bool StartupOnly { get; set; }
+
+    [DataMember(Name = "processNames", Order = 2, EmitDefaultValue = false)]
+    public List<string>? ProcessNames { get; set; }
+
+    [DataMember(Name = "engines", Order = 3, EmitDefaultValue = false)]
+    public List<string>? Engines { get; set; }
+
+    [DataMember(Name = "waitForBreak", Order = 4, EmitDefaultValue = false)]
+    public bool WaitForBreak { get; set; }
+
+    [DataMember(Name = "breakTimeoutMs", Order = 5, EmitDefaultValue = false)]
+    public int? BreakTimeoutMs { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 6, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerAutoAttachResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "attachedCount", Order = 2)]
+    public int AttachedCount { get; set; }
+
+    [DataMember(Name = "processes", Order = 3)]
+    public List<DebuggerAttachResponse> Processes { get; set; } = new();
 
     [DataMember(Name = "warnings", Order = 4)]
     public List<BridgeWarning> Warnings { get; set; } = new();

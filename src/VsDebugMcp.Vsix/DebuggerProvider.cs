@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
@@ -1816,27 +1817,229 @@ internal sealed class DebuggerProvider
 					$"Target process ({identifier}) was not found in local running processes.");
 			}
 
-			var warnings = new List<BridgeWarning>();
-			if (targetProc is Process2 proc2 && proc2.IsBeingDebugged)
+			return await AttachProcessCoreAsync(
+				debugger,
+				targetProc,
+				request.Engines,
+				request.WaitForBreak,
+				request.BreakTimeoutMs,
+				cancellationToken);
+		}
+		finally
+		{
+			_executionLock.Release();
+		}
+	}
+
+	public async Task<DebuggerFindSolutionProcessesResponse> FindSolutionProcessesAsync(
+		DebuggerFindSolutionProcessesRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		var solutionProjects = new List<(string Name, string? FilePath, bool IsStartup, List<string> OutputNames)>();
+		var warnings = new List<BridgeWarning>();
+
+		if (dte.Solution?.IsOpen != true)
+		{
+			warnings.Add(new BridgeWarning
 			{
-				warnings.Add(new BridgeWarning
+				Code = "no_solution_open",
+				Message = "No solution is currently open in Visual Studio."
+			});
+			return new DebuggerFindSolutionProcessesResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				Processes = new List<SolutionProcessInfo>(),
+				TotalCount = 0,
+				Warnings = warnings
+			};
+		}
+
+		var startupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		try
+		{
+			if (dte.Solution.SolutionBuild?.StartupProjects is Array startupArray)
+			{
+				foreach (var item in startupArray)
 				{
-					Code = "already_debugged",
-					Message = $"Process {targetProc.Name} (PID: {targetProc.ProcessID}) is already being debugged by this instance."
-				});
+					if (item is string startupStr && !string.IsNullOrWhiteSpace(startupStr))
+					{
+						startupNames.Add(startupStr);
+						startupNames.Add(Path.GetFileName(startupStr));
+						startupNames.Add(Path.GetFileNameWithoutExtension(startupStr));
+					}
+				}
 			}
-			else
+		}
+		catch { }
+
+		if (dte.Solution.Projects != null)
+		{
+			foreach (Project proj in dte.Solution.Projects)
 			{
+				CollectSolutionProjects(proj, startupNames, solutionProjects);
+			}
+		}
+
+		var matchedProcesses = new List<SolutionProcessInfo>();
+		var localProcesses = debugger.LocalProcesses;
+
+		if (localProcesses != null)
+		{
+			foreach (EnvDTE.Process proc in localProcesses)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
 				try
 				{
-					targetProc.Attach();
+					var procName = proc.Name;
+					if (string.IsNullOrWhiteSpace(procName)) continue;
+
+					var exeBaseName = Path.GetFileNameWithoutExtension(procName);
+
+					var matchedProj = solutionProjects.Find(p =>
+						string.Equals(p.Name, exeBaseName, StringComparison.OrdinalIgnoreCase) ||
+						(!string.IsNullOrWhiteSpace(p.FilePath) && string.Equals(Path.GetFileNameWithoutExtension(p.FilePath), exeBaseName, StringComparison.OrdinalIgnoreCase)) ||
+						p.OutputNames.Exists(on => string.Equals(on, exeBaseName, StringComparison.OrdinalIgnoreCase)));
+
+					if (!string.IsNullOrEmpty(matchedProj.Name))
+					{
+						if (request.StartupOnly && !matchedProj.IsStartup)
+						{
+							continue;
+						}
+
+						bool isBeingDebugged = false;
+						string? userName = null;
+						if (proc is Process2 proc2)
+						{
+							try { isBeingDebugged = proc2.IsBeingDebugged; } catch { }
+							try { userName = proc2.UserName; } catch { }
+						}
+
+						matchedProcesses.Add(new SolutionProcessInfo
+						{
+							ProcessId = proc.ProcessID,
+							ProcessName = Path.GetFileName(procName),
+							ProjectName = matchedProj.Name,
+							ProjectFilePath = matchedProj.FilePath,
+							IsStartupProject = matchedProj.IsStartup,
+							IsBeingDebugged = isBeingDebugged,
+							UserName = userName
+						});
+					}
+				}
+				catch { }
+			}
+		}
+
+		return new DebuggerFindSolutionProcessesResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			Processes = matchedProcesses,
+			TotalCount = matchedProcesses.Count,
+			Warnings = warnings
+		};
+	}
+
+	public async Task<DebuggerAutoAttachResponse> AutoAttachAsync(
+		DebuggerAutoAttachRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (!_executionLock.Wait(0))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerBusy,
+				"A debugger execution control operation is already in progress.");
+		}
+
+		try
+		{
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+			var findReq = new DebuggerFindSolutionProcessesRequest
+			{
+				StartupOnly = request.StartupOnly,
+				VsInstanceId = request.VsInstanceId
+			};
+
+			var found = await FindSolutionProcessesAsync(findReq, cancellationToken);
+			var candidates = found.Processes;
+
+			if (request.ProcessNames != null && request.ProcessNames.Count > 0)
+			{
+				candidates = candidates.FindAll(p =>
+					request.ProcessNames.Exists(filter =>
+						p.ProcessName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 ||
+						p.ProjectName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0));
+			}
+
+			if (candidates.Count == 0)
+			{
+				var filterDesc = request.ProcessNames != null && request.ProcessNames.Count > 0
+					? $" matching filters [{string.Join(", ", request.ProcessNames)}]"
+					: string.Empty;
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.NoSolutionProcessesFound,
+					$"No running solution processes{filterDesc} were found to attach.");
+			}
+
+			var localProcesses = debugger.LocalProcesses;
+			var attachedResults = new List<DebuggerAttachResponse>();
+			var warnings = new List<BridgeWarning>();
+
+			foreach (var candidate in candidates)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+
+				EnvDTE.Process? targetProc = null;
+				if (localProcesses != null)
+				{
+					foreach (EnvDTE.Process proc in localProcesses)
+					{
+						try
+						{
+							if (proc.ProcessID == candidate.ProcessId)
+							{
+								targetProc = proc;
+								break;
+							}
+						}
+						catch { }
+					}
+				}
+
+				if (targetProc == null)
+				{
+					warnings.Add(new BridgeWarning
+					{
+						Code = "process_exited",
+						Message = $"Candidate process {candidate.ProcessName} (PID: {candidate.ProcessId}) exited before attaching."
+					});
+					continue;
+				}
+
+				try
+				{
+					var attachResp = await AttachProcessCoreAsync(
+						debugger,
+						targetProc,
+						request.Engines,
+						waitForBreak: false,
+						breakTimeoutMs: null,
+						cancellationToken);
+
+					attachedResults.Add(attachResp);
 				}
 				catch (Exception ex)
 				{
-					throw new DebuggerProviderException(
-						BridgeErrorCodes.DebuggerUnavailable,
-						$"Failed to attach to process {targetProc.Name} (PID: {targetProc.ProcessID}): {ex.Message}",
-						ex);
+					warnings.Add(new BridgeWarning
+					{
+						Code = "attach_failed",
+						Message = $"Failed to attach to {candidate.ProcessName} (PID: {candidate.ProcessId}): {ex.Message}"
+					});
 				}
 			}
 
@@ -1855,39 +2058,11 @@ internal sealed class DebuggerProvider
 				}
 			}
 
-			var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
-			var currentMode = GetModeString(debugger.CurrentMode);
-			string? breakReason = null;
-			StackFrameInfo? topFrame = null;
-
-			if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
-			{
-				try
-				{
-					breakReason = GetBreakReasonString(debugger.LastBreakReason);
-				}
-				catch { }
-
-				try
-				{
-					var frame = debugger.CurrentStackFrame;
-					if (frame != null)
-					{
-						topFrame = ReadStackFrame(frame, 0);
-					}
-				}
-				catch { }
-			}
-
-			return new DebuggerAttachResponse
+			return new DebuggerAutoAttachResponse
 			{
 				VsInstanceId = _vsInstanceId,
-				ProcessId = targetProc.ProcessID,
-				ProcessName = targetProc.Name ?? string.Empty,
-				CurrentMode = currentMode,
-				IsDebugging = isDebugging,
-				LastBreakReason = breakReason,
-				TopFrame = topFrame,
+				AttachedCount = attachedResults.Count(p => p.IsDebugging),
+				Processes = attachedResults,
 				Warnings = warnings
 			};
 		}
@@ -1895,6 +2070,220 @@ internal sealed class DebuggerProvider
 		{
 			_executionLock.Release();
 		}
+	}
+
+	private async Task<DebuggerAttachResponse> AttachProcessCoreAsync(
+		Debugger debugger,
+		EnvDTE.Process targetProc,
+		List<string>? engines,
+		bool waitForBreak,
+		int? breakTimeoutMs,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var warnings = new List<BridgeWarning>();
+		var attachedEngines = new List<string>();
+
+		if (targetProc is Process2 proc2 && proc2.IsBeingDebugged)
+		{
+			warnings.Add(new BridgeWarning
+			{
+				Code = "already_debugged",
+				Message = $"Process {targetProc.Name} (PID: {targetProc.ProcessID}) is already being debugged by this instance."
+			});
+		}
+		else
+		{
+			try
+			{
+				if (targetProc is Process2 proc2Engine && engines != null && engines.Count > 0)
+				{
+					var availableEngines = new List<EnvDTE80.Engine>();
+					if (proc2Engine.Transport?.Engines != null)
+					{
+						foreach (EnvDTE80.Engine eng in proc2Engine.Transport.Engines)
+						{
+							availableEngines.Add(eng);
+						}
+					}
+
+					var matchedEngines = new List<EnvDTE80.Engine>();
+					foreach (var reqEngine in engines)
+					{
+						if (string.IsNullOrWhiteSpace(reqEngine)) continue;
+						var trimmed = reqEngine.Trim();
+						var match = availableEngines.Find(e =>
+							string.Equals(e.Name, trimmed, StringComparison.OrdinalIgnoreCase) ||
+							string.Equals(e.ID, trimmed, StringComparison.OrdinalIgnoreCase))
+							?? availableEngines.Find(e =>
+							e.Name != null && e.Name.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) >= 0);
+
+						if (match == null)
+						{
+							var availableNames = availableEngines.Select(e => e.Name).ToList();
+							throw new DebuggerProviderException(
+								BridgeErrorCodes.EngineNotFound,
+								$"Debugger engine '{trimmed}' not found for process {targetProc.Name} (PID: {targetProc.ProcessID}). Available engines: {string.Join(", ", availableNames)}");
+						}
+
+						if (!matchedEngines.Contains(match))
+						{
+							matchedEngines.Add(match);
+						}
+					}
+
+					if (matchedEngines.Count == 1)
+					{
+						proc2Engine.Attach2(matchedEngines[0]);
+					}
+					else
+					{
+						proc2Engine.Attach2(matchedEngines.ToArray());
+					}
+
+					attachedEngines = matchedEngines.Select(e => e.Name).ToList();
+				}
+				else
+				{
+					targetProc.Attach();
+				}
+			}
+			catch (DebuggerProviderException)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				throw new DebuggerProviderException(
+					BridgeErrorCodes.DebuggerUnavailable,
+					$"Failed to attach to process {targetProc.Name} (PID: {targetProc.ProcessID}): {ex.Message}",
+					ex);
+			}
+		}
+
+		if (waitForBreak)
+		{
+			var timeoutMs = Clamp(breakTimeoutMs ?? 3000, 500, 30000);
+			var sw = System.Diagnostics.Stopwatch.StartNew();
+			while (sw.ElapsedMilliseconds < timeoutMs)
+			{
+				await Task.Delay(100, cancellationToken);
+				await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+				if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode || debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+				{
+					break;
+				}
+			}
+		}
+
+		var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
+		var currentMode = GetModeString(debugger.CurrentMode);
+		string? breakReason = null;
+		StackFrameInfo? topFrame = null;
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+		{
+			try
+			{
+				breakReason = GetBreakReasonString(debugger.LastBreakReason);
+			}
+			catch { }
+
+			try
+			{
+				var frame = debugger.CurrentStackFrame;
+				if (frame != null)
+				{
+					topFrame = ReadStackFrame(frame, 0);
+				}
+			}
+			catch { }
+		}
+
+		return new DebuggerAttachResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ProcessId = targetProc.ProcessID,
+			ProcessName = targetProc.Name ?? string.Empty,
+			CurrentMode = currentMode,
+			IsDebugging = isDebugging,
+			LastBreakReason = breakReason,
+			TopFrame = topFrame,
+			AttachedEngines = attachedEngines,
+			Warnings = warnings
+		};
+	}
+
+	private static void CollectSolutionProjects(
+		Project proj,
+		HashSet<string> startupNames,
+		List<(string Name, string? FilePath, bool IsStartup, List<string> OutputNames)> result)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		if (proj == null) return;
+
+		try
+		{
+			if (string.Equals(proj.Kind, "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}", StringComparison.OrdinalIgnoreCase))
+			{
+				if (proj.ProjectItems != null)
+				{
+					foreach (ProjectItem item in proj.ProjectItems)
+					{
+						try
+						{
+							if (item.SubProject != null)
+							{
+								CollectSolutionProjects(item.SubProject, startupNames, result);
+							}
+						}
+						catch { }
+					}
+				}
+				return;
+			}
+
+			var name = string.Empty;
+			string? filePath = null;
+			var outputNames = new List<string>();
+
+			try { name = proj.Name ?? string.Empty; } catch { }
+			try { filePath = proj.FullName; } catch { }
+
+			if (string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(filePath))
+			{
+				name = Path.GetFileNameWithoutExtension(filePath);
+			}
+
+			try
+			{
+				if (proj.Properties != null)
+				{
+					var outName = proj.Properties.Item("OutputFileName")?.Value?.ToString();
+					if (!string.IsNullOrWhiteSpace(outName))
+					{
+						outputNames.Add(Path.GetFileNameWithoutExtension(outName));
+					}
+					var asmName = proj.Properties.Item("AssemblyName")?.Value?.ToString();
+					if (!string.IsNullOrWhiteSpace(asmName))
+					{
+						outputNames.Add(asmName);
+					}
+				}
+			}
+			catch { }
+
+			if (!string.IsNullOrWhiteSpace(name))
+			{
+				var isStartup = startupNames.Contains(name)
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(filePath))
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileName(filePath)))
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileNameWithoutExtension(filePath)));
+
+				result.Add((name, filePath, isStartup, outputNames));
+			}
+		}
+		catch { }
 	}
 
 	public async Task<DebuggerDetachResponse> DetachAsync(

@@ -993,4 +993,117 @@ public sealed class InstanceProtocolTests
         Assert.Single(evalRespCopy.Warnings);
         Assert.Equal("variable_optimized_in_release", evalRespCopy.Warnings[0].Code);
     }
+
+    [Fact]
+    public void Phase5CContractsRoundTripThroughSharedSerializer()
+    {
+        var attachReq = new DebuggerAttachRequest
+        {
+            ProcessId = 12345,
+            ProcessName = "IndustrialService.exe",
+            Engines = new List<string> { "Native", "Managed" },
+            WaitForBreak = true,
+            BreakTimeoutMs = 5000
+        };
+        var attachReqCopy = BridgeJson.Deserialize<DebuggerAttachRequest>(BridgeJson.Serialize(attachReq));
+        Assert.Equal(12345, attachReqCopy.ProcessId);
+        Assert.Equal("IndustrialService.exe", attachReqCopy.ProcessName);
+        Assert.NotNull(attachReqCopy.Engines);
+        Assert.Equal(2, attachReqCopy.Engines.Count);
+        Assert.Equal("Native", attachReqCopy.Engines[0]);
+        Assert.Equal("Managed", attachReqCopy.Engines[1]);
+        Assert.True(attachReqCopy.WaitForBreak);
+        Assert.Equal(5000, attachReqCopy.BreakTimeoutMs);
+
+        var attachResp = new DebuggerAttachResponse
+        {
+            VsInstanceId = "vs-1",
+            ProcessId = 12345,
+            ProcessName = "IndustrialService.exe",
+            CurrentMode = "running",
+            IsDebugging = true,
+            AttachedEngines = new List<string> { "Native", "Managed (CoreCLR)" }
+        };
+        var attachRespCopy = BridgeJson.Deserialize<DebuggerAttachResponse>(BridgeJson.Serialize(attachResp));
+        Assert.Equal(12345, attachRespCopy.ProcessId);
+        Assert.Equal(2, attachRespCopy.AttachedEngines.Count);
+        Assert.Equal("Native", attachRespCopy.AttachedEngines[0]);
+        Assert.Equal("Managed (CoreCLR)", attachRespCopy.AttachedEngines[1]);
+
+        var findReq = new DebuggerFindSolutionProcessesRequest
+        {
+            StartupOnly = true,
+            VsInstanceId = "vs-1"
+        };
+        var findReqCopy = BridgeJson.Deserialize<DebuggerFindSolutionProcessesRequest>(BridgeJson.Serialize(findReq));
+        Assert.True(findReqCopy.StartupOnly);
+        Assert.Equal("vs-1", findReqCopy.VsInstanceId);
+
+        var findResp = new DebuggerFindSolutionProcessesResponse
+        {
+            VsInstanceId = "vs-1",
+            TotalCount = 2,
+            Processes = new List<SolutionProcessInfo>
+            {
+                new()
+                {
+                    ProcessId = 1001,
+                    ProcessName = "PlcMaster.exe",
+                    ProjectName = "PlcMaster",
+                    ProjectFilePath = @"C:\src\PlcMaster\PlcMaster.csproj",
+                    IsStartupProject = true,
+                    IsBeingDebugged = false,
+                    UserName = @"WORKGROUP\Operator"
+                },
+                new()
+                {
+                    ProcessId = 1002,
+                    ProcessName = "NativeDriver.exe",
+                    ProjectName = "NativeDriver",
+                    ProjectFilePath = @"C:\src\NativeDriver\NativeDriver.vcxproj",
+                    IsStartupProject = false,
+                    IsBeingDebugged = true,
+                    UserName = @"WORKGROUP\Operator"
+                }
+            }
+        };
+        var findRespCopy = BridgeJson.Deserialize<DebuggerFindSolutionProcessesResponse>(BridgeJson.Serialize(findResp));
+        Assert.Equal(2, findRespCopy.TotalCount);
+        Assert.Equal("PlcMaster.exe", findRespCopy.Processes[0].ProcessName);
+        Assert.True(findRespCopy.Processes[0].IsStartupProject);
+        Assert.False(findRespCopy.Processes[0].IsBeingDebugged);
+        Assert.Equal("NativeDriver.exe", findRespCopy.Processes[1].ProcessName);
+        Assert.False(findRespCopy.Processes[1].IsStartupProject);
+        Assert.True(findRespCopy.Processes[1].IsBeingDebugged);
+
+        var autoReq = new DebuggerAutoAttachRequest
+        {
+            StartupOnly = false,
+            ProcessNames = new List<string> { "PlcMaster", "NativeDriver" },
+            Engines = new List<string> { "Native", "Managed" },
+            WaitForBreak = false,
+            BreakTimeoutMs = 3000,
+            VsInstanceId = "vs-1"
+        };
+        var autoReqCopy = BridgeJson.Deserialize<DebuggerAutoAttachRequest>(BridgeJson.Serialize(autoReq));
+        Assert.False(autoReqCopy.StartupOnly);
+        Assert.NotNull(autoReqCopy.ProcessNames);
+        Assert.Equal(2, autoReqCopy.ProcessNames.Count);
+        Assert.NotNull(autoReqCopy.Engines);
+        Assert.Equal(2, autoReqCopy.Engines.Count);
+
+        var autoResp = new DebuggerAutoAttachResponse
+        {
+            VsInstanceId = "vs-1",
+            AttachedCount = 1,
+            Processes = new List<DebuggerAttachResponse> { attachResp }
+        };
+        var autoRespCopy = BridgeJson.Deserialize<DebuggerAutoAttachResponse>(BridgeJson.Serialize(autoResp));
+        Assert.Equal(1, autoRespCopy.AttachedCount);
+        Assert.Single(autoRespCopy.Processes);
+        Assert.Equal("IndustrialService.exe", autoRespCopy.Processes[0].ProcessName);
+
+        Assert.Equal("engine_not_found", BridgeErrorCodes.EngineNotFound);
+        Assert.Equal("no_solution_processes_found", BridgeErrorCodes.NoSolutionProcessesFound);
+    }
 }

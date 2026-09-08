@@ -200,8 +200,23 @@ public interface IBridgeService
         string? vsInstanceId,
         int? processId,
         string? processName,
+        List<string>? engines,
         bool waitForBreak,
         int? breakTimeoutMs,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerFindSolutionProcessesResponse> DebuggerFindSolutionProcessesAsync(
+        bool startupOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerAutoAttachResponse> DebuggerAutoAttachAsync(
+        bool startupOnly,
+        List<string>? processNames,
+        List<string>? engines,
+        bool waitForBreak,
+        int? breakTimeoutMs,
+        string? vsInstanceId,
         CancellationToken cancellationToken);
 
     Task<DebuggerDetachResponse> DebuggerDetachAsync(
@@ -774,6 +789,7 @@ public sealed class BridgeService : IBridgeService
         string? vsInstanceId,
         int? processId,
         string? processName,
+        List<string>? engines,
         bool waitForBreak,
         int? breakTimeoutMs,
         CancellationToken cancellationToken) =>
@@ -784,6 +800,43 @@ public sealed class BridgeService : IBridgeService
                 {
                     ProcessId = processId,
                     ProcessName = processName,
+                    Engines = engines,
+                    WaitForBreak = waitForBreak,
+                    BreakTimeoutMs = breakTimeoutMs
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerFindSolutionProcessesResponse> DebuggerFindSolutionProcessesAsync(
+        bool startupOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerFindSolutionProcessesAsync(
+                new DebuggerFindSolutionProcessesRequest
+                {
+                    StartupOnly = startupOnly
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerAutoAttachResponse> DebuggerAutoAttachAsync(
+        bool startupOnly,
+        List<string>? processNames,
+        List<string>? engines,
+        bool waitForBreak,
+        int? breakTimeoutMs,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerAutoAttachAsync(
+                new DebuggerAutoAttachRequest
+                {
+                    StartupOnly = startupOnly,
+                    ProcessNames = processNames,
+                    Engines = engines,
                     WaitForBreak = waitForBreak,
                     BreakTimeoutMs = breakTimeoutMs
                 },
@@ -1176,6 +1229,16 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.EngineNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.NoSolutionProcessesFound => new(
                 exception.Code,
                 exception.Message,
                 false,

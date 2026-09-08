@@ -5,6 +5,35 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18.0] - 2026-09-08
+
+### Added
+- **Mixed-Mode Debugging Engine Support & Solution Process Auto-Discovery (Phase 5C)**:
+  - **Mixed-Mode Debugging Engines (`vs_debugger_attach_process`)**:
+    - Upgraded `vs_debugger_attach_process` with optional `engines` parameter (e.g. `["Native", "Managed"]` or `["本机", "托管"]`).
+    - Uses `EnvDTE80.Process2.Attach2(engines)` with substring-insensitive matching against `proc2.Transport.Engines`.
+    - Returns attached engine list in `DebuggerAttachResponse.AttachedEngines`.
+    - Throws structured error `engine_not_found` with complete list of available engines for the process when an invalid engine is requested.
+  - **Solution Running Process Auto-Discovery (`vs_debugger_find_solution_processes`)**:
+    - Scans active solution projects and discovers matching running OS processes by process name, project name, or assembly/output name.
+    - Identifies startup projects (`isStartupProject: true`) via `SolutionBuild.StartupProjects`.
+    - Detects whether processes are currently being debugged by this instance (`isBeingDebugged`).
+    - Supports `startupOnly` filtering.
+  - **One-Click Batch Auto-Attach (`vs_debugger_auto_attach`)**:
+    - Automatically discovers and attaches to running solution processes without requiring manual PID lookup.
+    - Supports filtering by `processNames`, `startupOnly`, and specifying custom mixed-mode `engines`.
+    - Gracefully handles already debugged processes with `already_debugged` warning without failing entire batch.
+    - Throws `no_solution_processes_found` when no target processes match.
+  - Added new error codes: `engine_not_found`, `no_solution_processes_found`.
+
+### Verified
+- Automated unit tests: 165/165 PASS (100% across Protocol and Host test suites: 20/20 Protocol tests, 145/145 Host tests).
+- Total registered MCP tools expanded from 46 to 48.
+- Live verified against Visual Studio 18 Experimental Instance:
+  - `vs_debugger_find_solution_processes`: Discovered running `SampleApp.exe` (PID: 13060), identified startup project status, and tracked live `isBeingDebugged` state.
+  - `vs_debugger_attach_process`: Attached with mixed-mode engines `["本机", "托管"]`, correctly bound to `"本机"` and `"托管(.NET Core、.NET 5+)"`. Tested and verified `engine_not_found` exception with available engine listings.
+  - `vs_debugger_auto_attach`: Successfully attached solution processes in batch, verified `no_solution_processes_found` error, and verified idempotent `already_debugged` warning.
+
 ## [0.1.17.0] - 2026-09-08
 
 ### Added

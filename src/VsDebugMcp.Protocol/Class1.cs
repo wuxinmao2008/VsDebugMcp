@@ -59,6 +59,8 @@ public static class BridgeMethods
 	public const string DebuggerToggleBreakpoint = "debuggerToggleBreakpoint";
 	public const string SetSolutionConfiguration = "setSolutionConfiguration";
 	public const string GetOutputPanes = "getOutputPanes";
+	public const string DebuggerFindSolutionProcesses = "debuggerFindSolutionProcesses";
+	public const string DebuggerAutoAttach = "debuggerAutoAttach";
 	public const string Shutdown = "shutdown";
 }
 
@@ -108,6 +110,8 @@ public static class BridgeErrorCodes
 	public const string ConfigurationNotFound = "configuration_not_found";
 	public const string OutputPaneNotFound = "output_pane_not_found";
 	public const string CannotSwitchConfigurationWhileDebugging = "cannot_switch_configuration_while_debugging";
+	public const string EngineNotFound = "engine_not_found";
+	public const string NoSolutionProcessesFound = "no_solution_processes_found";
 	public const string InternalError = "internal_error";
 }
 
