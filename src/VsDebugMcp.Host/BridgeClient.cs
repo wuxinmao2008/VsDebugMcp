@@ -285,6 +285,30 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<GetActiveDocumentResponse> GetActiveDocumentAsync(
+        GetActiveDocumentRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetActiveDocumentRequest, GetActiveDocumentResponse>(
+            BridgeMethods.GetActiveDocument,
+            request,
+            cancellationToken);
+
+    public Task<NavigateToResponse> NavigateToAsync(
+        NavigateToRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<NavigateToRequest, NavigateToResponse>(
+            BridgeMethods.NavigateTo,
+            request,
+            cancellationToken);
+
+    public Task<GetSolutionConfigurationsResponse> GetSolutionConfigurationsAsync(
+        GetSolutionConfigurationsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<GetSolutionConfigurationsRequest, GetSolutionConfigurationsResponse>(
+            BridgeMethods.GetSolutionConfigurations,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

@@ -601,6 +601,55 @@ public sealed class McpTools
             maxCount,
             cancellationToken));
 
+    [McpServerTool(
+        Name = "vs_get_active_document",
+        ReadOnly = true,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the currently active document in Visual Studio, including file path, cursor position, selection range, and selected text.")]
+    public Task<GetActiveDocumentResponse> GetActiveDocumentAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetActiveDocumentAsync(
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_navigate_to",
+        ReadOnly = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Opens a source code file in Visual Studio and navigates the cursor to the specified line and column.")]
+    public Task<NavigateToResponse> NavigateToAsync(
+        [Description("The absolute or solution-relative physical path of the file to navigate to.")] string filePath,
+        [Description("Optional 1-based target line number. Defaults to 1.")] int? line = null,
+        [Description("Optional 1-based target column number. Defaults to 1.")] int? column = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.NavigateToAsync(
+            vsInstanceId,
+            filePath,
+            line,
+            column,
+            false,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_get_solution_configurations",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves all available build configurations and platforms in the open solution, indicating the currently active configuration.")]
+    public Task<GetSolutionConfigurationsResponse> GetSolutionConfigurationsAsync(
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.GetSolutionConfigurationsAsync(
+            vsInstanceId,
+            cancellationToken));
+
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {
         try

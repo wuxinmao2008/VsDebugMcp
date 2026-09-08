@@ -29,6 +29,7 @@ internal sealed class BridgeServer : IDisposable
     private readonly OutputWindowProvider _outputWindowProvider;
     private readonly DebuggerProvider _debuggerProvider;
     private readonly TestExplorerProvider _testExplorerProvider;
+    private readonly ActiveContextEditorProvider _activeContextEditorProvider;
     private Task? _serverTask;
 
     public BridgeServer(
@@ -45,6 +46,7 @@ internal sealed class BridgeServer : IDisposable
         _outputWindowProvider = new OutputWindowProvider(package, instance.VsInstanceId);
         _debuggerProvider = new DebuggerProvider(package, instance.VsInstanceId);
         _testExplorerProvider = new TestExplorerProvider(package, instance.VsInstanceId, _debuggerProvider, diagnostics);
+        _activeContextEditorProvider = new ActiveContextEditorProvider(package, instance.VsInstanceId);
     }
 
     public void Start()
@@ -679,6 +681,59 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.GetActiveDocument:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new GetActiveDocumentRequest()
+                        : BridgeJson.Deserialize<GetActiveDocumentRequest>(request.PayloadJson!);
+                    var result = await _activeContextEditorProvider.GetActiveDocumentAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get active document request payload is invalid.", false), false);
+                }
+                catch (ActiveContextEditorException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
+            case BridgeMethods.NavigateTo:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The navigate to request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<NavigateToRequest>(request.PayloadJson!);
+                    var result = await _activeContextEditorProvider.NavigateToAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The navigate to request payload is invalid.", false), false);
+                }
+                catch (ActiveContextEditorException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
+            case BridgeMethods.GetSolutionConfigurations:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new GetSolutionConfigurationsRequest()
+                        : BridgeJson.Deserialize<GetSolutionConfigurationsRequest>(request.PayloadJson!);
+                    var result = await _activeContextEditorProvider.GetSolutionConfigurationsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get solution configurations request payload is invalid.", false), false);
+                }
+                catch (ActiveContextEditorException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, ex.Retryable), false);
+                }
             case BridgeMethods.Shutdown:
                 return (BridgeResponse.Success(request.RequestId, new ShutdownResponse { Accepted = true }), true);
             default:
@@ -1043,6 +1098,24 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_get_modules",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_active_document",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_navigate_to",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_get_solution_configurations",
                 Version = "0.1",
                 IsStub = false
             }

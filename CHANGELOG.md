@@ -5,6 +5,18 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12.0] - 2026-09-08
+
+### Added
+- **Active Context & Editor Navigation (`vs_get_active_document`, `vs_navigate_to`, `vs_get_solution_configurations`) (Phase 4A)**:
+  - `vs_get_active_document`: Inspects the active foreground document in Visual Studio, extracting full physical path, file name, unsaved dirty status, read-only flag, language, total line count, 1-based cursor line/column, and selection details (selection range and selected text with 10,000-char safety clamp). Returns `hasActiveDocument: false` gracefully when no editor is focused.
+  - `vs_navigate_to`: Navigates Visual Studio to the specified file and moves the cursor to the target line and column. Supports absolute physical paths or solution-relative paths, brings the document window to the foreground, and validates file existence (`file_not_found`).
+  - `vs_get_solution_configurations`: Queries all build configurations and platforms configured in the open solution (e.g. `Debug|x64`, `Release|ARM64`), identifying the currently active solution configuration and platform.
+  - Added new bridge error codes: `file_not_found`, `invalid_navigation_target`, `active_document_unavailable`.
+
+### Verified
+- Automated unit tests: 113/113 PASS (100% across Protocol and Host test suites, 12/12 Protocol tests, 101/101 Host tests).
+
 ## [0.1.11.0] - 2026-09-07
 
 ### Added

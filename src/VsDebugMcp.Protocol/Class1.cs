@@ -48,6 +48,9 @@ public static class BridgeMethods
 	public const string TestDebug = "testDebug";
 	public const string TestGetStatus = "testGetStatus";
 	public const string TestCancel = "testCancel";
+	public const string GetActiveDocument = "getActiveDocument";
+	public const string NavigateTo = "navigateTo";
+	public const string GetSolutionConfigurations = "getSolutionConfigurations";
 	public const string Shutdown = "shutdown";
 }
 
@@ -86,6 +89,9 @@ public static class BridgeErrorCodes
 	public const string TestRunNotFound = "test_run_not_found";
 	public const string TestNotFound = "test_not_found";
 	public const string TestWindowUnavailable = "test_window_unavailable";
+	public const string FileNotFound = "file_not_found";
+	public const string InvalidNavigationTarget = "invalid_navigation_target";
+	public const string ActiveDocumentUnavailable = "active_document_unavailable";
 	public const string InternalError = "internal_error";
 }
 

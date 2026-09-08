@@ -617,4 +617,109 @@ public sealed class InstanceProtocolTests
         Assert.True(modRespCopy.Modules[0].SymbolsLoaded);
         Assert.Equal("0x00007FF7B1230000", modRespCopy.Modules[0].LoadAddress);
     }
+
+    [Fact]
+    public void ActiveContextAndEditorContractsRoundTripThroughSharedSerializer()
+    {
+        // 1. GetActiveDocument
+        var getDocReq = new GetActiveDocumentRequest
+        {
+            VsInstanceId = "vs-1"
+        };
+        var getDocReqCopy = BridgeJson.Deserialize<GetActiveDocumentRequest>(BridgeJson.Serialize(getDocReq));
+        Assert.Equal("vs-1", getDocReqCopy.VsInstanceId);
+
+        var getDocResp = new GetActiveDocumentResponse
+        {
+            VsInstanceId = "vs-1",
+            HasActiveDocument = true,
+            FilePath = @"C:\src\Program.cs",
+            FileName = "Program.cs",
+            IsDirty = true,
+            IsReadOnly = false,
+            Language = "CSharp",
+            CursorLine = 42,
+            CursorColumn = 10,
+            LineCount = 100,
+            HasSelection = true,
+            SelectionStartLine = 40,
+            SelectionStartColumn = 1,
+            SelectionEndLine = 42,
+            SelectionEndColumn = 10,
+            SelectedText = "Console.WriteLine();"
+        };
+        var getDocRespCopy = BridgeJson.Deserialize<GetActiveDocumentResponse>(BridgeJson.Serialize(getDocResp));
+        Assert.True(getDocRespCopy.HasActiveDocument);
+        Assert.Equal(@"C:\src\Program.cs", getDocRespCopy.FilePath);
+        Assert.True(getDocRespCopy.IsDirty);
+        Assert.Equal(42, getDocRespCopy.CursorLine);
+        Assert.True(getDocRespCopy.HasSelection);
+        Assert.Equal("Console.WriteLine();", getDocRespCopy.SelectedText);
+
+        // 2. NavigateTo
+        var navReq = new NavigateToRequest
+        {
+            VsInstanceId = "vs-1",
+            FilePath = @"C:\src\Program.cs",
+            Line = 50,
+            Column = 5,
+            Preview = false
+        };
+        var navReqCopy = BridgeJson.Deserialize<NavigateToRequest>(BridgeJson.Serialize(navReq));
+        Assert.Equal(@"C:\src\Program.cs", navReqCopy.FilePath);
+        Assert.Equal(50, navReqCopy.Line);
+        Assert.Equal(5, navReqCopy.Column);
+
+        var navResp = new NavigateToResponse
+        {
+            VsInstanceId = "vs-1",
+            FilePath = @"C:\src\Program.cs",
+            Line = 50,
+            Column = 5,
+            Success = true
+        };
+        var navRespCopy = BridgeJson.Deserialize<NavigateToResponse>(BridgeJson.Serialize(navResp));
+        Assert.True(navRespCopy.Success);
+        Assert.Equal(50, navRespCopy.Line);
+
+        // 3. GetSolutionConfigurations
+        var slnCfgReq = new GetSolutionConfigurationsRequest
+        {
+            VsInstanceId = "vs-1"
+        };
+        var slnCfgReqCopy = BridgeJson.Deserialize<GetSolutionConfigurationsRequest>(BridgeJson.Serialize(slnCfgReq));
+        Assert.Equal("vs-1", slnCfgReqCopy.VsInstanceId);
+
+        var slnCfgResp = new GetSolutionConfigurationsResponse
+        {
+            VsInstanceId = "vs-1",
+            SolutionName = "SampleApp",
+            SolutionPath = @"C:\src\SampleApp.sln",
+            ActiveConfigurationName = "Debug",
+            ActivePlatformName = "x64",
+            Configurations = new List<SolutionConfigurationInfo>
+            {
+                new()
+                {
+                    Name = "Debug",
+                    PlatformName = "x64",
+                    FullName = "Debug|x64",
+                    IsActive = true
+                },
+                new()
+                {
+                    Name = "Release",
+                    PlatformName = "x64",
+                    FullName = "Release|x64",
+                    IsActive = false
+                }
+            }
+        };
+        var slnCfgRespCopy = BridgeJson.Deserialize<GetSolutionConfigurationsResponse>(BridgeJson.Serialize(slnCfgResp));
+        Assert.Equal("SampleApp", slnCfgRespCopy.SolutionName);
+        Assert.Equal("Debug", slnCfgRespCopy.ActiveConfigurationName);
+        Assert.Equal(2, slnCfgRespCopy.Configurations.Count);
+        Assert.True(slnCfgRespCopy.Configurations[0].IsActive);
+        Assert.False(slnCfgRespCopy.Configurations[1].IsActive);
+    }
 }

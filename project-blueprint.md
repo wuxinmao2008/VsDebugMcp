@@ -11,7 +11,28 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积 ~4 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-07 更新）
+## 实施进度（2026-09-08 更新）
+
+### Phase 4A：活动上下文与编辑器协同导航已完成开发 (v0.1.12.0)
+
+- **`vs_get_active_document` 活动文档与光标选区探测**：
+  - 基于 `EnvDTE.DTE.ActiveDocument` 获取当前前台编辑器激活文档；
+  - 提取文件物理全路径、文件名、是否未保存（脏状态）、只读标记、语言类型及总行数；
+  - 提取当前光标 1-based 行号与列号；
+  - 提取选中区域文本（限制最大 10,000 字符安全截断）及选区起止行列范围；
+  - 优雅防卫：当前无打开文档或焦点不在代码编辑器时安全返回 `hasActiveDocument: false`，杜绝异常崩溃。
+- **`vs_navigate_to` 编辑器前台打开与行列精准定位**：
+  - 支持传入物理绝对路径或相对于解决方案目录的相对路径；
+  - 自动校验文件物理存在性（`file_not_found`）；
+  - 调用 `dte.ItemOperations.OpenFile` 并前台激活（`Activate()`）窗口；
+  - 调度 `TextSelection.GotoLine` 与 `MoveToDisplayColumn` 将光标精准平滑停靠在目标行列。
+- **`vs_get_solution_configurations` 解决方案构建配置与平台组合查询**：
+  - 遍历 `dte.Solution.SolutionBuild.SolutionConfigurations` 提取方案中所有构建配置与平台组合（如 `Debug|x64`, `Release|ARM64` 等）；
+  - 识别并标注当前激活的配置（`isActive: true`）；
+  - 方案未打开时安全返回 `solution_not_open`。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (12/12 PASS) + `VsDebugMcp.Host.Tests` (101/101 PASS)，全套 113 个单元测试 100% 通过；
+  - Bridge capability 注册总数升至 **35 个**（MCP 工具总数 37 个）。
 
 ### Phase 3C：进程附加与模块符号诊断闭环已完成开发并通过全链路在线实测验收 (v0.1.11.0)
 
@@ -236,15 +257,18 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 30. `vs_debugger_attach_process`
 31. `vs_debugger_detach`
 32. `vs_debugger_get_modules`
+33. `vs_get_active_document`
+34. `vs_navigate_to`
+35. `vs_get_solution_configurations`
 
 `vs_health` 作为 MCP tool 提供，但不重复列入 Bridge capability 数组。
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`11/11` PASS。
-- Host tests 最近一次完整运行：`90/90` PASS。
-- 全套测试通过率：`101/101` PASS (100%)。
-- 当前扩展与 Host 版本号：`0.1.11.0`。
+- Protocol tests 最近一次完整运行：`12/12` PASS。
+- Host tests 最近一次完整运行：`101/101` PASS。
+- 全套测试通过率：`113/113` PASS (100%)。
+- 当前扩展与 Host 版本号：`0.1.12.0`。
 - VSIX 已使用 VS 18 MSBuild 成功编译与打包。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；

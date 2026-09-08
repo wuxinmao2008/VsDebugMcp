@@ -83,6 +83,11 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "userCodeOnly")]
     [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "maxCount")]
     [InlineData(nameof(McpTools.DebuggerGetModulesAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetActiveDocumentAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.NavigateToAsync), "line")]
+    [InlineData(nameof(McpTools.NavigateToAsync), "column")]
+    [InlineData(nameof(McpTools.NavigateToAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetSolutionConfigurationsAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -99,6 +104,22 @@ public sealed class McpToolSchemaTests
     [InlineData("vs_debugger_detach", nameof(McpTools.DebuggerDetachAsync), false)]
     [InlineData("vs_debugger_get_modules", nameof(McpTools.DebuggerGetModulesAsync), true)]
     public void AllPhase3CToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
+    [Theory]
+    [InlineData("vs_get_active_document", nameof(McpTools.GetActiveDocumentAsync), true)]
+    [InlineData("vs_navigate_to", nameof(McpTools.NavigateToAsync), false)]
+    [InlineData("vs_get_solution_configurations", nameof(McpTools.GetSolutionConfigurationsAsync), true)]
+    public void AllPhase4AToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
         Assert.NotNull(method);

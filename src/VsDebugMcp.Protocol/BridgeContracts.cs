@@ -1402,3 +1402,145 @@ public sealed class DebuggerGetModulesResponse
     [DataMember(Name = "modules", Order = 6)]
     public List<ModuleInfo> Modules { get; set; } = new();
 }
+
+[DataContract]
+public sealed class GetActiveDocumentRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class GetActiveDocumentResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "hasActiveDocument", Order = 2)]
+    public bool HasActiveDocument { get; set; }
+
+    [DataMember(Name = "filePath", Order = 3, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "fileName", Order = 4, EmitDefaultValue = false)]
+    public string? FileName { get; set; }
+
+    [DataMember(Name = "isDirty", Order = 5)]
+    public bool IsDirty { get; set; }
+
+    [DataMember(Name = "isReadOnly", Order = 6)]
+    public bool IsReadOnly { get; set; }
+
+    [DataMember(Name = "language", Order = 7, EmitDefaultValue = false)]
+    public string? Language { get; set; }
+
+    [DataMember(Name = "cursorLine", Order = 8, EmitDefaultValue = false)]
+    public int? CursorLine { get; set; }
+
+    [DataMember(Name = "cursorColumn", Order = 9, EmitDefaultValue = false)]
+    public int? CursorColumn { get; set; }
+
+    [DataMember(Name = "lineCount", Order = 10, EmitDefaultValue = false)]
+    public int? LineCount { get; set; }
+
+    [DataMember(Name = "hasSelection", Order = 11)]
+    public bool HasSelection { get; set; }
+
+    [DataMember(Name = "selectionStartLine", Order = 12, EmitDefaultValue = false)]
+    public int? SelectionStartLine { get; set; }
+
+    [DataMember(Name = "selectionStartColumn", Order = 13, EmitDefaultValue = false)]
+    public int? SelectionStartColumn { get; set; }
+
+    [DataMember(Name = "selectionEndLine", Order = 14, EmitDefaultValue = false)]
+    public int? SelectionEndLine { get; set; }
+
+    [DataMember(Name = "selectionEndColumn", Order = 15, EmitDefaultValue = false)]
+    public int? SelectionEndColumn { get; set; }
+
+    [DataMember(Name = "selectedText", Order = 16, EmitDefaultValue = false)]
+    public string? SelectedText { get; set; }
+}
+
+[DataContract]
+public sealed class NavigateToRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "filePath", Order = 2)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "line", Order = 3, EmitDefaultValue = false)]
+    public int? Line { get; set; }
+
+    [DataMember(Name = "column", Order = 4, EmitDefaultValue = false)]
+    public int? Column { get; set; }
+
+    [DataMember(Name = "preview", Order = 5, EmitDefaultValue = false)]
+    public bool Preview { get; set; }
+}
+
+[DataContract]
+public sealed class NavigateToResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "filePath", Order = 2)]
+    public string FilePath { get; set; } = string.Empty;
+
+    [DataMember(Name = "line", Order = 3)]
+    public int Line { get; set; } = 1;
+
+    [DataMember(Name = "column", Order = 4)]
+    public int Column { get; set; } = 1;
+
+    [DataMember(Name = "success", Order = 5)]
+    public bool Success { get; set; }
+}
+
+[DataContract]
+public sealed class SolutionConfigurationInfo
+{
+    [DataMember(Name = "name", Order = 1)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "platformName", Order = 2)]
+    public string PlatformName { get; set; } = string.Empty;
+
+    [DataMember(Name = "fullName", Order = 3)]
+    public string FullName { get; set; } = string.Empty;
+
+    [DataMember(Name = "isActive", Order = 4)]
+    public bool IsActive { get; set; }
+}
+
+[DataContract]
+public sealed class GetSolutionConfigurationsRequest
+{
+    [DataMember(Name = "vsInstanceId", Order = 1, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class GetSolutionConfigurationsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "solutionName", Order = 2)]
+    public string SolutionName { get; set; } = string.Empty;
+
+    [DataMember(Name = "solutionPath", Order = 3)]
+    public string SolutionPath { get; set; } = string.Empty;
+
+    [DataMember(Name = "activeConfigurationName", Order = 4)]
+    public string ActiveConfigurationName { get; set; } = string.Empty;
+
+    [DataMember(Name = "activePlatformName", Order = 5)]
+    public string ActivePlatformName { get; set; } = string.Empty;
+
+    [DataMember(Name = "configurations", Order = 6)]
+    public List<SolutionConfigurationInfo> Configurations { get; set; } = new();
+}

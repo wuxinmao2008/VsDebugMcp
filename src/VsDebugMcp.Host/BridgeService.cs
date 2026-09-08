@@ -194,6 +194,22 @@ public interface IBridgeService
         bool userCodeOnly,
         int? maxCount,
         CancellationToken cancellationToken);
+
+    Task<GetActiveDocumentResponse> GetActiveDocumentAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<NavigateToResponse> NavigateToAsync(
+        string? vsInstanceId,
+        string filePath,
+        int? line,
+        int? column,
+        bool preview,
+        CancellationToken cancellationToken);
+
+    Task<GetSolutionConfigurationsResponse> GetSolutionConfigurationsAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -700,6 +716,46 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<GetActiveDocumentResponse> GetActiveDocumentAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetActiveDocumentAsync(
+                new GetActiveDocumentRequest(),
+                cancellationToken),
+            cancellationToken);
+
+    public Task<NavigateToResponse> NavigateToAsync(
+        string? vsInstanceId,
+        string filePath,
+        int? line,
+        int? column,
+        bool preview,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.NavigateToAsync(
+                new NavigateToRequest
+                {
+                    FilePath = filePath,
+                    Line = line,
+                    Column = column,
+                    Preview = preview
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<GetSolutionConfigurationsResponse> GetSolutionConfigurationsAsync(
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.GetSolutionConfigurationsAsync(
+                new GetSolutionConfigurationsRequest(),
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -881,6 +937,21 @@ public sealed class BridgeServiceException : Exception
                 exception.Code,
                 exception.Message,
                 true,
+                exception),
+            BridgeErrorCodes.FileNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.InvalidNavigationTarget => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.ActiveDocumentUnavailable => new(
+                exception.Code,
+                exception.Message,
+                false,
                 exception),
             _ => new(
                 BridgeErrorCodes.InternalError,
