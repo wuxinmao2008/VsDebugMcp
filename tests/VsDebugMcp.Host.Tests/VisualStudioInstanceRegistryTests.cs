@@ -56,6 +56,60 @@ public sealed class VisualStudioInstanceRegistryTests
         Assert.True(result.ShouldStop);
     }
 
+    [Fact]
+    public void ResolveMatchesByWorkingDirectoryWhenMultipleInstancesExist()
+    {
+        var registry = new VisualStudioInstanceRegistry(new VsHostOptions(), () => { }, _ => { });
+
+        var instanceA = new VisualStudioInstanceDescriptor
+        {
+            VsInstanceId = "vs-inst-a",
+            VisualStudioProcessId = 1001,
+            ProcessStartTimeUtcTicks = 12345,
+            VisualStudioVersion = "test",
+            SolutionName = "SolutionA",
+            SolutionFilePath = @"C:\repos\ProjectA\SolutionA.sln",
+            BridgePipeName = "pipeA"
+        };
+        var instanceB = new VisualStudioInstanceDescriptor
+        {
+            VsInstanceId = "vs-inst-b",
+            VisualStudioProcessId = 1002,
+            ProcessStartTimeUtcTicks = 12346,
+            VisualStudioVersion = "test",
+            SolutionName = "SolutionB",
+            SolutionFilePath = @"C:\repos\ProjectB\SolutionB.sln",
+            BridgePipeName = "pipeB"
+        };
+
+        registry.Register(instanceA);
+        registry.Register(instanceB);
+
+        // 1. Ambiguous when no targetPath is given
+        var ex1 = Assert.Throws<BridgeServiceException>(() => registry.Resolve(null));
+        Assert.Equal(BridgeErrorCodes.AmbiguousInstance, ex1.Code);
+
+        // 2. Matches subpath of ProjectA
+        var matchedA = registry.Resolve(null, @"C:\repos\ProjectA\src\Controllers\HomeController.cs");
+        Assert.Equal("vs-inst-a", matchedA.VsInstanceId);
+
+        // 3. Matches subpath of ProjectB
+        var matchedB = registry.Resolve(null, @"C:\repos\ProjectB\src\Data\Model.cs");
+        Assert.Equal("vs-inst-b", matchedB.VsInstanceId);
+
+        // 4. Matches parent directory of ProjectA
+        var matchedParentA = registry.Resolve(null, @"C:\repos\ProjectA");
+        Assert.Equal("vs-inst-a", matchedParentA.VsInstanceId);
+
+        // 5. Unrelated path still throws AmbiguousInstance
+        var ex2 = Assert.Throws<BridgeServiceException>(() => registry.Resolve(null, @"D:\OtherRepos\SomethingElse.cs"));
+        Assert.Equal(BridgeErrorCodes.AmbiguousInstance, ex2.Code);
+
+        // 6. Explicit vsInstanceId bypasses path matching
+        var explicitA = registry.Resolve("vs-inst-a", @"C:\repos\ProjectB\file.cs");
+        Assert.Equal("vs-inst-a", explicitA.VsInstanceId);
+    }
+
     private static VisualStudioInstanceRegistry CreateRegistry() =>
         new(new VsHostOptions(), () => { });
 

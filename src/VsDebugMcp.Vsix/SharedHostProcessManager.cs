@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
@@ -77,7 +78,11 @@ internal sealed class SharedHostProcessManager
                 _diagnostics?.LogInfo("未显式定位到独立 .NET 运行时目录，将使用系统环境启动 Host。");
             }
 
-            Process.Start(startInfo);
+            var hostProcess = Process.Start(startInfo);
+            if (hostProcess is not null)
+            {
+                JobObjectHelper.TryAssignProcess(hostProcess);
+            }
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -157,4 +162,104 @@ internal sealed class SharedHostProcessManager
 
     private static bool IsUnavailable(Exception exception) =>
         exception is IOException or TimeoutException;
+}
+
+internal static class JobObjectHelper
+{
+    private static IntPtr _jobHandle = IntPtr.Zero;
+    private static readonly object _lock = new();
+
+    public static void TryAssignProcess(Process process)
+    {
+        try
+        {
+            EnsureJobObject();
+            if (_jobHandle != IntPtr.Zero && !process.HasExited)
+            {
+                AssignProcessToJobObject(_jobHandle, process.Handle);
+            }
+        }
+        catch
+        {
+            // Best effort; Job Object failures should never block VS or extension functionality
+        }
+    }
+
+    private static void EnsureJobObject()
+    {
+        if (_jobHandle != IntPtr.Zero) return;
+        lock (_lock)
+        {
+            if (_jobHandle != IntPtr.Zero) return;
+
+            _jobHandle = CreateJobObject(IntPtr.Zero, null);
+            if (_jobHandle == IntPtr.Zero) return;
+
+            var info = new JOBOBJECT_BASIC_LIMIT_INFORMATION
+            {
+                LimitFlags = 0x2000 // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            };
+            var extendedInfo = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+            {
+                BasicLimitInformation = info
+            };
+
+            var length = Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+            var extendedInfoPtr = Marshal.AllocHGlobal(length);
+            try
+            {
+                Marshal.StructureToPtr(extendedInfo, extendedInfoPtr, false);
+                SetInformationJobObject(_jobHandle, 9 /* JobObjectExtendedLimitInformation */, extendedInfoPtr, (uint)length);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(extendedInfoPtr);
+            }
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(IntPtr hJob, int JobObjectInfoClass, IntPtr lpJobObjectInfo, uint cbJobObjectInfoLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryLimit;
+        public UIntPtr PeakJobMemoryLimit;
+    }
 }

@@ -284,7 +284,7 @@ public sealed class BridgeService : IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            _registry.Resolve(vsInstanceId),
+            _registry.Resolve(vsInstanceId, projectId),
             client => client.GetFilesInProjectAsync(
                 new GetFilesInProjectRequest
                 {
@@ -337,7 +337,7 @@ public sealed class BridgeService : IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            _registry.Resolve(vsInstanceId),
+            _registry.Resolve(vsInstanceId, file ?? project),
             client => client.GetErrorsAsync(
                 new GetErrorsRequest
                 {
@@ -381,7 +381,7 @@ public sealed class BridgeService : IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            _registry.Resolve(vsInstanceId),
+            _registry.Resolve(vsInstanceId, filePath),
             client => client.DebuggerSetBreakpointsAsync(
                 new DebuggerSetBreakpointsRequest
                 {
@@ -734,7 +734,7 @@ public sealed class BridgeService : IBridgeService
         bool preview,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            _registry.Resolve(vsInstanceId),
+            _registry.Resolve(vsInstanceId, filePath),
             client => client.NavigateToAsync(
                 new NavigateToRequest
                 {
@@ -949,6 +949,11 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.ActiveDocumentUnavailable => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DebuggerRunningCannotBuild => new(
                 exception.Code,
                 exception.Message,
                 false,

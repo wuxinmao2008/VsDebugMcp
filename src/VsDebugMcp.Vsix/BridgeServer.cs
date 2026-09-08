@@ -814,6 +814,7 @@ internal sealed class BridgeServer : IDisposable
         BridgeErrorCodes.BuildNotActive => "The build task is not active.",
         BridgeErrorCodes.BuildCancelNotSupported => "The active Visual Studio build cannot be cancelled.",
         BridgeErrorCodes.BuildStartFailed => "Visual Studio could not start the build.",
+        BridgeErrorCodes.DebuggerRunningCannotBuild => "Cannot build the solution while debugging is in progress. Stop debugging first.",
         _ => "The Visual Studio build state is unavailable."
     };
 

@@ -54,6 +54,11 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			throw new BuildProviderException(BridgeErrorCodes.SolutionNotOpen, false);
 		}
 
+		if (dte.Debugger is not null && dte.Debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
+		{
+			throw new BuildProviderException(BridgeErrorCodes.DebuggerRunningCannotBuild, false);
+		}
+
 		lock (_sync)
 		{
 			if (_build is not null && !IsTerminal(_build.State))

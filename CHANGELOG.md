@@ -5,6 +5,23 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13.0] - 2026-09-08
+
+### Added
+- **Multi-Instance Smart Working Directory Routing (Phase 4B)**:
+  - Extended `VisualStudioInstanceRegistry.Resolve(string? vsInstanceId, string? targetPath = null)` to support prefix/containment matching of `targetPath` against open `SolutionFilePath` and directory.
+  - Automatically routes MCP tool requests (`vs_get_files_in_project`, `vs_get_errors`, `vs_debugger_set_breakpoints`, `vs_navigate_to`) to the matching Visual Studio instance when `vsInstanceId` is omitted, eliminating ambiguity errors in multi-solution / multi-window workflows.
+  - Enhanced `vs_find_instances` with full solution directory and project context search matching.
+- **Build Deadlock Guard during Debugging (Phase 4B)**:
+  - Added pre-build state guard in `SolutionBuildProvider`: prevents `vs_run_build` when the Visual Studio debugger is in run or break mode (`dbgRunMode` / `dbgBreakMode`).
+  - Immediately rejects build requests with `BridgeErrorCodes.DebuggerRunningCannotBuild` (`debugger_running_cannot_build`), avoiding native Visual Studio modal blocking dialogs and IPC pipe hangs.
+- **Host Process Lifecycle Job Object Hardening (Phase 4B)**:
+  - Added Windows Kernel Job Object encapsulation (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) in `SharedHostProcessManager`.
+  - Automatically associates child `VsDebugMcp.Host` process with the VSIX parent Visual Studio process, guaranteeing that the OOP MCP Host is terminated by the OS even if Visual Studio crashes or is killed ungracefully.
+
+### Verified
+- Automated unit tests: 115/115 PASS (100% across Protocol and Host test suites, 12/12 Protocol tests, 103/103 Host tests).
+
 ## [0.1.12.0] - 2026-09-08
 
 ### Added

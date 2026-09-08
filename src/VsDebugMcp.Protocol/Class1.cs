@@ -92,6 +92,7 @@ public static class BridgeErrorCodes
 	public const string FileNotFound = "file_not_found";
 	public const string InvalidNavigationTarget = "invalid_navigation_target";
 	public const string ActiveDocumentUnavailable = "active_document_unavailable";
+	public const string DebuggerRunningCannotBuild = "debugger_running_cannot_build";
 	public const string InternalError = "internal_error";
 }
 

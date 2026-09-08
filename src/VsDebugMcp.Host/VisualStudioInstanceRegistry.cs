@@ -12,17 +12,27 @@ public sealed class VisualStudioInstanceRegistry
     private readonly DateTime _startedAtUtc = DateTime.UtcNow;
     private readonly VsHostOptions _options;
     private readonly Action _requestStop;
+    private readonly Action<VisualStudioInstanceDescriptor> _validator;
     private bool _hasRegisteredInstance;
 
     public VisualStudioInstanceRegistry(VsHostOptions options, Action requestStop)
+        : this(options, requestStop, ValidateInstance)
+    {
+    }
+
+    internal VisualStudioInstanceRegistry(
+        VsHostOptions options,
+        Action requestStop,
+        Action<VisualStudioInstanceDescriptor>? validator)
     {
         _options = options;
         _requestStop = requestStop;
+        _validator = validator ?? ValidateInstance;
     }
 
     public RegisterInstanceResponse Register(VisualStudioInstanceDescriptor instance)
     {
-        ValidateInstance(instance);
+        _validator(instance);
         var now = DateTime.UtcNow;
         var registered = Copy(instance);
         registered.RegisteredAtUtc = now.ToString("O", CultureInfo.InvariantCulture);
@@ -43,7 +53,7 @@ public sealed class VisualStudioInstanceRegistry
 
     public HeartbeatInstanceResponse Heartbeat(VisualStudioInstanceDescriptor instance)
     {
-        ValidateInstance(instance);
+        _validator(instance);
         lock (_sync)
         {
             if (!_instances.TryGetValue(instance.VsInstanceId, out var registered))
@@ -68,7 +78,7 @@ public sealed class VisualStudioInstanceRegistry
         }
     }
 
-    public VisualStudioInstanceDescriptor Resolve(string? vsInstanceId)
+    public VisualStudioInstanceDescriptor Resolve(string? vsInstanceId, string? targetPath = null)
     {
         lock (_sync)
         {
@@ -93,16 +103,77 @@ public sealed class VisualStudioInstanceRegistry
                     true);
             }
 
-            if (_instances.Count > 1)
+            if (_instances.Count == 1)
             {
-                throw new BridgeServiceException(
-                    BridgeErrorCodes.AmbiguousInstance,
-                    "Multiple Visual Studio instances are registered; specify vsInstanceId.",
-                    false);
+                return Copy(_instances.Values.Single());
             }
 
-            return Copy(_instances.Values.Single());
+            if (!string.IsNullOrWhiteSpace(targetPath))
+            {
+                var matched = MatchByPath(targetPath);
+                if (matched is not null)
+                {
+                    return Copy(matched);
+                }
+            }
+
+            throw new BridgeServiceException(
+                BridgeErrorCodes.AmbiguousInstance,
+                "Multiple Visual Studio instances are registered; specify vsInstanceId.",
+                false);
         }
+    }
+
+    private VisualStudioInstanceDescriptor? MatchByPath(string path)
+    {
+        string normalizedPath;
+        try
+        {
+            normalizedPath = Path.GetFullPath(path.Trim())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return null;
+        }
+
+        VisualStudioInstanceDescriptor? bestMatch = null;
+        var matchCount = 0;
+
+        foreach (var inst in _instances.Values)
+        {
+            if (string.IsNullOrWhiteSpace(inst.SolutionFilePath))
+            {
+                continue;
+            }
+
+            string? slnDir;
+            try
+            {
+                slnDir = Path.GetDirectoryName(inst.SolutionFilePath)?
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(slnDir))
+            {
+                continue;
+            }
+
+            bool isSubPath = normalizedPath.StartsWith(slnDir, StringComparison.OrdinalIgnoreCase);
+            bool isParentPath = slnDir.StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase);
+
+            if (isSubPath || isParentPath)
+            {
+                bestMatch = inst;
+                matchCount++;
+            }
+        }
+
+        return matchCount == 1 ? bestMatch : null;
     }
 
     public IReadOnlyList<VisualStudioInstanceDescriptor> List()
@@ -131,7 +202,9 @@ public sealed class VisualStudioInstanceRegistry
                     instance.VsInstanceId.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0 ||
                     instance.VisualStudioProcessId.ToString(CultureInfo.InvariantCulture) == normalized ||
                     instance.SolutionName.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    instance.SolutionFilePath.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0)
+                    instance.SolutionFilePath.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (!string.IsNullOrEmpty(instance.SolutionFilePath) &&
+                     Path.GetDirectoryName(instance.SolutionFilePath)?.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0))
                 .OrderBy(instance => instance.VisualStudioProcessId)
                 .Select(Copy)
                 .ToArray();

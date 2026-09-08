@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+    <InternalsVisibleTo Include="VsDebugMcp.Host.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,7 +19,7 @@
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x64</Platforms>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <Version>0.1.12.0</Version>
+    <Version>0.1.13.0</Version>
   </PropertyGroup>
 
 </Project>

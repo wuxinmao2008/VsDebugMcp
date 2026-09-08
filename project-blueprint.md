@@ -13,7 +13,22 @@
 
 ## 实施进度（2026-09-08 更新）
 
-### Phase 4A：活动上下文与编辑器协同导航已完成开发 (v0.1.12.0)
+### Phase 4B：工程防御加固与多实例智能路由已完成开发 (v0.1.13.0)
+
+- **多实例工作目录智能路由 (`FindByWorkingDirectory`)**：
+  - 扩展 `VisualStudioInstanceRegistry.Resolve(string? vsInstanceId, string? targetPath = null)`，支持将请求的目标文件/目录路径与各 VS 实例报告的解决方案物理路径及目录进行包含与前缀匹配；
+  - 在省略 `vsInstanceId` 时自动路由到匹配的 Visual Studio 实例（`vs_get_files_in_project`, `vs_get_errors`, `vs_debugger_set_breakpoints`, `vs_navigate_to`），彻底消除多开 VS 时的 `ambiguous_instance` 阻断；
+  - 增强 `vs_find_instances` 查询能力，支持按解决方案目录模糊匹配。
+- **构建与调试互斥防死锁守卫 (`debugger_running_cannot_build`)**：
+  - 在 `SolutionBuildProvider` 构建生命周期前置感知调试器模式（`dte.Debugger.CurrentMode != dbgDesignMode`）；
+  - 若在 F5 调试运行（`dbgRunMode`）或断点中断（`dbgBreakMode`）期间收到 `vs_run_build` 请求，立即拒绝并返回结构化错误码 `debugger_running_cannot_build`（`Retryable = false`），规避 VS 原生阻塞式模态对话框引发 UI 挂起与 IPC 死锁。
+- **Windows Job Object 进程生命周期内核兜底**：
+  - 在 `SharedHostProcessManager` 中引入原生 P/Invoke Windows Job Object，配置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 限制；
+  - 在拉起 `VsDebugMcp.Host` 进程后将其挂载至 VS 进程所属 Job Object，确保即使 Visual Studio 强杀或崩溃，操作系统内核均保证回收 Host 孤儿进程，避免端口 `43260` 冲突。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (12/12 PASS) + `VsDebugMcp.Host.Tests` (103/103 PASS)，全套 115 个单元测试 100% 通过。
+
+### Phase 4A：活动上下文与编辑器协同导航已完成开发并通过全链路在线实测验收 (v0.1.12.0)
 
 - **`vs_get_active_document` 活动文档与光标选区探测**：
   - 基于 `EnvDTE.DTE.ActiveDocument` 获取当前前台编辑器激活文档；
@@ -629,19 +644,29 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 - [vs-copilot-debugger-log-analysis.md](vs-copilot-debugger-log-analysis.md)
 - [vs2026_copilot.md](vs2026_copilot.md)
 
-## 下一步规划（面向新会话 / 周一继续）
+## 下一步规划：Phase 4B 工程防御加固与多实例智能路由 (Hardening & Smart Routing)
 
-当前状态：Phase 0、Phase 1、Phase 2 全部调试闭环（v0.1.7.0）以及 Phase 3 测试资源管理器集成（v0.1.8.0，4 个测试工具）代码实现与单测全量通过（Protocol 9/9 PASS，Host 59/59 PASS）。在线实测已验证健康检查、工具发现、测试发现（精确匹配 3 个 xUnit 测试）、过滤查询及取消控制。最新构建已修复 TestWindow 工具窗口激活与 Host 注册退避。
+当前状态：Phase 0、Phase 1、Phase 2 全部调试闭环、Phase 3 (3A/3B/3C) 测试与深层调试闭环、以及 Phase 4A 活动上下文与编辑器协同导航（v0.1.12.0，35 个 Bridge Capabilities / 37 个 MCP Tools）全部开发完成并通过 113 个单元测试 (100%) 与全链路在线实测验收。
 
-周一会话可直接无缝继续的步骤：
+下一次迭代确立目标：**Phase 4B 工程防御加固与多实例智能路由**。
 
-1. **部署最新构建并完成测试执行闭环在线验收**：
-   - 执行 `powershell -ExecutionPolicy Bypass -File .\scripts\deploy-exp.ps1` 将编译好的最新 VSIX 0.1.8.0 覆盖部署到实验实例；
-   - 启动实验实例并打开 `sample/SampleSolution.slnx`；
-   - 调用 `vs_run_tests` 执行全量测试并获取 `testRunId`；
-   - 调用 `vs_get_test_run_status` 轮询测试执行结果，验证 3 个测试均通过（Passed=3, Failed=0, Skipped=0）；
-   - 验证单项指定 `testId` 运行以及并发防卫（`test_run_busy`）。
+### 1. 工作目录智能路由 (Smart Multi-Instance Routing via `FindByWorkingDirectory`)
+- **痛点**：当开发者同时打开多个 Visual Studio 解决方案时，外部 Agent 若未显式传递 `vsInstanceId`，Host 会直接报错 `ambiguous_instance`，导致必须多轮往返调用 `vs_find_instances` 确认实例 ID。
+- **方案**：
+  - 在 `VisualStudioInstanceRegistry` 与 `BridgeRouter` 中引入工作目录/路径前缀匹配算法；
+  - 当省略 `vsInstanceId` 且存在多个实例时，Host 优先将请求中的目标路径（如 `filePath`、`project`、或者客户端上下文 WorkingDirectory）与各 VS 实例报告的 `solutionDirectory` 进行不区分大小写的前缀匹配；
+  - 若能唯一精准锁定目标实例，自动路由至该实例，实现无感平滑切换；仅在完全无法区分时才回退至 `ambiguous_instance`。
 
-2. **后续可选深化方向**：
-   - **方向 C：错误列表（Error List）公开数据源深化**：解决非托管 C++ 与构建输出沉淀至 Error List 公开快照的限制；
-   - **方向 D：调试器进程附加与高级能力（Attach & Advanced Diagnostics）**：支持附加到外部已运行进程与条件/命中计数断点。
+### 2. 构建与调试互斥防御 (Prevent Build While Debugging Deadlock)
+- **痛点**：在 F5 调试状态（`dbgRunMode` 或 `dbgBreakMode`）下，Agent 若调用 `vs_run_build`，Visual Studio 底层会弹出阻塞式模态确认对话框（“项目正在运行，是否停止调试并重新生成？”），导致 devenv.exe UI 线程完全挂起，IPC 通道死锁。
+- **方案**：
+  - 在 `SolutionBuildProvider` 中前置注入调试器状态感知；
+  - 在触发构建操作前，检查 `dte.Debugger.CurrentMode != dbgDesignMode`；
+  - 若处于调试状态，立即提前拦截并返回结构化错误码 `debugger_running_cannot_build`（`Retryable = false`），明确提示 Agent 先调用 `vs_debugger_stop` 结束调试再行构建，彻底规避模态死锁。
+
+### 3. Windows Job Object 进程生命周期兜底 (OS-Level Orphan Process Cleanup)
+- **痛点**：当 Visual Studio 异常崩溃、被任务管理器强制杀死时，VSIX 在前台拉起的 OOP Host 进程可能无法收到正常注销信号，成为孤儿进程并继续占用端口 `43260` 或 Named Pipe，导致下次启动冲突。
+- **方案**：
+  - 在 `SharedHostProcessManager` 中引入 Windows Job Object 原生 P/Invoke 支持；
+  - 配置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 标志位，将 Host 进程加入当前 VS 进程守护的 Job Object 中；
+  - 即使 Visual Studio 发生强杀或崩溃，操作系统内核层级会自动级联回收 Host 子进程，保障端口与环境的绝对干净。
