@@ -365,6 +365,12 @@ public sealed class StackFrameInfo
 
     [DataMember(Name = "module", Order = 6, EmitDefaultValue = false)]
     public string? Module { get; set; }
+
+    [DataMember(Name = "columnNumber", Order = 7, EmitDefaultValue = false)]
+    public int? ColumnNumber { get; set; }
+
+    [DataMember(Name = "userCode", Order = 8, EmitDefaultValue = false)]
+    public bool? UserCode { get; set; }
 }
 
 [DataContract]
@@ -1616,4 +1622,100 @@ public sealed class DebuggerSetNextStatementResponse
 
     [DataMember(Name = "topFrame", Order = 6, EmitDefaultValue = false)]
     public StackFrameInfo? TopFrame { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerListBreakpointsRequest
+{
+    [DataMember(Name = "filePath", Order = 1, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "enabledOnly", Order = 2)]
+    public bool EnabledOnly { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 3, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerListBreakpointsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "totalCount", Order = 2)]
+    public int TotalCount { get; set; }
+
+    [DataMember(Name = "breakpoints", Order = 3)]
+    public List<BreakpointInfo> Breakpoints { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerClearBreakpointsRequest
+{
+    [DataMember(Name = "clearAll", Order = 1)]
+    public bool ClearAll { get; set; }
+
+    [DataMember(Name = "filePath", Order = 2, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "line", Order = 3, EmitDefaultValue = false)]
+    public int? Line { get; set; }
+
+    [DataMember(Name = "breakpointId", Order = 4, EmitDefaultValue = false)]
+    public string? BreakpointId { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerClearBreakpointsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "clearedCount", Order = 2)]
+    public int ClearedCount { get; set; }
+
+    [DataMember(Name = "remainingCount", Order = 3)]
+    public int RemainingCount { get; set; }
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerToggleBreakpointRequest
+{
+    [DataMember(Name = "breakpointId", Order = 1, EmitDefaultValue = false)]
+    public string? BreakpointId { get; set; }
+
+    [DataMember(Name = "filePath", Order = 2, EmitDefaultValue = false)]
+    public string? FilePath { get; set; }
+
+    [DataMember(Name = "line", Order = 3, EmitDefaultValue = false)]
+    public int? Line { get; set; }
+
+    [DataMember(Name = "enabled", Order = 4, EmitDefaultValue = false)]
+    public bool? Enabled { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerToggleBreakpointResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "matchedCount", Order = 2)]
+    public int MatchedCount { get; set; }
+
+    [DataMember(Name = "breakpoints", Order = 3)]
+    public List<BreakpointInfo> Breakpoints { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 4)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
 }

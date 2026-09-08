@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using EnvDTE;
 using EnvDTE80;
 using EnvDTE90;
+using EnvDTE90a;
 using Microsoft.VisualStudio.Shell;
 using VsDebugMcp.Protocol;
 
@@ -288,6 +289,325 @@ internal sealed class DebuggerProvider
 		}
 
 		return response;
+	}
+
+	public async Task<DebuggerListBreakpointsResponse> ListBreakpointsAsync(
+		DebuggerListBreakpointsRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		var result = new List<BreakpointInfo>();
+		var filterPath = request.FilePath?.Trim();
+		if (!string.IsNullOrEmpty(filterPath) && !Path.IsPathRooted(filterPath))
+		{
+			try { filterPath = Path.GetFullPath(filterPath); } catch { }
+		}
+
+		if (debugger.Breakpoints != null)
+		{
+			foreach (Breakpoint bp in debugger.Breakpoints)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				var info = MapBreakpoint(bp);
+
+				if (request.EnabledOnly && !info.Enabled)
+				{
+					continue;
+				}
+
+				if (!string.IsNullOrEmpty(filterPath))
+				{
+					if (!string.Equals(info.FilePath, filterPath, StringComparison.OrdinalIgnoreCase) &&
+					    !info.FilePath.EndsWith(filterPath, StringComparison.OrdinalIgnoreCase))
+					{
+						continue;
+					}
+				}
+
+				result.Add(info);
+			}
+		}
+
+		return new DebuggerListBreakpointsResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			TotalCount = result.Count,
+			Breakpoints = result
+		};
+	}
+
+	public async Task<DebuggerClearBreakpointsResponse> ClearBreakpointsAsync(
+		DebuggerClearBreakpointsRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (!request.ClearAll &&
+		    string.IsNullOrWhiteSpace(request.FilePath) &&
+		    string.IsNullOrWhiteSpace(request.BreakpointId))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InvalidRequest,
+				"Must specify 'clearAll: true', 'filePath', or 'breakpointId' to clear breakpoints. Preventing accidental full deletion.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		var response = new DebuggerClearBreakpointsResponse
+		{
+			VsInstanceId = _vsInstanceId
+		};
+
+		if (debugger.Breakpoints == null || debugger.Breakpoints.Count == 0)
+		{
+			response.ClearedCount = 0;
+			response.RemainingCount = 0;
+			return response;
+		}
+
+		var targetFile = request.FilePath?.Trim();
+		if (!string.IsNullOrEmpty(targetFile) && !Path.IsPathRooted(targetFile))
+		{
+			try { targetFile = Path.GetFullPath(targetFile); } catch { }
+		}
+
+		var toDelete = new List<Breakpoint>();
+		try
+		{
+			foreach (Breakpoint bp in debugger.Breakpoints)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				string bpFile = string.Empty;
+				int bpLine = 0;
+				try { bpFile = bp.File ?? string.Empty; } catch { }
+				try { bpLine = bp.FileLine; } catch { }
+
+				var bpId = !string.IsNullOrEmpty(bpFile) ? $"{bpFile}:{bpLine}" : $"bp:{bpLine}";
+
+				if (request.ClearAll)
+				{
+					toDelete.Add(bp);
+				}
+				else if (!string.IsNullOrEmpty(request.BreakpointId))
+				{
+					if (string.Equals(bpId, request.BreakpointId.Trim(), StringComparison.OrdinalIgnoreCase))
+					{
+						toDelete.Add(bp);
+					}
+				}
+				else if (!string.IsNullOrEmpty(targetFile))
+				{
+					var fileMatch = string.Equals(bpFile, targetFile, StringComparison.OrdinalIgnoreCase) ||
+					                bpFile.EndsWith(targetFile, StringComparison.OrdinalIgnoreCase);
+
+					if (fileMatch)
+					{
+						if (request.Line.HasValue)
+						{
+							if (bpLine == request.Line.Value)
+							{
+								toDelete.Add(bp);
+							}
+						}
+						else
+						{
+							toDelete.Add(bp);
+						}
+					}
+				}
+			}
+
+			foreach (var bp in toDelete)
+			{
+				try
+				{
+					bp.Delete();
+					response.ClearedCount++;
+				}
+				catch (Exception ex)
+				{
+					response.Warnings.Add(new BridgeWarning
+					{
+						Code = "delete_breakpoint_failed",
+						Message = $"Failed to delete breakpoint: {ex.Message}"
+					});
+				}
+			}
+
+			response.RemainingCount = debugger.Breakpoints?.Count ?? 0;
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerUnavailable,
+				$"Failed to clear breakpoints: {ex.Message}",
+				ex);
+		}
+
+		return response;
+	}
+
+	public async Task<DebuggerToggleBreakpointResponse> ToggleBreakpointAsync(
+		DebuggerToggleBreakpointRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.BreakpointId) &&
+		    (string.IsNullOrWhiteSpace(request.FilePath) || !request.Line.HasValue))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.InvalidRequest,
+				"Must specify either 'breakpointId' or both 'filePath' and 'line' to toggle a breakpoint.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		var response = new DebuggerToggleBreakpointResponse
+		{
+			VsInstanceId = _vsInstanceId
+		};
+
+		if (debugger.Breakpoints == null || debugger.Breakpoints.Count == 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.BreakpointNotFound, "No breakpoints are set in the current solution.");
+		}
+
+		var targetFile = request.FilePath?.Trim();
+		if (!string.IsNullOrEmpty(targetFile) && !Path.IsPathRooted(targetFile))
+		{
+			try { targetFile = Path.GetFullPath(targetFile); } catch { }
+		}
+
+		var targetId = request.BreakpointId?.Trim();
+		var matched = new List<Breakpoint>();
+
+		foreach (Breakpoint bp in debugger.Breakpoints)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			string bpFile = string.Empty;
+			int bpLine = 0;
+			try { bpFile = bp.File ?? string.Empty; } catch { }
+			try { bpLine = bp.FileLine; } catch { }
+
+			var bpId = !string.IsNullOrEmpty(bpFile) ? $"{bpFile}:{bpLine}" : $"bp:{bpLine}";
+
+			if (!string.IsNullOrEmpty(targetId))
+			{
+				if (string.Equals(bpId, targetId, StringComparison.OrdinalIgnoreCase))
+				{
+					matched.Add(bp);
+				}
+			}
+			else if (!string.IsNullOrEmpty(targetFile) && request.Line.HasValue)
+			{
+				var fileMatch = string.Equals(bpFile, targetFile, StringComparison.OrdinalIgnoreCase) ||
+				                bpFile.EndsWith(targetFile, StringComparison.OrdinalIgnoreCase);
+				if (fileMatch && bpLine == request.Line.Value)
+				{
+					matched.Add(bp);
+				}
+			}
+		}
+
+		if (matched.Count == 0)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.BreakpointNotFound,
+				$"No breakpoint found matching target '{targetId ?? $"{targetFile}:{request.Line}"}'.");
+		}
+
+		foreach (var bp in matched)
+		{
+			try
+			{
+				var newEnabled = request.Enabled ?? !bp.Enabled;
+				bp.Enabled = newEnabled;
+				response.Breakpoints.Add(MapBreakpoint(bp));
+				response.MatchedCount++;
+			}
+			catch (Exception ex)
+			{
+				response.Warnings.Add(new BridgeWarning
+				{
+					Code = "toggle_breakpoint_failed",
+					Message = $"Failed to toggle breakpoint: {ex.Message}"
+				});
+			}
+		}
+
+		return response;
+	}
+
+	private static BreakpointInfo MapBreakpoint(Breakpoint bp)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		var file = string.Empty;
+		var line = 1;
+		var col = 1;
+		var condition = string.Empty;
+		var enabled = true;
+		string? condType = null;
+		int? hitTarget = null;
+		string? hitType = null;
+		int? currentHits = null;
+		var isBound = false;
+
+		try { file = bp.File ?? string.Empty; } catch { }
+		try { line = bp.FileLine; } catch { }
+		try { col = bp.FileColumn; } catch { }
+		try { condition = bp.Condition; } catch { }
+		try { enabled = bp.Enabled; } catch { }
+
+		try
+		{
+			condType = bp.ConditionType == dbgBreakpointConditionType.dbgBreakpointConditionTypeWhenChanged
+				? "whenChanged"
+				: "whenTrue";
+		}
+		catch { }
+
+		try { hitTarget = bp.HitCountTarget; } catch { }
+
+		try
+		{
+			hitType = bp.HitCountType switch
+			{
+				dbgHitCountType.dbgHitCountTypeEqual => "equal",
+				dbgHitCountType.dbgHitCountTypeGreaterOrEqual => "greaterOrEqual",
+				dbgHitCountType.dbgHitCountTypeMultiple => "multiple",
+				_ => null
+			};
+		}
+		catch { }
+
+		try { currentHits = bp.CurrentHits; } catch { }
+
+		try
+		{
+			isBound = (bp.Children != null && bp.Children.Count > 0) || bp.FileLine > 0;
+		}
+		catch
+		{
+			isBound = bp.FileLine > 0;
+		}
+
+		var id = !string.IsNullOrWhiteSpace(file) ? $"{file}:{line}" : $"bp:{line}:{col}";
+
+		return new BreakpointInfo
+		{
+			Id = id,
+			FilePath = file,
+			Line = line,
+			Column = col,
+			Condition = string.IsNullOrEmpty(condition) ? null : condition,
+			Enabled = enabled,
+			IsBound = isBound,
+			ConditionType = condType,
+			HitCountTarget = hitTarget,
+			HitCountType = hitType,
+			CurrentHitCount = currentHits
+		};
 	}
 
 	public async Task<DebuggerGetCallStackResponse> GetCallStackAsync(
@@ -1963,42 +2283,92 @@ internal sealed class DebuggerProvider
 		var functionName = "unknown";
 		string? language = null;
 		string? module = null;
+		string? fileName = null;
+		int? lineNumber = null;
+		int? columnNumber = null;
+		bool? userCode = null;
 
 		try { functionName = frame.FunctionName ?? "unknown"; } catch { }
 		try { language = frame.Language; } catch { }
 		try { module = frame.Module; } catch { }
 
-		string? fileName = null;
-		int? lineNumber = null;
-
-		try
+		// Phase 5A: Try reading strong-typed properties via EnvDTE90a.StackFrame2 first
+		if (frame is EnvDTE90a.StackFrame2 frame2)
 		{
-			var inIdx = functionName.LastIndexOf(" in ", StringComparison.OrdinalIgnoreCase);
-			var lineIdx = functionName.LastIndexOf(":line ", StringComparison.OrdinalIgnoreCase);
-			if (inIdx >= 0 && lineIdx > inIdx)
+			try
 			{
-				fileName = functionName.Substring(inIdx + 4, lineIdx - (inIdx + 4)).Trim();
-				var lineStr = functionName.Substring(lineIdx + 6).Trim();
-				if (int.TryParse(lineStr, out var parsedLine))
+				var fn = frame2.FileName;
+				if (!string.IsNullOrWhiteSpace(fn))
 				{
-					lineNumber = parsedLine;
+					fileName = fn.Trim();
 				}
 			}
-			else
+			catch { }
+
+			try
 			{
-				var altLineIdx = functionName.LastIndexOf(" Line ", StringComparison.OrdinalIgnoreCase);
-				if (altLineIdx >= 0)
+				var ln = frame2.LineNumber;
+				if (ln > 0)
 				{
-					var lineStr = functionName.Substring(altLineIdx + 6).Trim();
-					if (int.TryParse(lineStr, out var parsedLine))
+					lineNumber = (int)ln;
+				}
+			}
+			catch { }
+
+			try
+			{
+				userCode = frame2.UserCode;
+			}
+			catch { }
+
+			try
+			{
+				if (string.IsNullOrWhiteSpace(module))
+				{
+					module = frame2.Module;
+				}
+			}
+			catch { }
+		}
+
+		// Fallback: If fileName or lineNumber couldn't be extracted via StackFrame2, try parsing functionName string
+		if (string.IsNullOrWhiteSpace(fileName) || lineNumber == null)
+		{
+			try
+			{
+				var inIdx = functionName.LastIndexOf(" in ", StringComparison.OrdinalIgnoreCase);
+				var lineIdx = functionName.LastIndexOf(":line ", StringComparison.OrdinalIgnoreCase);
+				if (inIdx >= 0 && lineIdx > inIdx)
+				{
+					if (string.IsNullOrWhiteSpace(fileName))
 					{
-						lineNumber = parsedLine;
+						fileName = functionName.Substring(inIdx + 4, lineIdx - (inIdx + 4)).Trim();
+					}
+					if (lineNumber == null)
+					{
+						var lineStr = functionName.Substring(lineIdx + 6).Trim();
+						if (int.TryParse(lineStr, out var parsedLine))
+						{
+							lineNumber = parsedLine;
+						}
+					}
+				}
+				else
+				{
+					var altLineIdx = functionName.LastIndexOf(" Line ", StringComparison.OrdinalIgnoreCase);
+					if (altLineIdx >= 0 && lineNumber == null)
+					{
+						var lineStr = functionName.Substring(altLineIdx + 6).Trim();
+						if (int.TryParse(lineStr, out var parsedLine))
+						{
+							lineNumber = parsedLine;
+						}
 					}
 				}
 			}
-		}
-		catch
-		{
+			catch
+			{
+			}
 		}
 
 		return new StackFrameInfo
@@ -2007,6 +2377,8 @@ internal sealed class DebuggerProvider
 			FunctionName = functionName,
 			FileName = string.IsNullOrWhiteSpace(fileName) ? null : fileName,
 			LineNumber = lineNumber > 0 ? lineNumber : null,
+			ColumnNumber = columnNumber > 0 ? columnNumber : null,
+			UserCode = userCode,
 			Language = string.IsNullOrWhiteSpace(language) ? null : language,
 			Module = string.IsNullOrWhiteSpace(module) ? null : module
 		};

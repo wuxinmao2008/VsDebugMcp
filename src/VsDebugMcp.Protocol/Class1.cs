@@ -54,6 +54,9 @@ public static class BridgeMethods
 	public const string DebuggerFreezeThread = "debuggerFreezeThread";
 	public const string DebuggerThawThread = "debuggerThawThread";
 	public const string DebuggerSetNextStatement = "debuggerSetNextStatement";
+	public const string DebuggerListBreakpoints = "debuggerListBreakpoints";
+	public const string DebuggerClearBreakpoints = "debuggerClearBreakpoints";
+	public const string DebuggerToggleBreakpoint = "debuggerToggleBreakpoint";
 	public const string Shutdown = "shutdown";
 }
 
@@ -98,6 +101,8 @@ public static class BridgeErrorCodes
 	public const string DebuggerRunningCannotBuild = "debugger_running_cannot_build";
 	public const string ThreadNotFound = "thread_not_found";
 	public const string InvalidNextStatement = "invalid_next_statement";
+	public const string BreakpointNotFound = "breakpoint_not_found";
+	public const string InvalidBreakpointTarget = "invalid_breakpoint_target";
 	public const string InternalError = "internal_error";
 }
 

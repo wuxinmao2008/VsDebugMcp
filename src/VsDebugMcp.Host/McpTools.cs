@@ -216,12 +216,74 @@ public sealed class McpTools
             cancellationToken));
 
     [McpServerTool(
+        Name = "vs_debugger_list_breakpoints",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Lists breakpoints currently set in Visual Studio, including file paths, lines, conditions, hit counts, enabled status, and bound state.")]
+    public Task<DebuggerListBreakpointsResponse> DebuggerListBreakpointsAsync(
+        [Description("Optional source file path to filter breakpoints by.")] string? filePath = null,
+        [Description("Optional flag to return only currently enabled breakpoints. Defaults to false.")] bool? enabledOnly = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerListBreakpointsAsync(
+            filePath,
+            enabledOnly ?? false,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_clear_breakpoints",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Clears breakpoints in Visual Studio. For safety, at least one of clearAll (set to true), filePath, or breakpointId must be specified.")]
+    public Task<DebuggerClearBreakpointsResponse> DebuggerClearBreakpointsAsync(
+        [Description("Optional flag to clear all breakpoints across the solution. Must be explicitly set to true if filePath and breakpointId are omitted.")] bool? clearAll = null,
+        [Description("Optional source file path to clear breakpoints from.")] string? filePath = null,
+        [Description("Optional 1-based line number to clear when filePath is specified. If omitted with filePath, clears all breakpoints in the file.")] int? line = null,
+        [Description("Optional specific breakpoint ID (e.g. 'full/path.cpp:42') to clear.")] string? breakpointId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerClearBreakpointsAsync(
+            clearAll ?? false,
+            filePath,
+            line,
+            breakpointId,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_toggle_breakpoint",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Toggles or explicitly sets the enabled status of an existing breakpoint by breakpointId or filePath + line.")]
+    public Task<DebuggerToggleBreakpointResponse> DebuggerToggleBreakpointAsync(
+        [Description("Optional specific breakpoint ID (e.g. 'full/path.cpp:42') to toggle.")] string? breakpointId = null,
+        [Description("Optional source file path of the breakpoint to toggle.")] string? filePath = null,
+        [Description("Optional 1-based line number of the breakpoint to toggle. Required if filePath is specified without breakpointId.")] int? line = null,
+        [Description("Optional target enabled state. If omitted, the current enabled state is inverted (toggled).")] bool? enabled = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerToggleBreakpointAsync(
+            breakpointId,
+            filePath,
+            line,
+            enabled,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
         Name = "vs_debugger_get_call_stack",
         ReadOnly = true,
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the call stack of the active or specified thread when the debugger is paused in break mode.")]
+    [Description("Returns the call stack of the active or specified thread when the debugger is paused in break mode, including source file paths, line and column numbers, module names, and user-code flags.")]
     public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
         [Description("Optional thread ID. Omit it to retrieve the call stack for the current active thread.")] int? threadId = null,
         [Description("Optional maximum number of frames to retrieve from 1 to 200. Defaults to 50.")] int? maxFrames = null,

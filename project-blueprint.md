@@ -13,6 +13,22 @@
 
 ## 实施进度（2026-09-08 更新）
 
+### Phase 5A：调用栈强类型修复与断点全生命周期治理已完成开发 (v0.1.16.0)
+
+- **调用栈原生强类型属性提取 (`vs_debugger_get_call_stack`)**：
+  - 基于 COM `EnvDTE90a.StackFrame2` 强类型接口，直接提取 `FileName`、`LineNumber` 与 `UserCode`；
+  - 彻底终结 C++/Qt 等非托管原生栈帧源文件与行号丢失问题；
+  - 保留并兼容原有的文本解析回退保底；
+  - 在 `StackFrameInfo` 中新增可选的 `columnNumber` 与 `userCode` 字段，保持向后兼容。
+- **断点全生命周期治理三件套**：
+  - **`vs_debugger_list_breakpoints`**：查询当前解决方案中所有断点，提供包含文件绝对路径、行列、条件、命中计数规则、当前命中数、启用状态与绑定状态（`isBound`）的结构化清单；支持文件与仅看启用过滤；
+  - **`vs_debugger_clear_breakpoints`**：施加参数防卫（必须指定 `clearAll: true`、`filePath` 或 `breakpointId`），杜绝非预期全量删除；支持一键清空、按文件清空与精确按 ID 删除；
+  - **`vs_debugger_toggle_breakpoint`**：独立启停指定断点，动态反转或显式设置 `enabled` 状态，不破坏原有条件表达式与命中计数规则。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (18/18 PASS) + `VsDebugMcp.Host.Tests` (123/123 PASS)，全套 141 个单元测试 100% 通过；
+  - MCP 工具总数扩充至 **41 个**；
+  - 组件版本统一升级至 **`0.1.16.0`**。
+
 ### Phase 4D：生态集成与开箱即用体验已完成开发 (v0.1.15.0)
 
 - **IDE 原生配置中心第一触点 (`扩展 -> VsDebugMcp`)**：
@@ -675,35 +691,30 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 
 ## 已落盘参考资料
 
-- [visual-studio-2026-mcp-research.md](visual-studio-2026-mcp-research.md)
-- [technical-route-comparison.md](technical-route-comparison.md)
-- [vs-copilot-log-analysis.md](vs-copilot-log-analysis.md)
-- [vs-copilot-debugger-log-analysis.md](vs-copilot-debugger-log-analysis.md)
-- [vs2026_copilot.md](vs2026_copilot.md)
+- [visual-studio-2026-mcp-research.md](docs/visual-studio-2026-mcp-research.md)
+- [technical-route-comparison.md](docs/technical-route-comparison.md)
+- [vs-copilot-log-analysis.md](docs/vs-copilot-log-analysis.md)
+- [vs-copilot-debugger-log-analysis.md](docs/vs-copilot-debugger-log-analysis.md)
+- [vs2026_copilot.md](docs/vs2026_copilot.md)
+- [phase5-mixed-mode-qt-plc-debugging-blueprint.md](docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md)
+- [phase5a-callstack-breakpoints-report.md](docs/phase5a-callstack-breakpoints-report.md)
 
-## 下一步规划：Phase 4B 工程防御加固与多实例智能路由 (Hardening & Smart Routing)
+## 下一步规划：Phase 5B 解决方案配置切换与多窗格日志联动
 
-当前状态：Phase 0、Phase 1、Phase 2 全部调试闭环、Phase 3 (3A/3B/3C) 测试与深层调试闭环、以及 Phase 4A 活动上下文与编辑器协同导航（v0.1.12.0，35 个 Bridge Capabilities / 37 个 MCP Tools）全部开发完成并通过 113 个单元测试 (100%) 与全链路在线实测验收。
+当前状态：Phase 0 ~ Phase 5A 全部开发完成并通过 141 个单元测试 (100%) 与实验实例在线实测闭环验收（当前版本：v0.1.16.0，41 个 MCP 工具）。
 
-下一次迭代确立目标：**Phase 4B 工程防御加固与多实例智能路由**。
+根据 [docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md](docs/phase5-mixed-mode-qt-plc-debugging-blueprint.md)，下一迭代聚焦于：
 
-### 1. 工作目录智能路由 (Smart Multi-Instance Routing via `FindByWorkingDirectory`)
-- **痛点**：当开发者同时打开多个 Visual Studio 解决方案时，外部 Agent 若未显式传递 `vsInstanceId`，Host 会直接报错 `ambiguous_instance`，导致必须多轮往返调用 `vs_find_instances` 确认实例 ID。
-- **方案**：
-  - 在 `VisualStudioInstanceRegistry` 与 `BridgeRouter` 中引入工作目录/路径前缀匹配算法；
-  - 当省略 `vsInstanceId` 且存在多个实例时，Host 优先将请求中的目标路径（如 `filePath`、`project`、或者客户端上下文 WorkingDirectory）与各 VS 实例报告的 `solutionDirectory` 进行不区分大小写的前缀匹配；
-  - 若能唯一精准锁定目标实例，自动路由至该实例，实现无感平滑切换；仅在完全无法区分时才回退至 `ambiguous_instance`。
+### Phase 5B（P1 级 · 调试环境联动与多窗格日志）
+1. **构建配置一键切换 (`vs_set_solution_configuration`)**：支持切换 Debug/Release 及平台（x64/Win32/Any CPU），解决 Release 下变量优化无法求值的问题。
+2. **输出窗口 Debug 窗格与多窗格支持**：扩展 `vs_get_output_window_logs` 支持 Debug 窗格（`qDebug()`、`OutputDebugString`、CLR 日志）；新增 `vs_get_output_panes` 列出包括工控 `UILOG` 在内的所有输出窗格。
+3. **变量优化态智能诊断建议**：求值失败或显示 `<optimized away>` 时，在响应中提供配置切换与 PDB 符号检查建议。
 
-### 2. 构建与调试互斥防御 (Prevent Build While Debugging Deadlock)
-- **痛点**：在 F5 调试状态（`dbgRunMode` 或 `dbgBreakMode`）下，Agent 若调用 `vs_run_build`，Visual Studio 底层会弹出阻塞式模态确认对话框（“项目正在运行，是否停止调试并重新生成？”），导致 devenv.exe UI 线程完全挂起，IPC 通道死锁。
-- **方案**：
-  - 在 `SolutionBuildProvider` 中前置注入调试器状态感知；
-  - 在触发构建操作前，检查 `dte.Debugger.CurrentMode != dbgDesignMode`；
-  - 若处于调试状态，立即提前拦截并返回结构化错误码 `debugger_running_cannot_build`（`Retryable = false`），明确提示 Agent 先调用 `vs_debugger_stop` 结束调试再行构建，彻底规避模态死锁。
+### Phase 5C（P1 级 · 混合进程自动发现与智能附加）
+1. **混合模式引擎支持**：`vs_debugger_attach_process` 增加 `engines: ["Native", "Managed"]`，确保 C# 与 Qt/C++ 双引擎同时生效。
+2. **解决方案关联进程自动附加 (`vs_debugger_auto_attach`)**：根据启动项目产物名或名称模式自动匹配系统进程并批量附加。
 
-### 3. Windows Job Object 进程生命周期兜底 (OS-Level Orphan Process Cleanup)
-- **痛点**：当 Visual Studio 异常崩溃、被任务管理器强制杀死时，VSIX 在前台拉起的 OOP Host 进程可能无法收到正常注销信号，成为孤儿进程并继续占用端口 `43260` 或 Named Pipe，导致下次启动冲突。
-- **方案**：
-  - 在 `SharedHostProcessManager` 中引入 Windows Job Object 原生 P/Invoke 支持；
-  - 配置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 标志位，将 Host 进程加入当前 VS 进程守护的 Job Object 中；
-  - 即使 Visual Studio 发生强杀或崩溃，操作系统内核层级会自动级联回收 Host 子进程，保障端口与环境的绝对干净。
+### Phase 5D（P2 级 · 工控与 Qt 专项诊断拓展）
+1. **Qt 线程归属诊断 (`vs_debugger_qt_diagnose_affinity`)**：复合求值 `QObject::thread()` 与当前执行线程对比，智能探测跨线程直接调用风险。
+2. **异步事件链追踪与日志关联**：断点停靠上下文自动快照近期调试日志，串联 `signal → slot → finished` 异步时序。
+

@@ -792,4 +792,131 @@ public sealed class InstanceProtocolTests
         Assert.NotNull(nextStmtRespCopy.TopFrame);
         Assert.Equal("Test.DoWork", nextStmtRespCopy.TopFrame.FunctionName);
     }
+
+    [Fact]
+    public void Phase5ABreakpointAndStackFrameProtocolRoundTripsThroughSharedSerializer()
+    {
+        var frame = new StackFrameInfo
+        {
+            FrameIndex = 0,
+            FunctionName = "MyWidget::onDataReceived()",
+            FileName = "D:\\src\\MyWidget.cpp",
+            LineNumber = 120,
+            ColumnNumber = 5,
+            UserCode = true,
+            Language = "C++",
+            Module = "MyApp.exe"
+        };
+        var frameCopy = BridgeJson.Deserialize<StackFrameInfo>(BridgeJson.Serialize(frame));
+        Assert.Equal(0, frameCopy.FrameIndex);
+        Assert.Equal("MyWidget::onDataReceived()", frameCopy.FunctionName);
+        Assert.Equal("D:\\src\\MyWidget.cpp", frameCopy.FileName);
+        Assert.Equal(120, frameCopy.LineNumber);
+        Assert.Equal(5, frameCopy.ColumnNumber);
+        Assert.True(frameCopy.UserCode);
+        Assert.Equal("C++", frameCopy.Language);
+        Assert.Equal("MyApp.exe", frameCopy.Module);
+
+        var listReq = new DebuggerListBreakpointsRequest
+        {
+            FilePath = "D:\\src\\MyWidget.cpp",
+            EnabledOnly = true,
+            VsInstanceId = "vs-1"
+        };
+        var listReqCopy = BridgeJson.Deserialize<DebuggerListBreakpointsRequest>(BridgeJson.Serialize(listReq));
+        Assert.Equal("D:\\src\\MyWidget.cpp", listReqCopy.FilePath);
+        Assert.True(listReqCopy.EnabledOnly);
+        Assert.Equal("vs-1", listReqCopy.VsInstanceId);
+
+        var listResp = new DebuggerListBreakpointsResponse
+        {
+            VsInstanceId = "vs-1",
+            TotalCount = 1,
+            Breakpoints = new List<BreakpointInfo>
+            {
+                new()
+                {
+                    Id = "D:\\src\\MyWidget.cpp:120",
+                    FilePath = "D:\\src\\MyWidget.cpp",
+                    Line = 120,
+                    Column = 1,
+                    Condition = "value > 0",
+                    ConditionType = "whenTrue",
+                    HitCountTarget = 5,
+                    HitCountType = "equal",
+                    CurrentHitCount = 2,
+                    Enabled = true,
+                    IsBound = true
+                }
+            }
+        };
+        var listRespCopy = BridgeJson.Deserialize<DebuggerListBreakpointsResponse>(BridgeJson.Serialize(listResp));
+        Assert.Equal("vs-1", listRespCopy.VsInstanceId);
+        Assert.Equal(1, listRespCopy.TotalCount);
+        Assert.Single(listRespCopy.Breakpoints);
+        Assert.Equal("D:\\src\\MyWidget.cpp:120", listRespCopy.Breakpoints[0].Id);
+        Assert.Equal("value > 0", listRespCopy.Breakpoints[0].Condition);
+        Assert.Equal(2, listRespCopy.Breakpoints[0].CurrentHitCount);
+        Assert.True(listRespCopy.Breakpoints[0].IsBound);
+
+        var clearReq = new DebuggerClearBreakpointsRequest
+        {
+            ClearAll = false,
+            FilePath = "D:\\src\\MyWidget.cpp",
+            Line = 120,
+            BreakpointId = "D:\\src\\MyWidget.cpp:120",
+            VsInstanceId = "vs-1"
+        };
+        var clearReqCopy = BridgeJson.Deserialize<DebuggerClearBreakpointsRequest>(BridgeJson.Serialize(clearReq));
+        Assert.False(clearReqCopy.ClearAll);
+        Assert.Equal("D:\\src\\MyWidget.cpp", clearReqCopy.FilePath);
+        Assert.Equal(120, clearReqCopy.Line);
+        Assert.Equal("D:\\src\\MyWidget.cpp:120", clearReqCopy.BreakpointId);
+
+        var clearResp = new DebuggerClearBreakpointsResponse
+        {
+            VsInstanceId = "vs-1",
+            ClearedCount = 1,
+            RemainingCount = 0,
+            Warnings = new List<BridgeWarning>
+            {
+                new() { Code = "warn1", Message = "test warning" }
+            }
+        };
+        var clearRespCopy = BridgeJson.Deserialize<DebuggerClearBreakpointsResponse>(BridgeJson.Serialize(clearResp));
+        Assert.Equal(1, clearRespCopy.ClearedCount);
+        Assert.Equal(0, clearRespCopy.RemainingCount);
+        Assert.Single(clearRespCopy.Warnings);
+
+        var toggleReq = new DebuggerToggleBreakpointRequest
+        {
+            BreakpointId = "D:\\src\\MyWidget.cpp:120",
+            FilePath = "D:\\src\\MyWidget.cpp",
+            Line = 120,
+            Enabled = false,
+            VsInstanceId = "vs-1"
+        };
+        var toggleReqCopy = BridgeJson.Deserialize<DebuggerToggleBreakpointRequest>(BridgeJson.Serialize(toggleReq));
+        Assert.Equal("D:\\src\\MyWidget.cpp:120", toggleReqCopy.BreakpointId);
+        Assert.False(toggleReqCopy.Enabled);
+
+        var toggleResp = new DebuggerToggleBreakpointResponse
+        {
+            VsInstanceId = "vs-1",
+            MatchedCount = 1,
+            Breakpoints = new List<BreakpointInfo>
+            {
+                new()
+                {
+                    Id = "D:\\src\\MyWidget.cpp:120",
+                    FilePath = "D:\\src\\MyWidget.cpp",
+                    Line = 120,
+                    Enabled = false
+                }
+            }
+        };
+        var toggleRespCopy = BridgeJson.Deserialize<DebuggerToggleBreakpointResponse>(BridgeJson.Serialize(toggleResp));
+        Assert.Equal(1, toggleRespCopy.MatchedCount);
+        Assert.False(toggleRespCopy.Breakpoints[0].Enabled);
+    }
 }

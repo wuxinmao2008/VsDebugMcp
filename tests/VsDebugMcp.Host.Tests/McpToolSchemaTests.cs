@@ -88,6 +88,19 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.NavigateToAsync), "column")]
     [InlineData(nameof(McpTools.NavigateToAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.GetSolutionConfigurationsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerListBreakpointsAsync), "filePath")]
+    [InlineData(nameof(McpTools.DebuggerListBreakpointsAsync), "enabledOnly")]
+    [InlineData(nameof(McpTools.DebuggerListBreakpointsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerClearBreakpointsAsync), "clearAll")]
+    [InlineData(nameof(McpTools.DebuggerClearBreakpointsAsync), "filePath")]
+    [InlineData(nameof(McpTools.DebuggerClearBreakpointsAsync), "line")]
+    [InlineData(nameof(McpTools.DebuggerClearBreakpointsAsync), "breakpointId")]
+    [InlineData(nameof(McpTools.DebuggerClearBreakpointsAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "breakpointId")]
+    [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "filePath")]
+    [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "line")]
+    [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "enabled")]
+    [InlineData(nameof(McpTools.DebuggerToggleBreakpointAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -120,6 +133,22 @@ public sealed class McpToolSchemaTests
     [InlineData("vs_navigate_to", nameof(McpTools.NavigateToAsync), false)]
     [InlineData("vs_get_solution_configurations", nameof(McpTools.GetSolutionConfigurationsAsync), true)]
     public void AllPhase4AToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
+    [Theory]
+    [InlineData("vs_debugger_list_breakpoints", nameof(McpTools.DebuggerListBreakpointsAsync), true)]
+    [InlineData("vs_debugger_clear_breakpoints", nameof(McpTools.DebuggerClearBreakpointsAsync), false)]
+    [InlineData("vs_debugger_toggle_breakpoint", nameof(McpTools.DebuggerToggleBreakpointAsync), false)]
+    public void AllPhase5AToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
     {
         var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
         Assert.NotNull(method);

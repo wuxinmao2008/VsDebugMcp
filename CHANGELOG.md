@@ -5,6 +5,30 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16.0] - 2026-09-08
+
+### Added
+- **Call Stack Strong-Typed Native Attribute Extraction & Breakpoint Full Lifecycle Management (Phase 5A)**:
+  - **Native Call Stack Resolution (`vs_debugger_get_call_stack`)**:
+    - Integrated with COM `EnvDTE90a.StackFrame2` to extract strongly-typed source file paths (`FileName`), line numbers (`LineNumber`), column numbers (`ColumnNumber`), and user code flags (`UserCode`).
+    - Eliminates the limitation where C++/Qt non-managed stack frames only returned function names without source locations.
+    - Preserves smart fallback text parsing for legacy and mixed formatting.
+  - **Breakpoint Listing (`vs_debugger_list_breakpoints`)**:
+    - Queries all breakpoints currently configured in the Visual Studio solution.
+    - Exposes file paths, line/column coordinates, conditional expressions (`whenTrue`/`whenChanged`), hit count conditions (`equal`/`greaterOrEqual`/`multiple`), current hit count, enabled status, and binding state (`isBound`).
+    - Supports filtering by file path and enabled-only status.
+  - **Safe Breakpoint Deletion (`vs_debugger_clear_breakpoints`)**:
+    - Enforces safety defenses: requires at least one of `clearAll: true`, `filePath`, or `breakpointId` to prevent accidental deletion.
+    - Supports clearing all breakpoints solution-wide, clearing by file path (or file + line), or deleting by specific breakpoint ID (`path:line`).
+  - **Breakpoint Enable/Disable Toggling (`vs_debugger_toggle_breakpoint`)**:
+    - Dynamically toggles or explicitly sets breakpoint enabled state without losing conditional expressions or hit count configurations.
+    - Supports targeting by `breakpointId` or `(filePath, line)`.
+  - Added new bridge error codes: `breakpoint_not_found`, `invalid_breakpoint_target`.
+
+### Verified
+- Automated unit tests: 141/141 PASS (100% across Protocol and Host test suites: 18/18 Protocol tests, 123/123 Host tests).
+- Total registered MCP tools expanded from 38 to 41.
+
 ## [0.1.15.0] - 2026-09-08
 
 ### Added

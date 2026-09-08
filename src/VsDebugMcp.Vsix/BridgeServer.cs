@@ -307,6 +307,57 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerListBreakpoints:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerListBreakpointsRequest()
+                        : BridgeJson.Deserialize<DebuggerListBreakpointsRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ListBreakpointsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The list breakpoints request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerClearBreakpoints:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerClearBreakpointsRequest()
+                        : BridgeJson.Deserialize<DebuggerClearBreakpointsRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ClearBreakpointsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The clear breakpoints request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerToggleBreakpoint:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerToggleBreakpointRequest()
+                        : BridgeJson.Deserialize<DebuggerToggleBreakpointRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ToggleBreakpointAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The toggle breakpoint request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.DebuggerGetCallStack:
                 try
                 {
@@ -1190,6 +1241,24 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_set_next_statement",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_list_breakpoints",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_clear_breakpoints",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_toggle_breakpoint",
                 Version = "0.1",
                 IsStub = false
             }

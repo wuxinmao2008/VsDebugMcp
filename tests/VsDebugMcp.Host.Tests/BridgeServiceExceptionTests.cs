@@ -18,6 +18,8 @@ public sealed class BridgeServiceExceptionTests
     [InlineData(BridgeErrorCodes.DebuggerRunningCannotBuild, false)]
     [InlineData(BridgeErrorCodes.ThreadNotFound, false)]
     [InlineData(BridgeErrorCodes.InvalidNextStatement, false)]
+    [InlineData(BridgeErrorCodes.BreakpointNotFound, false)]
+    [InlineData(BridgeErrorCodes.InvalidBreakpointTarget, false)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {
         var rpcException = new BridgeRpcException(code, $"Error for {code}", expectedRetryable);

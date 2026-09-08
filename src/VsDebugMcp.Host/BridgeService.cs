@@ -66,6 +66,28 @@ public interface IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
+    Task<DebuggerListBreakpointsResponse> DebuggerListBreakpointsAsync(
+        string? filePath,
+        bool enabledOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerClearBreakpointsResponse> DebuggerClearBreakpointsAsync(
+        bool clearAll,
+        string? filePath,
+        int? line,
+        string? breakpointId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerToggleBreakpointResponse> DebuggerToggleBreakpointAsync(
+        string? breakpointId,
+        string? filePath,
+        int? line,
+        bool? enabled,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
     Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
         int? threadId,
         int? maxFrames,
@@ -405,6 +427,65 @@ public sealed class BridgeService : IBridgeService
                     FilePath = filePath,
                     Breakpoints = breakpoints,
                     ClearExisting = clearExisting
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerListBreakpointsResponse> DebuggerListBreakpointsAsync(
+        string? filePath,
+        bool enabledOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId, filePath),
+            client => client.DebuggerListBreakpointsAsync(
+                new DebuggerListBreakpointsRequest
+                {
+                    FilePath = filePath,
+                    EnabledOnly = enabledOnly,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerClearBreakpointsResponse> DebuggerClearBreakpointsAsync(
+        bool clearAll,
+        string? filePath,
+        int? line,
+        string? breakpointId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId, filePath),
+            client => client.DebuggerClearBreakpointsAsync(
+                new DebuggerClearBreakpointsRequest
+                {
+                    ClearAll = clearAll,
+                    FilePath = filePath,
+                    Line = line,
+                    BreakpointId = breakpointId,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerToggleBreakpointResponse> DebuggerToggleBreakpointAsync(
+        string? breakpointId,
+        string? filePath,
+        int? line,
+        bool? enabled,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId, filePath),
+            client => client.DebuggerToggleBreakpointAsync(
+                new DebuggerToggleBreakpointRequest
+                {
+                    BreakpointId = breakpointId,
+                    FilePath = filePath,
+                    Line = line,
+                    Enabled = enabled,
+                    VsInstanceId = vsInstanceId
                 },
                 cancellationToken),
             cancellationToken);
@@ -1030,6 +1111,16 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.InvalidNextStatement => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.BreakpointNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.InvalidBreakpointTarget => new(
                 exception.Code,
                 exception.Message,
                 false,
