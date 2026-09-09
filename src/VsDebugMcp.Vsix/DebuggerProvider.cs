@@ -259,7 +259,7 @@ internal sealed class DebuggerProvider
 			try
 			{
 				var logLines = Clamp(request.RecentLogLines ?? 30, 1, 200);
-				var source = string.IsNullOrWhiteSpace(request.LogSource) ? "debug" : request.LogSource.Trim();
+				var source = string.IsNullOrWhiteSpace(request.LogSource) ? "debug" : request.LogSource!.Trim();
 				var logResp = await _outputWindowProvider.GetLogsAsync(new GetOutputWindowLogsRequest
 				{
 					Source = source,
@@ -593,7 +593,7 @@ internal sealed class DebuggerProvider
 				}
 				else if (!string.IsNullOrEmpty(request.BreakpointId))
 				{
-					if (string.Equals(bpId, request.BreakpointId.Trim(), StringComparison.OrdinalIgnoreCase))
+					if (string.Equals(bpId, request.BreakpointId!.Trim(), StringComparison.OrdinalIgnoreCase))
 					{
 						toDelete.Add(bp);
 					}
@@ -1819,10 +1819,10 @@ internal sealed class DebuggerProvider
 				throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "A valid line number (>= 1) is required when specifying filePath.");
 			}
 
-			var navTarget = request.FilePath.Trim();
+			var navTarget = request.FilePath!.Trim();
 			if (!Path.IsPathRooted(navTarget) && !string.IsNullOrEmpty(dte.Solution?.FullName))
 			{
-				var slnDir = Path.GetDirectoryName(dte.Solution.FullName);
+				var slnDir = Path.GetDirectoryName(dte.Solution!.FullName);
 				if (!string.IsNullOrEmpty(slnDir))
 				{
 					navTarget = Path.Combine(slnDir, navTarget);
@@ -2634,7 +2634,7 @@ internal sealed class DebuggerProvider
 					var asmName = proj.Properties.Item("AssemblyName")?.Value?.ToString();
 					if (!string.IsNullOrWhiteSpace(asmName))
 					{
-						outputNames.Add(asmName);
+						outputNames.Add(asmName!);
 					}
 				}
 			}
@@ -2643,9 +2643,9 @@ internal sealed class DebuggerProvider
 			if (!string.IsNullOrWhiteSpace(name))
 			{
 				var isStartup = startupNames.Contains(name)
-					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(filePath))
-					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileName(filePath)))
-					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileNameWithoutExtension(filePath)));
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(filePath!))
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileName(filePath!)!))
+					|| (!string.IsNullOrWhiteSpace(filePath) && startupNames.Contains(Path.GetFileNameWithoutExtension(filePath!)!));
 
 				result.Add((name, filePath, isStartup, outputNames));
 			}

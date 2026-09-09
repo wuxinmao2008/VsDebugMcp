@@ -304,10 +304,10 @@ internal sealed class ActiveContextEditorProvider
                     platform = c2.PlatformName ?? string.Empty;
                 }
 
-                if (string.Equals(name, request.Configuration.Trim(), StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(name, request.Configuration!.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
                     if (string.IsNullOrWhiteSpace(request.Platform) ||
-                        string.Equals(platform, request.Platform.Trim(), StringComparison.OrdinalIgnoreCase))
+                        string.Equals(platform, request.Platform!.Trim(), StringComparison.OrdinalIgnoreCase))
                     {
                         matchedCfg = cfg;
                         break;

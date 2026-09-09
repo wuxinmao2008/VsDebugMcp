@@ -33,7 +33,9 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
     {
         try
         {
-            var outputWindow = await _package.GetServiceAsync(typeof(SVsOutputWindow)).ConfigureAwait(false) as IVsOutputWindow;
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            var outputWindow = await _package.GetServiceAsync(typeof(SVsOutputWindow)) as IVsOutputWindow;
             if (outputWindow != null)
             {
                 var paneGuid = OutputPaneGuid;
@@ -46,8 +48,6 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
 
                 _outputPane = pane;
             }
-
-            await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             _statusBar = await _package.GetServiceAsync(typeof(SVsStatusbar)) as IVsStatusbar;
             _infoBarFactory = await _package.GetServiceAsync(typeof(SVsInfoBarUIFactory)) as IVsInfoBarUIFactory;
@@ -89,7 +89,9 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
 
         try
         {
+#pragma warning disable VSTHRD010 // OutputStringThreadSafe is explicitly designed for background threads
             _outputPane?.OutputStringThreadSafe(line);
+#pragma warning restore VSTHRD010
         }
         catch
         {
