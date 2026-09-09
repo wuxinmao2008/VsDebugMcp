@@ -3,13 +3,13 @@
   <Metadata>
     <Identity Id="VsDebugMcp.Bridge.c2fcf48e-5c7b-4a36-9f83-d6cda8e6c2ad" Version="0.1.19.0" Language="en-US" Publisher="WuXinmao" />
     <DisplayName>VsDebugMcp</DisplayName>
-    <Description>Connect AI agents to local Visual Studio through MCP for solution discovery, build control, diagnostics, and Build Output.</Description>
+    <Description>Connect AI agents to Visual Studio via MCP for solution discovery, build control, diagnostics, hybrid debugging, virtual memory inspection, and test automation.</Description>
     <MoreInfo>https://github.com/wuxinmao2008/VsDebugMcp</MoreInfo>
     <License>LICENSE.txt</License>
     <ReleaseNotes>CHANGELOG.md</ReleaseNotes>
     <Icon>Assets\logo.png</Icon>
     <PreviewImage>Assets\logo.png</PreviewImage>
-    <Tags>MCP;AI Agent;Visual Studio;Build;Diagnostics;Developer Tools</Tags>
+    <Tags>MCP;Model Context Protocol;AI Agent;Claude;Cursor;Visual Studio;Debugger;Build;Diagnostics;Testing;Qt;PLC;Automation;Memory</Tags>
   </Metadata>
   <Installation ExtensionType="VSSDK">
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14,)">

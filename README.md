@@ -52,17 +52,32 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_detach` — Graceful debugger detachment leaving processes running
 - `vs_debugger_get_modules` — Loaded module enumeration with symbol load status (PDB), file paths, and memory addresses
 
-### Active Context & Editor Navigation (Phase 4A)
+### Active Context & Editor Navigation (Phase 4A & 4B)
 - `vs_get_active_document` — Foreground active editor document inspection with dirty flag, language, line count, cursor position, and text selection
 - `vs_navigate_to` — Smooth navigation to files with precise line/column positioning
 - `vs_get_solution_configurations` — Solution configuration and platform discovery
+- `vs_set_solution_configuration` — Solution configuration and platform activation (Debug <-> Release, x64, etc.)
 
-### Test Explorer & Test-Driven Debugging (Phase 3 & 3A)
-- `vs_get_tests` — Solution test discovery with optional filters
-- `vs_run_tests` — Asynchronous test execution (full suite or specified `testIds`)
-- `vs_get_test_run_status` — Real-time test run state, progress, execution metrics, and per-test outcomes
-- `vs_cancel_test_run` — Active test run cancellation
-- `vs_debug_test_by_id` — Programmatic test debugging by test ID with smart breakpoint landing probe
+### Advanced Debugger Controls & Breakpoint Lifecycle (Phase 4C & 5A)
+- `vs_debugger_freeze_thread` / `vs_debugger_thaw_thread` — Precise thread suspension and resumption
+- `vs_debugger_set_next_statement` — Instruction pointer repositioning during break mode
+- `vs_debugger_list_breakpoints` — Structured inspection of all breakpoints in the solution
+- `vs_debugger_clear_breakpoints` — Guarded breakpoint removal (all, per-file, or by ID)
+- `vs_debugger_toggle_breakpoint` — Independent breakpoint enable/disable toggling
+
+### Multi-Pane Output & Diagnostics (Phase 5B)
+- `vs_get_output_panes` — Enumeration of all Output Window panes (Build, Debug, custom panes)
+- Enhanced `vs_get_output_window_logs` with standard Debug pane support (`qDebug()`, `OutputDebugString`)
+- Smart optimization warnings on Release variables (`variable_optimized_in_release`)
+
+### Mixed-Mode Engines & Solution Process Auto-Attach (Phase 5C)
+- `vs_debugger_find_solution_processes` — Auto-discovery of running processes matching solution projects
+- `vs_debugger_auto_attach` — One-click batch auto-attachment for solution processes
+- `vs_debugger_attach_process` with explicit mixed-mode `engines` parameter (`Native`, `Managed`)
+
+### Aggregated Diagnostic Snapshot & Memory Reading (Phase 5D)
+- `vs_debugger_get_snapshot` — Atomic, single-call capture of full debugging context (process, thread, stack, locals, debug logs)
+- `vs_debugger_read_memory` — Raw virtual memory byte inspection via Win32 `ReadProcessMemory` (HexDump and Base64)
 
 ### Client Onboarding & Ecosystem Guide (Phase 4D)
 - Native Visual Studio top-level menu: **`Extensions (扩展) -> VsDebugMcp`**
@@ -121,7 +136,7 @@ Ordinary builds do not deploy the extension. Deployment requires closing the rel
 
 ## Validation status
 
-- Automated unit tests: 74/74 PASS across Protocol and Host test suites.
+- Automated unit tests: 180/180 PASS (100% across Protocol and Host test suites: 21 Protocol, 159 Host).
 - End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
 - Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / multi-thread inspection / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 
