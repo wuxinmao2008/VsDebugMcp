@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Version tag to release (e.g. v0.1.19.0)'
+        required: false
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Publish Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Run Quality Gate (Automated Tests)
+        run: |
+          dotnet test tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj --configuration Release --verbosity normal
+          dotnet test tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj --configuration Release --verbosity normal
+
+      - name: Determine Release Tag
+        id: vars
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event.inputs.tag_name }}' -ne '') {
+            '${{ github.event.inputs.tag_name }}'
+          } else {
+            '${{ github.ref_name }}'
+          }
+          if (-not $tag) {
+            Write-Error "Could not determine release tag name."
+            exit 1
+          }
+          Write-Host "Releasing tag: $tag"
+          "TAG_NAME=$tag" >> $env:GITHUB_ENV
+
+      - name: Extract Release Notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/extract-release-notes.ps1 -Version "$env:TAG_NAME" -OutputPath "RELEASE_NOTES.md"
+          Get-Content "RELEASE_NOTES.md"
+
+      - name: Build Release VSIX Package
+        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -Configuration Release
+
+      - name: Prepare Release Artifacts and Checksums
+        shell: pwsh
+        run: |
+          $vsixFiles = Get-ChildItem -Path src/VsDebugMcp.Vsix/bin -Recurse -Filter "*.vsix" |
+            Where-Object { $_.FullName -match "Release" } |
+            Sort-Object LastWriteTime -Descending
+
+          if (-not $vsixFiles) {
+            Write-Error "Release VSIX package not found!"
+            exit 1
+          }
+
+          $sourceVsix = $vsixFiles[0]
+          $targetVsix = "VsDebugMcp.vsix"
+          Copy-Item -Path $sourceVsix.FullName -Destination $targetVsix -Force
+
+          # Calculate SHA256
+          $hash = (Get-FileHash -Path $targetVsix -Algorithm SHA256).Hash
+          "$hash  $targetVsix" | Set-Content -Path "VsDebugMcp.vsix.sha256" -Encoding ascii
+
+          Write-Host "Prepared $targetVsix (SHA256: $hash)"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$env:TAG_NAME" "VsDebugMcp.vsix" "VsDebugMcp.vsix.sha256" `
+            --title "VsDebugMcp $env:TAG_NAME" `
+            --notes-file "RELEASE_NOTES.md"
+
+      - name: Publish to Visual Studio Marketplace (Optional)
+        shell: pwsh
+        env:
+          VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
+        run: |
+          if (-not $env:VS_MARKETPLACE_PAT) {
+            Write-Host "============================================================" -ForegroundColor Yellow
+            Write-Host " VS_MARKETPLACE_PAT is not configured in repository secrets." -ForegroundColor Yellow
+            Write-Host " Skipping Visual Studio Marketplace automatic publication."   -ForegroundColor Yellow
+            Write-Host " To enable, add Azure DevOps PAT as 'VS_MARKETPLACE_PAT'."    -ForegroundColor Yellow
+            Write-Host "============================================================" -ForegroundColor Yellow
+            exit 0
+          }
+
+          Write-Host "Locating VsixPublisher.exe..." -ForegroundColor Cyan
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -property installationPath
+          $publisher = Join-Path $vsPath "VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe"
+
+          if (-not (Test-Path $publisher)) {
+            Write-Warning "VsixPublisher.exe not found at '$publisher'. Skipping marketplace publish."
+            exit 0
+          }
+
+          Write-Host "Publishing VsDebugMcp.vsix to Visual Studio Marketplace..." -ForegroundColor Green
+          & $publisher publish -payload "VsDebugMcp.vsix" -publishManifest "src/VsDebugMcp.Vsix/source.extension.vsixmanifest" -personalAccessToken $env:VS_MARKETPLACE_PAT
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "VsixPublisher failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+          }
+          Write-Host "Successfully published to Visual Studio Marketplace!" -ForegroundColor Green
