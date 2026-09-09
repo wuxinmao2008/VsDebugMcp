@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-managed:
+    name: Automated Unit Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run Protocol Tests
+        run: dotnet test tests/VsDebugMcp.Protocol.Tests/VsDebugMcp.Protocol.Tests.csproj --configuration Release --verbosity normal
+
+      - name: Run Host Tests
+        run: dotnet test tests/VsDebugMcp.Host.Tests/VsDebugMcp.Host.Tests.csproj --configuration Release --verbosity normal
+
+  build-vsix:
+    name: Build VSIX Package
+    needs: test-managed
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build VSIX via PowerShell tool
+        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -Configuration Release
+
+      - name: Verify VSIX Output
+        shell: pwsh
+        run: |
+          $vsixFiles = Get-ChildItem -Path src/VsDebugMcp.Vsix/bin -Recurse -Filter "*.vsix"
+          if (-not $vsixFiles) {
+            Write-Error "No VSIX file was produced!"
+            exit 1
+          }
+          foreach ($f in $vsixFiles) {
+            Write-Host "Found VSIX: $($f.FullName) ($([math]::Round($f.Length/1MB, 2)) MB)"
+          }
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VsDebugMcp-VSIX-Release
+          path: src/VsDebugMcp.Vsix/bin/**/VsDebugMcp.Vsix.vsix
+          if-no-files-found: error
+          retention-days: 14

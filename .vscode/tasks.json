@@ -13,33 +13,14 @@
 		},
 		{
 			"label": "build: vsix",
-			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
-			"args": [
-				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
-				"/restore",
-				"/t:Build",
-				"/p:Configuration=Debug",
-				"/p:DeployExtension=false",
-				"/m:1",
-				"/nr:false",
-				"/v:minimal"
-			],
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/build-vsix.ps1 -Configuration Debug",
 			"problemMatcher": "$msCompile"
 		},
 		{
 			"label": "build: vsix: release",
-			"type": "process",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe",
-			"args": [
-				"${workspaceFolder}/src/VsDebugMcp.Vsix/VsDebugMcp.Vsix.csproj",
-				"/restore",
-				"/t:Build",
-				"/p:Configuration=Release",
-				"/m:1",
-				"/nr:false",
-				"/v:minimal"
-			],
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/build-vsix.ps1 -Configuration Release",
 			"problemMatcher": "$msCompile"
 		},
 		{

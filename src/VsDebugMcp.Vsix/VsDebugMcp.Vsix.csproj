@@ -1,7 +1,8 @@
 
 <Project Sdk="Microsoft.VisualStudio.Sdk.Build">
   <PropertyGroup>
-    <TargetFrameworks>vs2026_5</TargetFrameworks>
+    <VsixTargetFramework Condition="'$(VsixTargetFramework)' == ''">vs2026_5</VsixTargetFramework>
+    <TargetFrameworks>$(VsixTargetFramework)</TargetFrameworks>
     <GeneratePkgDefFile>True</GeneratePkgDefFile>
     <DeployExtension>false</DeployExtension>
     <ExtensionType>VSSDK</ExtensionType>
@@ -26,6 +27,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(DevEnvDir)' != '' and '$(DevEnvDir)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(DevEnvDir)..\..\'))</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(VSINSTALLDIR)' != '' and '$(VSINSTALLDIR)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(VSINSTALLDIR)'))</VsInstallRoot>
     <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Professional</VsInstallRoot>
     <TestWindowDir>$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
   </PropertyGroup>
