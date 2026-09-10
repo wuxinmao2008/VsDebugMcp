@@ -116,7 +116,49 @@ public static class BridgeErrorCodes
 	public const string NoSolutionProcessesFound = "no_solution_processes_found";
 	public const string InvalidMemoryAddress = "invalid_memory_address";
 	public const string MemoryReadFailed = "memory_read_failed";
+	public const string PrivacyRiskAborted = "privacy_risk_aborted";
 	public const string InternalError = "internal_error";
+}
+
+public static class McpIssueTypes
+{
+	public const string InternalException = "internal_exception";
+	public const string TransportTimeout = "transport_timeout";
+	public const string ProtocolMismatch = "protocol_mismatch";
+	public const string SerializationFailure = "serialization_failure";
+	public const string SchemaAmbiguous = "schema_ambiguous";
+	public const string InvalidToolResult = "invalid_tool_result";
+	public const string OutputTooLarge = "output_too_large";
+	public const string PerformanceDegradation = "performance_degradation";
+	public const string UnsupportedState = "unsupported_state";
+	public const string FeatureGap = "feature_gap";
+	public const string Unknown = "unknown";
+
+	private static readonly HashSet<string> s_all = new(StringComparer.OrdinalIgnoreCase)
+	{
+		InternalException,
+		TransportTimeout,
+		ProtocolMismatch,
+		SerializationFailure,
+		SchemaAmbiguous,
+		InvalidToolResult,
+		OutputTooLarge,
+		PerformanceDegradation,
+		UnsupportedState,
+		FeatureGap,
+		Unknown
+	};
+
+	public static IReadOnlyCollection<string> All => s_all;
+
+	public static string Normalize(string? type)
+	{
+		if (string.IsNullOrWhiteSpace(type))
+			return Unknown;
+
+		var trimmed = type!.Trim();
+		return s_all.Contains(trimmed) ? trimmed.ToLowerInvariant() : Unknown;
+	}
 }
 
 public static class TestRunStates

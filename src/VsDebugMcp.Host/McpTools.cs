@@ -9,10 +9,12 @@ namespace VsDebugMcp.Host;
 public sealed class McpTools
 {
     private readonly IBridgeService _bridgeService;
+    private readonly IDiagnosticReportService _diagnosticReportService;
 
-    public McpTools(IBridgeService bridgeService)
+    public McpTools(IBridgeService bridgeService, IDiagnosticReportService? diagnosticReportService = null)
     {
-        _bridgeService = bridgeService;
+        _bridgeService = bridgeService ?? throw new ArgumentNullException(nameof(bridgeService));
+        _diagnosticReportService = diagnosticReportService ?? new DiagnosticReportService(bridgeService, new VisualStudioInstanceRegistry(new VsHostOptions(), () => { }));
     }
 
     [McpServerTool(
@@ -883,6 +885,28 @@ public sealed class McpTools
             column,
             vsInstanceId,
             cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_report_mcp_issue",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Packs a standardized diagnostic report and pre-fills a GitHub Issue Form URL when an MCP tool suffers from infrastructure failures, unclear schema, or performance bottlenecks. PREREQUISITE: You MUST obtain affirmative user consent in chat before calling this tool. DO NOT call if reporting requires leaking user proprietary code, private variables, or secrets.")]
+    public Task<ReportMcpIssueResponse> ReportMcpIssueAsync(
+        [Description("The exact MCP tool name that caused friction (e.g. 'vs_debugger_evaluate_expr').")] string targetTool,
+        [Description("Standardized friction category: 'internal_exception', 'transport_timeout', 'protocol_mismatch', 'serialization_failure', 'schema_ambiguous', 'invalid_tool_result', 'output_too_large', 'performance_degradation', 'unsupported_state', 'feature_gap', or 'unknown'.")] string issueType,
+        [Description("Concise technical summary of what the tool failed to deliver (<=512 chars). STRICTLY FORBIDDEN to include proprietary code, variable contents, credentials, or private file paths.")] string agentSummary,
+        [Description("Optional constructive suggestions to improve the tool (<=512 chars).")] string? suggestedImprovement = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        _diagnosticReportService.ReportMcpIssueAsync(
+            targetTool,
+            issueType,
+            agentSummary,
+            suggestedImprovement,
+            vsInstanceId,
+            cancellationToken);
 
     private static async Task<T> InvokeAsync<T>(Func<Task<T>> action)
     {

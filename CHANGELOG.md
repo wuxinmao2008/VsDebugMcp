@@ -5,6 +5,33 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20.0] - 2026-09-10
+
+### Added
+- **Interactive Agent Feedback & Diagnostic Reporting Infrastructure (Phase 5E)**:
+  - **Standardized Diagnostic Packaging & URL Pre-filling (`vs_report_mcp_issue`)**:
+    - Adds a new MCP tool `vs_report_mcp_issue` allowing Agents to report usability friction, infrastructure faults, schema ambiguity, or performance issues with user affirmative consent.
+    - Standardized 11-category friction classification (`internal_exception`, `transport_timeout`, `protocol_mismatch`, `serialization_failure`, `schema_ambiguous`, `invalid_tool_result`, `output_too_large`, `performance_degradation`, `unsupported_state`, `feature_gap`, `unknown`).
+    - Enforces strict input bounds (`maxLength: 512`) to prevent unbounded code or prompt dumping.
+  - **Proactive Privacy Circuit Breaker & Sanitization Pipeline**:
+    - Automatic DLP regex scanner detecting high-risk tokens (GitHub PATs, GitLab tokens, Bearer tokens, JWTs, private RSA/SSH keys, passwords, and unmasked Windows user paths).
+    - Proactively aborts report generation with `privacy_risk_aborted` status when potential credentials or private context are detected.
+    - Automatically masks `%USERPROFILE%` and `%USERNAME%` in all feedback payloads.
+  - **Automated Technical Environment Diagnostics Extraction**:
+    - Automatically gathers OS build & architecture, Visual Studio version, .NET runtime, Host version, active debug mode, and project archetypes (`C++ (vcxproj)`, `C# (csproj)`, `CMake`).
+    - Strict archetype abstraction ensuring proprietary project file names and solution directory paths are never exfiltrated.
+  - **GitHub Issue Form Short URL Prefill**:
+    - Integrates with `.github/ISSUE_TEMPLATE/tool-friction.yml` using canonical field IDs (`tool`, `category`, `summary`, `improvement`, `environment`).
+    - Generates lightweight, compliant URLs (typically 300-600 characters), eliminating browser 414 URI Too Long truncation risks.
+  - **Local Diagnostic Audit Dump**:
+    - Safely stores local Markdown diagnostics at `%LOCALAPPDATA%\VsDebugMcp\reports\rpt_{timestamp}.md` for offline inspection and user ownership.
+    - Shields external trust boundaries by returning abstract environment variable paths (`%LOCALAPPDATA%`) to cloud LLM contexts.
+  - Added new error code: `privacy_risk_aborted`.
+
+### Verified
+- Automated unit tests: 191/191 PASS (100% across Protocol and Host test suites: 21/21 Protocol tests, 170/170 Host tests).
+- Total registered MCP tools expanded from 50 to **51** (all `isStub: false`).
+
 ## [0.1.19.0] - 2026-09-08
 
 ### Added

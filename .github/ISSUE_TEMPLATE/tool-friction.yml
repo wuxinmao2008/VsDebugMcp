@@ -1,0 +1,57 @@
+name: "🛠️ MCP Tool Friction Report"
+description: "Report usability issues, infrastructure failures, or unexpected behaviors with VsDebugMcp tools."
+title: "[Tool Friction]: "
+labels: ["tool-friction", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!IMPORTANT]
+        > **Safety Check**: This issue was prepared by an Agent with your approval. Before clicking "Submit new issue", please verify that no proprietary code, private variables, or secrets are present below.
+  - type: input
+    id: tool
+    attributes:
+      label: "Target MCP Tool"
+      description: "The MCP tool that caused friction (e.g. vs_debugger_evaluate_expr)"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: "Friction Category"
+      description: "Standardized category of the issue"
+      options:
+        - "internal_exception"
+        - "transport_timeout"
+        - "protocol_mismatch"
+        - "serialization_failure"
+        - "schema_ambiguous"
+        - "invalid_tool_result"
+        - "output_too_large"
+        - "performance_degradation"
+        - "unsupported_state"
+        - "feature_gap"
+        - "unknown"
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Agent Technical Summary"
+      description: "Concise summary of what the tool failed to deliver (no private code or paths)"
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: "Suggested Improvement"
+      description: "Constructive feedback on how the tool can be improved"
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment & Diagnostics"
+      description: "Auto-detected diagnostic environment information"
+    validations:
+      required: true

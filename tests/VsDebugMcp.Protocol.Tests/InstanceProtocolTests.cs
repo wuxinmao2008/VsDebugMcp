@@ -1208,5 +1208,48 @@ public sealed class InstanceProtocolTests
 
         Assert.Equal("invalid_memory_address", BridgeErrorCodes.InvalidMemoryAddress);
         Assert.Equal("memory_read_failed", BridgeErrorCodes.MemoryReadFailed);
+        Assert.Equal("privacy_risk_aborted", BridgeErrorCodes.PrivacyRiskAborted);
+
+        var issueReq = new ReportMcpIssueRequest
+        {
+            TargetTool = "vs_debugger_evaluate_expr",
+            IssueType = McpIssueTypes.TransportTimeout,
+            AgentSummary = "Named pipe timed out while evaluating a deep collection.",
+            SuggestedImprovement = "Introduce progressive evaluation.",
+            VsInstanceId = "vs-1"
+        };
+        var issueReqCopy = BridgeJson.Deserialize<ReportMcpIssueRequest>(BridgeJson.Serialize(issueReq));
+        Assert.Equal("vs_debugger_evaluate_expr", issueReqCopy.TargetTool);
+        Assert.Equal(McpIssueTypes.TransportTimeout, issueReqCopy.IssueType);
+        Assert.Equal("Named pipe timed out while evaluating a deep collection.", issueReqCopy.AgentSummary);
+        Assert.Equal("Introduce progressive evaluation.", issueReqCopy.SuggestedImprovement);
+        Assert.Equal("vs-1", issueReqCopy.VsInstanceId);
+
+        var issueResp = new ReportMcpIssueResponse
+        {
+            Status = "ready_for_user_submission",
+            ReportId = "rpt_20260910_01",
+            GithubIssueUrl = "https://github.com/wuxinmao2008/VsDebugMcp/issues/new?template=tool-friction.yml",
+            LocalReportPath = @"%LOCALAPPDATA%\VsDebugMcp\reports\rpt_20260910_01.md",
+            InstructionsForAgent = "Present the github_issue_url as a clickable link.",
+            EnvironmentSummary = new Dictionary<string, string>
+            {
+                ["OS"] = "Windows 11",
+                ["VS"] = "18.2.0"
+            },
+            Warnings = new List<BridgeWarning>()
+        };
+        var issueRespCopy = BridgeJson.Deserialize<ReportMcpIssueResponse>(BridgeJson.Serialize(issueResp));
+        Assert.Equal("ready_for_user_submission", issueRespCopy.Status);
+        Assert.Equal("rpt_20260910_01", issueRespCopy.ReportId);
+        Assert.NotNull(issueRespCopy.GithubIssueUrl);
+        Assert.Equal(@"%LOCALAPPDATA%\VsDebugMcp\reports\rpt_20260910_01.md", issueRespCopy.LocalReportPath);
+        Assert.Equal("Windows 11", issueRespCopy.EnvironmentSummary["OS"]);
+
+        Assert.Equal("internal_exception", McpIssueTypes.Normalize("INTERNAL_EXCEPTION"));
+        Assert.Equal("transport_timeout", McpIssueTypes.Normalize(" transport_timeout "));
+        Assert.Equal("unknown", McpIssueTypes.Normalize("some_random_invalid_type"));
+        Assert.Equal("unknown", McpIssueTypes.Normalize(null));
+        Assert.Equal(11, McpIssueTypes.All.Count);
     }
 }

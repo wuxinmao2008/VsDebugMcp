@@ -11,7 +11,28 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积 ~4 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-08 更新）
+## 实施进度（2026-09-10 更新）
+
+### Phase 5E：Agent 交互式工具反馈与诊断报告基础设施已完成开发 (v0.1.20.0)
+
+- **标准化诊断打包与 Issue 预填工具 (`vs_report_mcp_issue`)**：
+  - 新增 MCP 工具 `vs_report_mcp_issue`，供 Agent 在经用户明确授权后，结构化呈报工具调用摩擦、基础设施故障或模式歧义；
+  - 规范 11 类细分故障枚举（`internal_exception`, `transport_timeout`, `protocol_mismatch`, `serialization_failure`, `schema_ambiguous`, `invalid_tool_result`, `output_too_large`, `performance_degradation`, `unsupported_state`, `feature_gap`, `unknown`）；
+  - 强制施加 512 字符硬限长（`maxLength: 512`），从 Schema 层面封堵任意代码或私有大文本注入。
+- **双重主动隐私熔断与安全白名单脱敏**：
+  - 确立“宁可丢失一次反馈，绝不冒隐私泄露风险”铁律；
+  - 内置 DLP 正则敏感过滤器（覆盖 GitHub PAT、GitLab Token、Bearer Token、JWT、私钥及未脱敏 Windows 用户路径）；
+  - 检测到高危机密时，主动熔断提单流程并返回 `privacy_risk_aborted`；自动在端侧掩码 `%USERPROFILE%` 与 `%USERNAME%`。
+- **环境技术元数据自动提取 (Non-PII)**：
+  - 自动从本地提取操作系统构建与架构、Visual Studio 版本、VsDebugMcp 组件版本、.NET 运行时与项目范式（`C++ (vcxproj)`、`C# (csproj)`、`CMake`）；
+  - 强制范式抽象化，绝不出域和外发任何具体工程文件物理路径与项目名称。
+- **GitHub Issue Form 短链接与本地离线归档**：
+  - 联动 `.github/ISSUE_TEMPLATE/tool-friction.yml` 官方表单，基于字段 `id` 生成 200~400 字符短链接，彻底杜绝 `414 URI Too Long` 截断；
+  - 本地离线写入 `%LOCALAPPDATA%\VsDebugMcp\reports\rpt_{timestamp}.md`，返回给 Agent 抽象环境变量路径以保护外部云端信任域。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (21/21 PASS) + `VsDebugMcp.Host.Tests` (170/170 PASS)，全套 191 个单元测试 100% 通过；
+  - MCP 工具总数扩充至 **51 个**（全部 `isStub: false`）；
+  - 组件版本统一升级至 **`0.1.20.0`**。
 
 ### Phase 5D：聚合调试快照与进程虚拟内存透视已完成开发并通过全链路在线实测验收 (v0.1.19.0)
 

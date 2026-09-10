@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -35,7 +35,9 @@ Console.CancelKeyPress += (_, eventArgs) =>
 var options = new VsHostOptions();
 var registry = new VisualStudioInstanceRegistry(options, shutdown.Cancel);
 var controlServer = new HostControlServer(options, registry, shutdown.Cancel);
-var tools = new McpTools(new BridgeService(options, registry));
+var bridgeService = new BridgeService(options, registry);
+var diagnosticService = new DiagnosticReportService(bridgeService, registry);
+var tools = new McpTools(bridgeService, diagnosticService);
 
 var builder = WebApplication.CreateBuilder();
 builder.Logging.ClearProviders();

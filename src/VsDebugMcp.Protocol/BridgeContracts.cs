@@ -2009,3 +2009,47 @@ public sealed class DebuggerReadMemoryResponse
     [DataMember(Name = "warnings", Order = 9)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }
+
+[DataContract]
+public sealed class ReportMcpIssueRequest
+{
+    [DataMember(Name = "targetTool", Order = 1)]
+    public string TargetTool { get; set; } = string.Empty;
+
+    [DataMember(Name = "issueType", Order = 2)]
+    public string IssueType { get; set; } = string.Empty;
+
+    [DataMember(Name = "agentSummary", Order = 3)]
+    public string AgentSummary { get; set; } = string.Empty;
+
+    [DataMember(Name = "suggestedImprovement", Order = 4, EmitDefaultValue = false)]
+    public string? SuggestedImprovement { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class ReportMcpIssueResponse
+{
+    [DataMember(Name = "status", Order = 1)]
+    public string Status { get; set; } = "ready_for_user_submission";
+
+    [DataMember(Name = "reportId", Order = 2)]
+    public string ReportId { get; set; } = string.Empty;
+
+    [DataMember(Name = "githubIssueUrl", Order = 3, EmitDefaultValue = false)]
+    public string? GithubIssueUrl { get; set; }
+
+    [DataMember(Name = "localReportPath", Order = 4, EmitDefaultValue = false)]
+    public string? LocalReportPath { get; set; }
+
+    [DataMember(Name = "instructionsForAgent", Order = 5, EmitDefaultValue = false)]
+    public string? InstructionsForAgent { get; set; }
+
+    [DataMember(Name = "environmentSummary", Order = 6, EmitDefaultValue = false)]
+    public Dictionary<string, string> EnvironmentSummary { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 7)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
