@@ -55,9 +55,9 @@ MCP 客户端 (Cursor / Claude / VS Code)
 
 ---
 
-## MCP 工具全景清单 (50 个标准工具)
+## MCP 工具全景清单 (51 个标准工具)
 
-扩展向 AI Agent 完整暴露 **50 个标准 MCP 工具**（全量已实现并实测验证，无空壳）：
+扩展向 AI Agent 完整暴露 **51 个标准 MCP 工具**（全量已实现并实测验证，无空壳）：
 
 ### 1. 服务与多实例管理 (4 个工具)
 | 工具名称 | 只读 | 功能描述 |
@@ -140,6 +140,11 @@ MCP 客户端 (Cursor / Claude / VS Code)
 | `vs_get_test_run_status` | 是 | 轮询测试运行生命周期、通过/失败计数、总耗时及各测试项独立结果 |
 | `vs_cancel_test_run` | 否 | 即时取消正在运行中的测试任务 |
 | `vs_debug_test_by_id` | 否 | 专有单测调试通道，下断触发测试调试，支持自动着陆与栈顶帧即时返回 |
+
+### 9. 智能体交互与问题反馈 (1 个工具)
+| 工具名称 | 只读 | 功能描述 |
+|---|:---:|---|
+| `vs_report_mcp_issue` | 否 | 智能体交互式摩擦与缺陷报告，内置 DLP 隐私脱敏、本地诊断导出与免密预填 GitHub Issue |
 
 ---
 
@@ -240,9 +245,9 @@ VsDebugMcp follows an enterprise-grade **Hybrid Architecture (OOP Host + VSIX Br
 
 ---
 
-## Available MCP Tools (50 Tools Total)
+## Available MCP Tools (51 Tools Total)
 
-The extension exposes **50 production-ready MCP tools** across 8 core domains:
+The extension exposes **51 production-ready MCP tools** across 9 core domains:
 
 1. **Service & Multi-Instance Routing (4 tools)**: `vs_health`, `vs_capabilities`, `vs_list_instances`, `vs_find_instances`.
 2. **Solution & Project Context (4 tools)**: `vs_get_projects_in_solution`, `vs_get_files_in_project`, `vs_get_solution_configurations`, `vs_set_solution_configuration`.
@@ -252,6 +257,7 @@ The extension exposes **50 production-ready MCP tools** across 8 core domains:
 6. **Debugger Diagnostics & Breakpoints (12 tools)**: `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_get_call_stack`, `vs_debugger_set_next_statement`, `vs_debugger_set_breakpoints`, `vs_debugger_list_breakpoints`, `vs_debugger_clear_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_get_exception_info`, `vs_debugger_get_modules`.
 7. **Deep Inspection, Memory & Evaluation (5 tools)**: `vs_debugger_get_snapshot`, `vs_debugger_read_memory`, `vs_debugger_evaluate_expr`, `vs_debugger_evaluate_expressions`, `vs_debugger_get_locals`.
 8. **Test Explorer & Test-Driven Debugging (5 tools)**: `vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run`, `vs_debug_test_by_id`.
+9. **Agent Feedback & Diagnostic Reporting (1 tool)**: `vs_report_mcp_issue`.
 
 ---
 

@@ -79,6 +79,9 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_get_snapshot` — Atomic, single-call capture of full debugging context (process, thread, stack, locals, debug logs)
 - `vs_debugger_read_memory` — Raw virtual memory byte inspection via Win32 `ReadProcessMemory` (HexDump and Base64)
 
+### Agent Interactive Feedback & Diagnostic Reporting (Phase 5E)
+- `vs_report_mcp_issue` — Agent-driven tool friction and bug reporting with DLP privacy filtering, local audit markdown export, and prefilled GitHub Issue creation
+
 ### Client Onboarding & Ecosystem Guide (Phase 4D)
 - Native Visual Studio top-level menu: **`Extensions (扩展) -> VsDebugMcp`**
 - Interactive WPF Configuration Guide with presets for **VS Code**, **Cursor**, **Claude Desktop**, **Antigravity**, and **Codex/Windsurf**
@@ -136,7 +139,7 @@ Ordinary builds do not deploy the extension. Deployment requires closing the rel
 
 ## Validation status
 
-- Automated unit tests: 180/180 PASS (100% across Protocol and Host test suites: 21 Protocol, 159 Host).
+- Automated unit tests: 191/191 PASS (100% across Protocol and Host test suites: 21 Protocol, 170 Host).
 - End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
 - Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / multi-thread inspection / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 

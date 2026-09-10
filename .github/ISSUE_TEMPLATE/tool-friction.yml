@@ -15,23 +15,12 @@ body:
       description: "The MCP tool that caused friction (e.g. vs_debugger_evaluate_expr)"
     validations:
       required: true
-  - type: dropdown
+  - type: input
     id: category
     attributes:
       label: "Friction Category"
-      description: "Standardized category of the issue"
-      options:
-        - "internal_exception"
-        - "transport_timeout"
-        - "protocol_mismatch"
-        - "serialization_failure"
-        - "schema_ambiguous"
-        - "invalid_tool_result"
-        - "output_too_large"
-        - "performance_degradation"
-        - "unsupported_state"
-        - "feature_gap"
-        - "unknown"
+      description: "Standardized category of the issue (e.g. unsupported_state, transport_timeout, internal_exception)"
+      placeholder: "e.g. unsupported_state"
     validations:
       required: true
   - type: textarea
