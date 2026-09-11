@@ -46,24 +46,26 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Build VSIX via PowerShell tool
-        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -Configuration Release
+        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -TargetVs All -Configuration Release
 
       - name: Verify VSIX Output
         shell: pwsh
         run: |
-          $vsixFiles = Get-ChildItem -Path src/VsDebugMcp.Vsix/bin -Recurse -Filter "*.vsix"
-          if (-not $vsixFiles) {
-            Write-Error "No VSIX file was produced!"
+          $vsixFiles = Get-ChildItem -Path src -Recurse -Filter "*.vsix"
+          if (-not $vsixFiles -or $vsixFiles.Count -lt 2) {
+            Write-Error "Expected at least 2 VSIX packages (32-bit and 64-bit), but found: $($vsixFiles.Count)"
             exit 1
           }
           foreach ($f in $vsixFiles) {
             Write-Host "Found VSIX: $($f.FullName) ($([math]::Round($f.Length/1MB, 2)) MB)"
           }
 
-      - name: Upload VSIX Artifact
+      - name: Upload VSIX Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VsDebugMcp-VSIX-Release
-          path: src/VsDebugMcp.Vsix/bin/**/VsDebugMcp.Vsix.vsix
+          path: |
+            src/VsDebugMcp.Vsix/bin/**/VsDebugMcp.Vsix.vsix
+            src/VsDebugMcp.Vsix.2019/bin/**/VsDebugMcp.Vsix.2019.vsix
           if-no-files-found: error
           retention-days: 14

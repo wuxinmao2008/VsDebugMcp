@@ -151,13 +151,11 @@ All VSIX projects can be cross-compiled cleanly using the Visual Studio 2026 (VS
 
 ## Security and privacy
 
-- MCP HTTP is bound only to `127.0.0.1:43260`.
-- Host control and Bridge pipes are restricted to the current Windows user.
-- Remote access is not supported.
-- The Host does not terminate unknown processes during port conflicts.
-- Logs must not include request payloads, credentials, environment variables or raw Visual Studio Copilot logs.
-
-The project targets `vs2026_5`. The VSIX currently pins `Microsoft.VisualStudio.Sdk` to `17.14.40265` while building with Visual Studio 18 MSBuild.
+- **Local-only loopback**: MCP HTTP is bound strictly to `127.0.0.1:43260`. Remote network interfaces or external network access are completely disabled.
+- **OS-level Access Control (ACL)**: Host control and Bridge Named Pipes are restricted strictly to the current Windows user identity (`PipeSecurity`), preventing cross-user eavesdropping or local privilege escalation.
+- **Continuous SAST & CodeQL Audit**: The repository is continuously analyzed via GitHub CodeQL (Security-Extended suite) to verify taint-tracking dataflows, eliminate Path Traversal risks (CWE-22), guard Win32 native memory handles (CWE-119/CWE-404), and ensure strict input bounds across all MCP tool parameters.
+- **Privacy & DLP Protection**: Logs and feedback tools (`vs_report_mcp_issue`) enforce proactive Data Loss Prevention (DLP) circuit breaking. Request payloads, credentials, PAT tokens, private keys, environment variables, and unmasked user paths are strictly blocked from leaving the local machine.
+- **Non-destructive port handling**: The Host never forcibly terminates unknown third-party processes during port conflicts; it reports a graceful error instead.
 
 ## Release notes
 

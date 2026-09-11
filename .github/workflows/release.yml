@@ -63,37 +63,40 @@ jobs:
           powershell -ExecutionPolicy Bypass -File scripts/extract-release-notes.ps1 -Version "$env:TAG_NAME" -OutputPath "RELEASE_NOTES.md"
           Get-Content "RELEASE_NOTES.md"
 
-      - name: Build Release VSIX Package
-        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -Configuration Release
+      - name: Build Release VSIX Packages (All Targets)
+        run: powershell -ExecutionPolicy Bypass -File scripts/build-vsix.ps1 -TargetVs All -Configuration Release
 
       - name: Prepare Release Artifacts and Checksums
         shell: pwsh
         run: |
-          $vsixFiles = Get-ChildItem -Path src/VsDebugMcp.Vsix/bin -Recurse -Filter "*.vsix" |
-            Where-Object { $_.FullName -match "Release" } |
-            Sort-Object LastWriteTime -Descending
-
-          if (-not $vsixFiles) {
-            Write-Error "Release VSIX package not found!"
+          $vsix2026 = (Get-ChildItem -Path src/VsDebugMcp.Vsix/bin -Recurse -Filter "*.vsix" | Where-Object { $_.FullName -match "Release" } | Sort-Object LastWriteTime -Descending)[0]
+          if (-not $vsix2026) {
+            Write-Error "Release VSIX package for VS 2022~2026 not found!"
             exit 1
           }
+          Copy-Item -Path $vsix2026.FullName -Destination "VsDebugMcp.vsix" -Force
+          Copy-Item -Path $vsix2026.FullName -Destination "VsDebugMcp-vs2022-vs2026.vsix" -Force
 
-          $sourceVsix = $vsixFiles[0]
-          $targetVsix = "VsDebugMcp.vsix"
-          Copy-Item -Path $sourceVsix.FullName -Destination $targetVsix -Force
+          $vsix2019 = (Get-ChildItem -Path src/VsDebugMcp.Vsix.2019/bin -Recurse -Filter "*.vsix" | Where-Object { $_.FullName -match "Release" } | Sort-Object LastWriteTime -Descending)[0]
+          if (-not $vsix2019) {
+            Write-Error "Release VSIX package for VS 2017~2019 not found!"
+            exit 1
+          }
+          Copy-Item -Path $vsix2019.FullName -Destination "VsDebugMcp-vs2017-vs2019.vsix" -Force
 
           # Calculate SHA256
-          $hash = (Get-FileHash -Path $targetVsix -Algorithm SHA256).Hash
-          "$hash  $targetVsix" | Set-Content -Path "VsDebugMcp.vsix.sha256" -Encoding ascii
+          Get-FileHash -Path "VsDebugMcp.vsix", "VsDebugMcp-vs2022-vs2026.vsix", "VsDebugMcp-vs2017-vs2019.vsix" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Path "checksums.sha256" -Encoding ascii
 
-          Write-Host "Prepared $targetVsix (SHA256: $hash)"
+          Write-Host "Prepared release packages with SHA256 checksums."
 
       - name: Create GitHub Release
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$env:TAG_NAME" "VsDebugMcp.vsix" "VsDebugMcp.vsix.sha256" `
+          gh release create "$env:TAG_NAME" "VsDebugMcp.vsix" "VsDebugMcp-vs2022-vs2026.vsix" "VsDebugMcp-vs2017-vs2019.vsix" "checksums.sha256" `
             --title "VsDebugMcp $env:TAG_NAME" `
             --notes-file "RELEASE_NOTES.md"
 
