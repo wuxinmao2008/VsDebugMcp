@@ -1,5 +1,12 @@
 # VsDebugMcp
 
+[![CI](https://github.com/wuxinmao2008/VsDebugMcp/actions/workflows/ci.yml/badge.svg)](https://github.com/wuxinmao2008/VsDebugMcp/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/wuxinmao2008/VsDebugMcp?color=blue&label=release)](https://github.com/wuxinmao2008/VsDebugMcp/releases)
+[![Visual Studio Support](https://img.shields.io/badge/Visual%20Studio-2017%20%7C%202019%20%7C%202022%20%7C%202026-purple.svg?logo=visualstudio)](https://github.com/wuxinmao2008/VsDebugMcp)
+[![.NET Supported](https://img.shields.io/badge/.NET-8.0%20%7C%20Framework%204.7.2-512BD4.svg?logo=dotnet)](https://github.com/wuxinmao2008/VsDebugMcp)
+[![Tests](https://img.shields.io/badge/tests-191%20passed-brightgreen.svg?logo=githubactions)](https://github.com/wuxinmao2008/VsDebugMcp/actions)
+[![License](https://img.shields.io/github/license/wuxinmao2008/VsDebugMcp?color=orange)](LICENSE.txt)
+
 Visual Studio (VS 2017 ~ VS 2026 / VS 15.x ~ 18.x) MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
 
 ## Architecture
