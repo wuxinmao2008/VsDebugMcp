@@ -70,4 +70,5 @@
       </Content>
     </ItemGroup>
   </Target>
+  <Import Project="..\VsDebugMcp.Vsix.Shared\VsDebugMcp.Vsix.Shared.projitems" Label="Shared" />
 </Project>
