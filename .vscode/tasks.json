@@ -24,6 +24,18 @@
 			"problemMatcher": "$msCompile"
 		},
 		{
+			"label": "build: vsix: 2019",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/build-vsix.ps1 -TargetVs 2019 -Configuration Release",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "build: vsix: all",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/build-vsix.ps1 -TargetVs All -Configuration Release",
+			"problemMatcher": "$msCompile"
+		},
+		{
 			"label": "deploy: vsix",
 			"type": "shell",
 			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/scripts/deploy-exp.ps1",

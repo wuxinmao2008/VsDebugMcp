@@ -64,25 +64,26 @@ internal sealed class SharedHostProcessManager
                 WindowStyle = ProcessWindowStyle.Hidden
             };
 
-            var resolvedDotNetRoot = TryResolveDotNetRoot();
-            if (!string.IsNullOrEmpty(resolvedDotNetRoot))
-            {
-                _diagnostics?.LogInfo($"已为 Host 配置 .NET 运行时目录 (DOTNET_ROOT): {resolvedDotNetRoot}");
-                startInfo.EnvironmentVariables["DOTNET_ROOT"] = resolvedDotNetRoot;
+        var resolvedDotNetRoot = TryResolveDotNetRoot();
+        if (string.IsNullOrEmpty(resolvedDotNetRoot))
+        {
+            ActivityLog.LogError(LogSource, "net8_runtime_missing");
+            _diagnostics?.LogError("未检测到可用的 .NET 8 运行时（VS 2019 环境需系统安装 .NET 8）。请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
+            _diagnostics?.ShowErrorBanner("缺少 .NET 8 运行时，请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
+            return false;
+        }
 
-                var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-                startInfo.EnvironmentVariables["PATH"] = resolvedDotNetRoot + Path.PathSeparator + currentPath;
-            }
-            else
-            {
-                _diagnostics?.LogInfo("未显式定位到独立 .NET 运行时目录，将使用系统环境启动 Host。");
-            }
+        _diagnostics?.LogInfo($"已为 Host 配置 .NET 运行时目录 (DOTNET_ROOT): {resolvedDotNetRoot}");
+        startInfo.EnvironmentVariables["DOTNET_ROOT"] = resolvedDotNetRoot;
 
-            var hostProcess = Process.Start(startInfo);
-            if (hostProcess is not null)
-            {
-                JobObjectHelper.TryAssignProcess(hostProcess);
-            }
+        var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        startInfo.EnvironmentVariables["PATH"] = resolvedDotNetRoot + Path.PathSeparator + currentPath;
+
+        var hostProcess = Process.Start(startInfo);
+        if (hostProcess is not null)
+        {
+            JobObjectHelper.TryAssignProcess(hostProcess);
+        }
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -146,18 +147,50 @@ internal sealed class SharedHostProcessManager
         }
 
         var envDotNetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        if (!string.IsNullOrEmpty(envDotNetRoot) && File.Exists(Path.Combine(envDotNetRoot, "dotnet.exe")))
+        if (!string.IsNullOrEmpty(envDotNetRoot) && File.Exists(Path.Combine(envDotNetRoot, "dotnet.exe")) && HasNet8Runtime(envDotNetRoot))
         {
             return envDotNetRoot;
         }
 
         var defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet");
-        if (File.Exists(Path.Combine(defaultPath, "dotnet.exe")))
+        if (File.Exists(Path.Combine(defaultPath, "dotnet.exe")) && HasNet8Runtime(defaultPath))
         {
             return defaultPath;
         }
 
         return null;
+    }
+
+    private static bool HasNet8Runtime(string dotnetRoot)
+    {
+        if (string.IsNullOrEmpty(dotnetRoot)) return false;
+
+        var coreAppDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
+        if (Directory.Exists(coreAppDir))
+        {
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(coreAppDir))
+                {
+                    var name = Path.GetFileName(dir);
+                    if (name.StartsWith("8.", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // 针对单文件/自包含等特殊目录结构
+        if (File.Exists(Path.Combine(dotnetRoot, "hostfxr.dll")) && File.Exists(Path.Combine(dotnetRoot, "coreclr.dll")))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static bool IsUnavailable(Exception exception) =>

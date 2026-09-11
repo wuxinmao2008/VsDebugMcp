@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.VisualStudio.Sdk.Build">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <GeneratePkgDefFile>True</GeneratePkgDefFile>
+    <DeployExtension>false</DeployExtension>
+    <ExtensionType>VSSDK</ExtensionType>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
+    <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
+    <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <Version>0.1.20.0</Version>
+    <DefineConstants>$(DefineConstants);VS2019</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <VsixDeployOnDebug>false</VsixDeployOnDebug>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DeployExtension>false</DeployExtension>
+    <VsixDeployOnDebug>false</VsixDeployOnDebug>
+    <DeployVSTemplates>false</DeployVSTemplates>
+    <RegisterOutputPackage>false</RegisterOutputPackage>
+  </PropertyGroup>
+  <PropertyGroup>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(DevEnvDir)' != '' and '$(DevEnvDir)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(DevEnvDir)..\..\'))</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(VSINSTALLDIR)' != '' and '$(VSINSTALLDIR)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(VSINSTALLDIR)'))</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Professional</VsInstallRoot>
+    <TestWindowDir>$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="Microsoft.VisualStudio.TestWindow.Interfaces">
+      <HintPath>$(TestWindowDir)Microsoft.VisualStudio.TestWindow.Interfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\logo.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <VSIXSubPath>Assets</VSIXSubPath>
+    </Content>
+    <Content Include="..\..\assets\screenshot_01.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <VSIXSubPath>assets</VSIXSubPath>
+    </Content>
+    <Content Include="..\..\CHANGELOG.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\..\Overview.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\..\LICENSE.txt">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+  </ItemGroup>
+  <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">
+    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained false --output &quot;$(HostPublishDirectory)&quot;" />
+    <ItemGroup>
+      <Content Include="$(HostPublishDirectory)**\*" Exclude="$(HostPublishDirectory)**\*.pdb">
+        <IncludeInVSIX>true</IncludeInVSIX>
+        <VSIXSubPath>Host\%(RecursiveDir)</VSIXSubPath>
+      </Content>
+    </ItemGroup>
+  </Target>
+  <Import Project="..\VsDebugMcp.Vsix.Shared\VsDebugMcp.Vsix.Shared.projitems" Label="Shared" />
+</Project>

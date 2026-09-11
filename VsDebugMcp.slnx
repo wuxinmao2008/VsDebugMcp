@@ -14,6 +14,7 @@
 			<Platform Project="x64" />
 			<Deploy Solution="Debug|*" />
 		</Project>
+		<Project Path="src/VsDebugMcp.Vsix.2019/VsDebugMcp.Vsix.2019.csproj" />
 		<Project Path="src/VsDebugMcp.Vsix.Shared/VsDebugMcp.Vsix.Shared.shproj" />
 	</Folder>
 	<Folder Name="/tests/">
