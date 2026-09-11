@@ -2,16 +2,31 @@
 
 ## 当前共识
 
-- 目标：参考 Qt Creator MCP 插件，为 Visual Studio 2026 / VS 18.x 提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0、Phase 1（最小 IDE 上下文与构建闭环）及 Phase 2 Debugger POC（只读调试观测原型）已全部完成开发并完成全链路在线实测验收。
+- 目标：参考 Qt Creator MCP 插件，为 Visual Studio 全系列（VS 2017 ~ VS 2026 / VS 15.x ~ 18.x）提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
+- 阶段：Phase 0 ~ Phase 5E 全部完成并完成全链路在线实测验收，51 个 MCP 工具全量就绪。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
 - 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
-- 能力范围：构建/编译、断点设置、调试状态/调用栈/表达式求值诊断、输出窗口、项目工程与文件树。
+- 工程架构演进：核心业务逻辑 100% 聚合于显式 C# 共享项目 `VsDebugMcp.Vsix.Shared.shproj`，以源码级直接注入编译，零额外运行时 DLL。分别由 `VsDebugMcp.Vsix` (VS 2022~2026 64-bit) 和 `VsDebugMcp.Vsix.2019` (VS 2017~2019 32-bit) 独立打包。
+- 能力范围：构建/编译、断点设置、调试状态/调用栈/表达式求值诊断、输出窗口、项目工程与文件树、单元测试联动、进程虚拟内存透视。
 - 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43260` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
-- 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，优先复用 Visual Studio 2026 内置的 .NET 8 运行时（或系统 .NET 8 运行时），随 VSIX 安装并由 VSIX 自动拉起，VSIX 包体积 ~4 MB。
+- 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-10 更新）
+## 实施进度（2026-09-11 更新）
+
+### 架构升级：全版本 (VS 2017 ~ VS 2026) 共享项目架构与多目标交叉编译落地
+
+- **显式 C# 共享项目 (`VsDebugMcp.Vsix.Shared.shproj`)**：
+  - 将全部 51 个 MCP 工具背后的 Provider、通信服务和诊断实现统一迁移至共享项目；
+  - 严格确保零额外 DLL 产物，代码在编译期直接注入宿主主程序集，消除多版本 Git 分支 merge 带来的长期配置冲突。
+- **独立 32 位打包工程 (`VsDebugMcp.Vsix.2019`)**：
+  - 针对 VS 2017 (v15.x) 与 VS 2019 (v16.x) 建立独立的 `source.extension.vsixmanifest`（声明 `[15.0, 17.0)` 及 AnyCPU/x86 架构）；
+  - 目标框架基于 .NET Framework 4.7.2，与现代 VS 2022/2026 64 位 amd64 打包工程物理隔离。
+- **Host 方案 2 深度探测加固**：
+  - 在 `SharedHostProcessManager.cs` 中实现 `HasNet8Runtime` 深度探测，支持准确识别 `Microsoft.NETCore.App/8.*`；
+  - 在纯净旧版 VS 环境下若缺失 .NET 8，立即在 VS 顶部弹出友好 InfoBar 引导并提供官方安装链接，避免 5 秒超时等待。
+- **VS 2026 统一交叉编译流水线**：
+  - 升级 `scripts/build-vsix.ps1`，无需在开发者本地安装老版本 VS，直接通过一套 VS 2026 64 位 MSBuild 一键交叉产出全系 VSIX 安装包。
 
 ### Phase 5E：Agent 交互式工具反馈与诊断报告基础设施已完成开发 (v0.1.20.0)
 

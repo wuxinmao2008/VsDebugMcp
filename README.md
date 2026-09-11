@@ -1,6 +1,6 @@
 # VsDebugMcp
 
-Visual Studio 2026 / VS 18.x MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
+Visual Studio (VS 2017 ~ VS 2026 / VS 15.x ~ 18.x) MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
 
 ## Architecture
 
@@ -10,10 +10,13 @@ VS Code / MCP client
 	-> one shared VsDebugMcp.Host per Windows user
 	-> vsInstanceId registry and router
 	-> per-instance current-user Named Pipe RPC
-	-> Visual Studio VSIX Bridge
+	-> Visual Studio VSIX Bridge (VS 2017 ~ VS 2026)
 ```
 
-The VSIX packages a `win-x64` Framework-Dependent Host (reusing Visual Studio 2026's bundled .NET 8 runtime or system .NET 8) and ensures that it is running when Visual Studio loads. MCP clients do not launch the Host or need its installation path.
+The extension provides full backwards and forwards compatibility spanning **Visual Studio 2017, 2019, 2022, and 2026**:
+- **VS 2022 ~ VS 2026 (64-bit)**: Packages a `win-x64` Framework-Dependent Host reusing Visual Studio's bundled .NET 8 runtime (or system .NET 8).
+- **VS 2017 ~ VS 2019 (32-bit)**: Leverages the system's global .NET 8 Desktop Runtime with intelligent version sensing and zero-wait InfoBar installation guidance.
+- MCP clients communicate via standard HTTP and do not launch the Host or need its installation path.
 
 Each Visual Studio process registers a session identity derived from its PID and process start time. Tools may omit `vsInstanceId` when one instance is registered; when multiple instances are registered, callers must select one explicitly.
 
@@ -93,10 +96,12 @@ Each Visual Studio process registers a session identity derived from its PID and
 ![VS Code Agent using VsDebugMcp](assets/screenshot_01.png)
 
 ## Projects
-
+ 
 - `src/VsDebugMcp.Protocol` — shared IPC contracts, framing, instance identity and error model; targets `net8.0` and `netstandard2.0`.
 - `src/VsDebugMcp.Host` — framework-dependent .NET 8 Streamable HTTP MCP Host, instance registry and Named Pipe Bridge client.
-- `src/VsDebugMcp.Vsix` — SDK-style VSSDK Bridge, Host launcher and Visual Studio instance registrar.
+- `src/VsDebugMcp.Vsix.Shared` — explicit C# Shared Project (`.shproj`) housing 100% of IDE Provider logic, diagnostics and bridge communication without generating any additional DLL overhead.
+- `src/VsDebugMcp.Vsix` — 64-bit VSSDK Bridge packaging project targeting Visual Studio 2022 (v17.x) and Visual Studio 2026 (v18.x).
+- `src/VsDebugMcp.Vsix.2019` — 32-bit (x86/AnyCPU) VSSDK Bridge packaging project targeting Visual Studio 2017 (v15.x) and Visual Studio 2019 (v16.x).
 
 ## VS Code configuration
 
@@ -127,19 +132,20 @@ The Host listens only on IPv4 loopback. If port `43260` is occupied, startup fai
 
 Use the VS Code tasks:
 
-- `build: managed`
-- `build: vsix`
-- `build: vsix: release`
-- `build: all`
-- `deploy: vsix`
+- `build: managed` — Builds `VsDebugMcp.Host`
+- `build: vsix` — Builds the primary 64-bit VSIX in Debug mode
+- `build: vsix: release` — Builds the primary 64-bit VSIX in Release mode
+- `build: vsix: 2019` — Builds the 32-bit VSIX for VS 2017 / 2019
+- `build: vsix: all` — Simultaneously cross-compiles VSIX packages for all supported IDE editions
+- `build: all` — Builds managed host and primary VSIX
+- `deploy: vsix` — Deploys the VSIX to the Experimental Instance
 
-The VSIX project must be built with the Visual Studio 18 MSBuild installation. Its build publishes the Host as `win-x64` framework-dependent and embeds it under `Host/` in the VSIX package.
-
-Ordinary builds do not deploy the extension. Deployment requires closing the relevant Visual Studio instance and running `deploy: vsix` explicitly.
+All VSIX projects can be cross-compiled cleanly using the Visual Studio 2026 (VS 18.x) MSBuild installation on developer and CI machines without requiring local installations of older IDEs. Ordinary builds do not deploy the extension. Deployment requires closing the relevant Visual Studio instance and running `deploy: vsix` explicitly.
 
 ## Validation status
 
 - Automated unit tests: 191/191 PASS (100% across Protocol and Host test suites: 21 Protocol, 170 Host).
+- Multi-target packaging verification: Both `VsDebugMcp.Vsix.vsix` (64-bit, ~8.2MB) and `VsDebugMcp.Vsix.2019.vsix` (32-bit, ~7.8MB) package cleanly with embedded framework-dependent Host executables.
 - End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
 - Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / multi-thread inspection / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 

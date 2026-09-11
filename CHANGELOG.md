@@ -5,6 +5,23 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Full-Spectrum IDE Backwards & Forwards Compatibility (VS 2017 ~ VS 2026)**:
+  - **C# Shared Project Architecture (`VsDebugMcp.Vsix.Shared`)**:
+    - Extracted 100% of IDE Provider, diagnostic, and bridge communication logic into an explicit `.shproj` container.
+    - Zero external runtime DLLs: source code is compiled and injected directly into target VSIX host assemblies.
+  - **Dedicated 32-bit Packaging Project (`VsDebugMcp.Vsix.2019`)**:
+    - Created packaging project targeting Visual Studio 2017 (v15.x) and Visual Studio 2019 (v16.x) via `[15.0, 17.0)` version targeting.
+    - Operates on .NET Framework 4.7.2 with AnyCPU/x86 host compatibility while maintaining full feature parity.
+  - **Hardened Host .NET 8 Runtime Sensing (Option 2)**:
+    - Added deep runtime verification (`HasNet8Runtime`) in `SharedHostProcessManager.cs` to accurately detect `Microsoft.NETCore.App/8.*`.
+    - Eliminates 5-second connection timeouts on legacy IDE installations by instantly displaying a zero-wait InfoBar banner with official .NET 8 Desktop Runtime download guidance.
+  - **Unified Cross-Compilation Build Pipeline**:
+    - Enhanced `scripts/build-vsix.ps1` with `-TargetVs Auto | 2019 | 2017 | 2022 | 2026 | All`.
+    - Added VS Code tasks `build: vsix: 2019` and `build: vsix: all` enabling unified cross-packaging on Visual Studio 2026 without requiring older IDE installations.
+
 ## [0.1.20.0] - 2026-09-10
 
 ### Added

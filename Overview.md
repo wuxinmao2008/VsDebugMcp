@@ -1,8 +1,8 @@
 # VsDebugMcp
 
-**Connect Visual Studio 2026 to AI Agents via Model Context Protocol (MCP).**
+**Connect Visual Studio (VS 2017 ~ VS 2026) to AI Agents via Model Context Protocol (MCP).**
 
-通过 MCP 协议将 Visual Studio 2026 / 18.x（及 VS 2022 17.14+）连接到外部 AI Agent，为智能助手提供 IDE 级的项目工程树、构建控制、双轨编译诊断、全生命周期混合调试、进程虚拟内存透视与测试资源管理器联动能力。
+通过 MCP 协议将 Visual Studio（全版本覆盖 VS 2017、VS 2019、VS 2022 及最新的 VS 2026 / 18.x）连接到外部 AI Agent，为智能助手提供 IDE 级的项目工程树、构建控制、双轨编译诊断、全生命周期混合调试、进程虚拟内存透视与测试资源管理器联动能力。
 
 [简体中文](#简体中文) | [English](#english)
 
@@ -231,7 +231,8 @@ If you use MCP-compatible AI agents (such as **Cursor**, **VS Code**, **Claude D
   - When encountering runtime crashes or deadlocks, general agents can only guess without breakpoint control, call stacks, stepping, or memory visibility.
 - **The VsDebugMcp Solution**:
   - Constructs a high-performance, bidirectional bridge between Visual Studio and external AI agents;
-  - Empowers your agent to inspect solutions, control IDE builds, capture Build/Debug output panes, set advanced breakpoints, step through code, take aggregated diagnostic snapshots, and inspect raw virtual memory spaces.
+  - Empowers your agent to inspect solutions, control IDE builds, capture Build/Debug output panes, set advanced breakpoints, step through code, take aggregated diagnostic snapshots, and inspect raw virtual memory spaces;
+  - Offers full version coverage spanning **Visual Studio 2017, 2019, 2022, and 2026** with zero third-party DLL dependencies.
 
 ---
 
