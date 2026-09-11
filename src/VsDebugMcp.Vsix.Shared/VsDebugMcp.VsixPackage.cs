@@ -72,6 +72,13 @@ public sealed class VsDebugMcp_VsixPackage : AsyncPackage
         catch (Exception ex)
         {
             _diagnosticService?.LogError($"打开客户端配置指引窗口失败: {ex.Message}", "client_config_window_error");
+            VsShellUtilities.ShowMessageBox(
+                this,
+                $"无法打开客户端配置指引窗口:\n{ex.Message}",
+                "VsDebugMcp",
+                OLEMSGICON.OLEMSGICON_CRITICAL,
+                OLEMSGBUTTON.OLEMSGBUTTON_OK,
+                OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
         }
     }
 

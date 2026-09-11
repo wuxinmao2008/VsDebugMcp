@@ -21,6 +21,7 @@
 *.so
 *.dylib
 *.dll
+!lib/**/*.dll
 *.so.*
 
 

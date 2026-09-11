@@ -6,7 +6,7 @@
     <ExtensionType>VSSDK</ExtensionType>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
+    <VisualStudioSDKImplicitPackageVersion>16.0.206</VisualStudioSDKImplicitPackageVersion>
     <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
     <Platforms>AnyCPU;x64</Platforms>
@@ -25,10 +25,11 @@
     <RegisterOutputPackage>false</RegisterOutputPackage>
   </PropertyGroup>
   <PropertyGroup>
+    <TestWindowDir Condition="'$(TestWindowDir)' == '' and Exists('$(MSBuildProjectDirectory)\..\..\lib\vs2019\Microsoft.VisualStudio.TestWindow.Interfaces.dll')">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\lib\vs2019'))\</TestWindowDir>
     <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(DevEnvDir)' != '' and '$(DevEnvDir)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(DevEnvDir)..\..\'))</VsInstallRoot>
     <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(VSINSTALLDIR)' != '' and '$(VSINSTALLDIR)' != '*Undefined*'">$([System.IO.Path]::GetFullPath('$(VSINSTALLDIR)'))</VsInstallRoot>
     <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Professional</VsInstallRoot>
-    <TestWindowDir>$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
+    <TestWindowDir Condition="'$(TestWindowDir)' == ''">$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
@@ -36,6 +37,7 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />
     <Reference Include="System.Xaml" />
+    <Reference Include="System.Design" />
     <Reference Include="Microsoft.VisualStudio.TestWindow.Interfaces">
       <HintPath>$(TestWindowDir)Microsoft.VisualStudio.TestWindow.Interfaces.dll</HintPath>
       <Private>false</Private>
