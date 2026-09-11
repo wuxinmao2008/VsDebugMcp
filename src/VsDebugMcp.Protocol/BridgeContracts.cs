@@ -673,6 +673,15 @@ public sealed class BuildTaskResponse
 
     [DataMember(Name = "cancelRequested", Order = 10)]
     public bool CancelRequested { get; set; }
+
+    [DataMember(Name = "durationSeconds", Order = 11, EmitDefaultValue = false)]
+    public double? DurationSeconds { get; set; }
+
+    [DataMember(Name = "errorCount", Order = 12, EmitDefaultValue = false)]
+    public int? ErrorCount { get; set; }
+
+    [DataMember(Name = "topErrors", Order = 13, EmitDefaultValue = false)]
+    public List<string>? TopErrors { get; set; }
 }
 
 [DataContract]
@@ -968,6 +977,24 @@ public sealed class RunTestsResponse
 
     [DataMember(Name = "startedAt", Order = 5)]
     public string StartedAt { get; set; } = string.Empty;
+
+    [DataMember(Name = "completedAt", Order = 6, EmitDefaultValue = false)]
+    public string? CompletedAt { get; set; }
+
+    [DataMember(Name = "passedCount", Order = 7, EmitDefaultValue = false)]
+    public int? PassedCount { get; set; }
+
+    [DataMember(Name = "failedCount", Order = 8, EmitDefaultValue = false)]
+    public int? FailedCount { get; set; }
+
+    [DataMember(Name = "skippedCount", Order = 9, EmitDefaultValue = false)]
+    public int? SkippedCount { get; set; }
+
+    [DataMember(Name = "durationSeconds", Order = 10, EmitDefaultValue = false)]
+    public double? DurationSeconds { get; set; }
+
+    [DataMember(Name = "failedTestNames", Order = 11, EmitDefaultValue = false)]
+    public List<string>? FailedTestNames { get; set; }
 }
 
 [DataContract]
@@ -1208,6 +1235,18 @@ public sealed class DebuggerGetExceptionInfoResponse
 
     [DataMember(Name = "rawDetails", Order = 9, EmitDefaultValue = false)]
     public string? RawDetails { get; set; }
+
+    [DataMember(Name = "assertionFailed", Order = 10, EmitDefaultValue = false)]
+    public bool? AssertionFailed { get; set; }
+
+    [DataMember(Name = "assertionExpression", Order = 11, EmitDefaultValue = false)]
+    public string? AssertionExpression { get; set; }
+
+    [DataMember(Name = "assertionFile", Order = 12, EmitDefaultValue = false)]
+    public string? AssertionFile { get; set; }
+
+    [DataMember(Name = "assertionLine", Order = 13, EmitDefaultValue = false)]
+    public int? AssertionLine { get; set; }
 }
 
 [DataContract]
@@ -1916,7 +1955,16 @@ public sealed class DebuggerGetSnapshotRequest
     [DataMember(Name = "logSource", Order = 7, EmitDefaultValue = false)]
     public string? LogSource { get; set; }
 
-    [DataMember(Name = "vsInstanceId", Order = 8, EmitDefaultValue = false)]
+    [DataMember(Name = "includeExceptionInfo", Order = 8, EmitDefaultValue = false)]
+    public bool IncludeExceptionInfo { get; set; } = true;
+
+    [DataMember(Name = "includeThreads", Order = 9, EmitDefaultValue = false)]
+    public bool IncludeThreads { get; set; } = false;
+
+    [DataMember(Name = "maxThreads", Order = 10, EmitDefaultValue = false)]
+    public int? MaxThreads { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 11, EmitDefaultValue = false)]
     public string? VsInstanceId { get; set; }
 }
 
@@ -1962,7 +2010,16 @@ public sealed class DebuggerGetSnapshotResponse
     [DataMember(Name = "logSource", Order = 13, EmitDefaultValue = false)]
     public string? LogSource { get; set; }
 
-    [DataMember(Name = "warnings", Order = 14)]
+    [DataMember(Name = "exceptionInfo", Order = 14, EmitDefaultValue = false)]
+    public DebuggerGetExceptionInfoResponse? ExceptionInfo { get; set; }
+
+    [DataMember(Name = "totalThreadCount", Order = 15, EmitDefaultValue = false)]
+    public int? TotalThreadCount { get; set; }
+
+    [DataMember(Name = "threads", Order = 16, EmitDefaultValue = false)]
+    public List<ThreadInfo>? Threads { get; set; }
+
+    [DataMember(Name = "warnings", Order = 17)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }
 

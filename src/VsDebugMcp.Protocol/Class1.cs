@@ -168,6 +168,11 @@ public static class TestRunStates
 	public const string Completed = "completed";
 	public const string Failed = "failed";
 	public const string Cancelled = "cancelled";
+
+	public static bool IsTerminal(string? state) =>
+		string.Equals(state, Completed, StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(state, Failed, StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(state, Cancelled, StringComparison.OrdinalIgnoreCase);
 }
 
 public static class BuildStates
@@ -178,6 +183,11 @@ public static class BuildStates
 	public const string Succeeded = "succeeded";
 	public const string Failed = "failed";
 	public const string Cancelled = "cancelled";
+
+	public static bool IsTerminal(string? state) =>
+		string.Equals(state, Succeeded, StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(state, Failed, StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(state, Cancelled, StringComparison.OrdinalIgnoreCase);
 }
 
 [DataContract]

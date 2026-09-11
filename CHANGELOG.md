@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced Assertion & Native Exception Extraction, Aggregated Diagnostic Snapshot, and Long-Running Task Wait Mode (Phase 6A)**:
+  - **Structured Assertion & Native Exception Diagnostics (`vs_debugger_get_exception_info`)**:
+    - Adds `AssertionLogParser` in `VsDebugMcp.Protocol` to automatically inspect Output Window Debug logs upon breaking.
+    - Accurately captures CRT `assert(...)`, `_ASSERTE`, and .NET `Debug.Assert` failures, extracting structured `assertionFailed`, `assertionExpression`, `assertionFile`, and `assertionLine`.
+    - Captures native Win32/SEH exception codes (e.g., `0xC0000005: Access violation`) and descriptions.
+  - **Full-Spectrum Diagnostic Snapshot Aggregation (`vs_debugger_get_snapshot`)**:
+    - Integrates `exceptionInfo` and `threads` (with `totalThreadCount`) into `DebuggerGetSnapshotResponse`.
+    - Adds `includeExceptionInfo` (default `true`), `includeThreads` (default `false`), and `maxThreads` (default `20`).
+    - Agents can now capture the entire crash/breakpoint scene (exception + top frame + call stack + locals + threads + recent logs) in a single round-trip.
+  - **Synchronous Wait Mode for Builds & Test Runs (`waitForCompletion`)**:
+    - Adds `waitForCompletion` (default `false`) and `timeoutSeconds` (default `60`) to `vs_run_build` and `vs_run_tests`.
+    - Eliminates repetitive polling round-trips by waiting synchronously in Host and returning terminal state, duration (`durationSeconds`), error count, and top failure summaries (`topErrors` / `failedTestNames`).
+  - **Helper & Verification**:
+    - Added `BuildStates.IsTerminal` and `TestRunStates.IsTerminal` helpers.
+    - Automated unit tests: 207/207 PASS (100% across Protocol and Host test suites: 26/26 Protocol tests, 181/181 Host tests).
 - **Full-Spectrum IDE Backwards & Forwards Compatibility (VS 2017 ~ VS 2026)**:
   - **C# Shared Project Architecture (`VsDebugMcp.Vsix.Shared`)**:
     - Extracted 100% of IDE Provider, diagnostic, and bridge communication logic into an explicit `.shproj` container.

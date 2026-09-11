@@ -30,6 +30,13 @@ public interface IBridgeService
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
+    Task<BuildTaskResponse> RunBuildAndWaitAsync(
+        string? configuration,
+        string? platform,
+        int timeoutSeconds,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
     Task<BuildTaskResponse> GetBuildStatusAsync(
         string buildTaskId,
         string? vsInstanceId,
@@ -163,6 +170,12 @@ public interface IBridgeService
         IReadOnlyList<string>? testIds,
         CancellationToken cancellationToken);
 
+    Task<RunTestsResponse> RunTestsAndWaitAsync(
+        string? vsInstanceId,
+        IReadOnlyList<string>? testIds,
+        int timeoutSeconds,
+        CancellationToken cancellationToken);
+
     Task<TestRunStatusResponse> GetTestRunStatusAsync(
         string? vsInstanceId,
         string? testRunId,
@@ -227,6 +240,9 @@ public interface IBridgeService
         bool includeRecentLogs,
         int? recentLogLines,
         string? logSource,
+        bool includeExceptionInfo,
+        bool includeThreads,
+        int? maxThreads,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -390,6 +406,59 @@ public sealed class BridgeService : IBridgeService
                 },
                 cancellationToken),
             cancellationToken);
+
+    public async Task<BuildTaskResponse> RunBuildAndWaitAsync(
+        string? configuration,
+        string? platform,
+        int timeoutSeconds,
+        string? vsInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var build = await RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken).ConfigureAwait(false);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 600));
+
+        while (!BuildStates.IsTerminal(build.State))
+        {
+            if (sw.Elapsed >= timeout)
+            {
+                build.DurationSeconds = Math.Round(sw.Elapsed.TotalSeconds, 2);
+                return build;
+            }
+
+            await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            build = await GetBuildStatusAsync(build.BuildTaskId, vsInstanceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        build.DurationSeconds = Math.Round(sw.Elapsed.TotalSeconds, 2);
+
+        if (build.Succeeded == false)
+        {
+            try
+            {
+                var errorsResp = await GetErrorsAsync(
+                    build.BuildTaskId,
+                    new[] { "error" },
+                    null,
+                    null,
+                    10,
+                    vsInstanceId,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (errorsResp != null && errorsResp.Items != null)
+                {
+                    build.ErrorCount = errorsResp.TotalCount > 0 ? errorsResp.TotalCount : errorsResp.Items.Count;
+                    build.TopErrors = errorsResp.Items
+                        .Take(5)
+                        .Select(e => $"{e.FilePath ?? e.Project ?? "build"}({e.Line}): {e.Code} {e.Message}")
+                        .ToList();
+                }
+            }
+            catch { }
+        }
+
+        return build;
+    }
 
     public Task<BuildTaskResponse> GetBuildStatusAsync(
         string buildTaskId,
@@ -716,6 +785,46 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public async Task<RunTestsResponse> RunTestsAndWaitAsync(
+        string? vsInstanceId,
+        IReadOnlyList<string>? testIds,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        var runResp = await RunTestsAsync(vsInstanceId, testIds, cancellationToken).ConfigureAwait(false);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 600));
+
+        while (!TestRunStates.IsTerminal(runResp.State))
+        {
+            if (sw.Elapsed >= timeout)
+            {
+                runResp.DurationSeconds = Math.Round(sw.Elapsed.TotalSeconds, 2);
+                return runResp;
+            }
+
+            await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            var status = await GetTestRunStatusAsync(vsInstanceId, runResp.TestRunId, cancellationToken).ConfigureAwait(false);
+            runResp.State = status.State;
+            runResp.TotalCount = status.TotalCount;
+            runResp.PassedCount = status.PassedCount;
+            runResp.FailedCount = status.FailedCount;
+            runResp.SkippedCount = status.SkippedCount;
+            runResp.CompletedAt = DateTime.UtcNow.ToString("O");
+
+            if (status.Results != null)
+            {
+                runResp.FailedTestNames = status.Results
+                    .Where(r => string.Equals(r.Outcome, "failed", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => !string.IsNullOrWhiteSpace(r.DisplayName) ? r.DisplayName : r.TestId)
+                    .ToList();
+            }
+        }
+
+        runResp.DurationSeconds = Math.Round(sw.Elapsed.TotalSeconds, 2);
+        return runResp;
+    }
+
     public Task<TestRunStatusResponse> GetTestRunStatusAsync(
         string? vsInstanceId,
         string? testRunId,
@@ -868,6 +977,9 @@ public sealed class BridgeService : IBridgeService
         bool includeRecentLogs,
         int? recentLogLines,
         string? logSource,
+        bool includeExceptionInfo,
+        bool includeThreads,
+        int? maxThreads,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -881,7 +993,11 @@ public sealed class BridgeService : IBridgeService
                     MaxLocals = maxLocals,
                     IncludeRecentLogs = includeRecentLogs,
                     RecentLogLines = recentLogLines,
-                    LogSource = logSource
+                    LogSource = logSource,
+                    IncludeExceptionInfo = includeExceptionInfo,
+                    IncludeThreads = includeThreads,
+                    MaxThreads = maxThreads,
+                    VsInstanceId = vsInstanceId
                 },
                 cancellationToken),
             cancellationToken);

@@ -1252,4 +1252,113 @@ public sealed class InstanceProtocolTests
         Assert.Equal("unknown", McpIssueTypes.Normalize(null));
         Assert.Equal(11, McpIssueTypes.All.Count);
     }
+
+    [Fact]
+    public void Phase6AContracts_SerializeAndDeserialize_Correctly()
+    {
+        // 1. BuildStates and TestRunStates IsTerminal
+        Assert.True(BuildStates.IsTerminal(BuildStates.Succeeded));
+        Assert.True(BuildStates.IsTerminal(BuildStates.Failed));
+        Assert.True(BuildStates.IsTerminal(BuildStates.Cancelled));
+        Assert.False(BuildStates.IsTerminal(BuildStates.Starting));
+        Assert.False(BuildStates.IsTerminal(BuildStates.Running));
+        Assert.False(BuildStates.IsTerminal(null));
+
+        Assert.True(TestRunStates.IsTerminal(TestRunStates.Completed));
+        Assert.True(TestRunStates.IsTerminal(TestRunStates.Failed));
+        Assert.True(TestRunStates.IsTerminal(TestRunStates.Cancelled));
+        Assert.False(TestRunStates.IsTerminal(TestRunStates.Starting));
+        Assert.False(TestRunStates.IsTerminal(TestRunStates.Running));
+        Assert.False(TestRunStates.IsTerminal(null));
+
+        // 2. BuildTaskResponse with wait fields
+        var buildResp = new BuildTaskResponse
+        {
+            BuildTaskId = "bld_1",
+            VsInstanceId = "vs-1",
+            State = BuildStates.Failed,
+            Succeeded = false,
+            DurationSeconds = 12.34,
+            ErrorCount = 2,
+            TopErrors = new List<string> { "foo.cpp(42): C2065 undeclared identifier", "bar.cpp(10): C2143 syntax error" }
+        };
+        var buildRespCopy = BridgeJson.Deserialize<BuildTaskResponse>(BridgeJson.Serialize(buildResp));
+        Assert.Equal("bld_1", buildRespCopy.BuildTaskId);
+        Assert.Equal(12.34, buildRespCopy.DurationSeconds);
+        Assert.Equal(2, buildRespCopy.ErrorCount);
+        Assert.NotNull(buildRespCopy.TopErrors);
+        Assert.Equal(2, buildRespCopy.TopErrors.Count);
+        Assert.Contains("foo.cpp", buildRespCopy.TopErrors[0]);
+
+        // 3. RunTestsResponse with wait fields
+        var testResp = new RunTestsResponse
+        {
+            VsInstanceId = "vs-1",
+            TestRunId = "run_1",
+            State = TestRunStates.Completed,
+            TotalCount = 10,
+            PassedCount = 8,
+            FailedCount = 2,
+            SkippedCount = 0,
+            DurationSeconds = 5.67,
+            FailedTestNames = new List<string> { "TestA", "TestB" }
+        };
+        var testRespCopy = BridgeJson.Deserialize<RunTestsResponse>(BridgeJson.Serialize(testResp));
+        Assert.Equal(8, testRespCopy.PassedCount);
+        Assert.Equal(2, testRespCopy.FailedCount);
+        Assert.Equal(5.67, testRespCopy.DurationSeconds);
+        Assert.Equal(2, testRespCopy.FailedTestNames?.Count);
+
+        // 4. DebuggerGetExceptionInfoResponse with assertion fields
+        var excResp = new DebuggerGetExceptionInfoResponse
+        {
+            VsInstanceId = "vs-1",
+            HasException = true,
+            ExceptionType = "AssertionFailure",
+            Message = "Assertion failed: ptr != nullptr",
+            AssertionFailed = true,
+            AssertionExpression = "ptr != nullptr",
+            AssertionFile = @"D:\Project\main.cpp",
+            AssertionLine = 128
+        };
+        var excRespCopy = BridgeJson.Deserialize<DebuggerGetExceptionInfoResponse>(BridgeJson.Serialize(excResp));
+        Assert.True(excRespCopy.HasException);
+        Assert.True(excRespCopy.AssertionFailed);
+        Assert.Equal("ptr != nullptr", excRespCopy.AssertionExpression);
+        Assert.Equal(@"D:\Project\main.cpp", excRespCopy.AssertionFile);
+        Assert.Equal(128, excRespCopy.AssertionLine);
+
+        // 5. DebuggerGetSnapshotResponse with aggregated exception and thread fields
+        var snapReq = new DebuggerGetSnapshotRequest
+        {
+            IncludeExceptionInfo = true,
+            IncludeThreads = true,
+            MaxThreads = 15
+        };
+        var snapReqCopy = BridgeJson.Deserialize<DebuggerGetSnapshotRequest>(BridgeJson.Serialize(snapReq));
+        Assert.True(snapReqCopy.IncludeExceptionInfo);
+        Assert.True(snapReqCopy.IncludeThreads);
+        Assert.Equal(15, snapReqCopy.MaxThreads);
+
+        var snapResp = new DebuggerGetSnapshotResponse
+        {
+            VsInstanceId = "vs-1",
+            Mode = "break",
+            IsDebugging = true,
+            ExceptionInfo = excResp,
+            TotalThreadCount = 4,
+            Threads = new List<ThreadInfo>
+            {
+                new() { Id = 100, Name = "Main Thread", IsCurrent = true, IsAlive = true },
+                new() { Id = 101, Name = "Worker Thread", IsCurrent = false, IsAlive = true }
+            }
+        };
+        var snapRespCopy = BridgeJson.Deserialize<DebuggerGetSnapshotResponse>(BridgeJson.Serialize(snapResp));
+        Assert.NotNull(snapRespCopy.ExceptionInfo);
+        Assert.True(snapRespCopy.ExceptionInfo.AssertionFailed);
+        Assert.Equal(4, snapRespCopy.TotalThreadCount);
+        Assert.NotNull(snapRespCopy.Threads);
+        Assert.Equal(2, snapRespCopy.Threads.Count);
+        Assert.Equal("Main Thread", snapRespCopy.Threads[0].Name);
+    }
 }

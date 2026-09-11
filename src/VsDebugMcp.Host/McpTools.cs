@@ -95,13 +95,17 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Starts an asynchronous build of the currently open Visual Studio solution. Omitted configuration or platform values use the active solution setting.")]
+    [Description("Starts a build of the currently open Visual Studio solution. Supports optional synchronous wait (waitForCompletion) to directly return the terminal state, elapsed time, and error summary.")]
     public Task<BuildTaskResponse> RunBuildAsync(
         [Description("Optional solution configuration name, such as Debug or Release.")] string? configuration = null,
         [Description("Optional solution platform name, such as Any CPU or x64.")] string? platform = null,
+        [Description("Optional flag whether to wait synchronously until the build task reaches a terminal state (succeeded, failed, cancelled) before returning. Defaults to false.")] bool? waitForCompletion = null,
+        [Description("Optional maximum duration in seconds to wait when waitForCompletion is true (1-600). Defaults to 60.")] int? timeoutSeconds = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
-        InvokeAsync(() => _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken));
+        InvokeAsync(() => (waitForCompletion ?? false)
+            ? _bridgeService.RunBuildAndWaitAsync(configuration, platform, timeoutSeconds ?? 60, vsInstanceId, cancellationToken)
+            : _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_get_build_status",
@@ -493,15 +497,16 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Asynchronously triggers unit test execution for specified test IDs or all discovered tests in the solution.")]
+    [Description("Triggers unit test execution for specified test IDs or all discovered tests in the solution. Supports optional synchronous wait (waitForCompletion) to directly return final pass/fail counts.")]
     public Task<RunTestsResponse> RunTestsAsync(
         [Description("Optional list of specific test IDs (GUIDs) to execute. If omitted or empty, all discovered tests in the solution will be run.")] IReadOnlyList<string>? testIds = null,
+        [Description("Optional flag whether to wait synchronously until test execution reaches a terminal state (completed, failed, cancelled) before returning. Defaults to false.")] bool? waitForCompletion = null,
+        [Description("Optional maximum duration in seconds to wait when waitForCompletion is true (1-600). Defaults to 60.")] int? timeoutSeconds = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
-        InvokeAsync(() => _bridgeService.RunTestsAsync(
-            vsInstanceId,
-            testIds,
-            cancellationToken));
+        InvokeAsync(() => (waitForCompletion ?? false)
+            ? _bridgeService.RunTestsAndWaitAsync(vsInstanceId, testIds, timeoutSeconds ?? 60, cancellationToken)
+            : _bridgeService.RunTestsAsync(vsInstanceId, testIds, cancellationToken));
 
     [McpServerTool(
         Name = "vs_get_test_run_status",
@@ -675,7 +680,7 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Captures a comprehensive diagnostic snapshot of the debugger state in a single call, aggregating mode, process, thread, call stack, locals, and recent debug output window logs.")]
+    [Description("Captures a comprehensive diagnostic snapshot of the debugger state in a single call, aggregating mode, process, thread, call stack, locals, exception/assertion details, and recent debug output window logs.")]
     public Task<DebuggerGetSnapshotResponse> DebuggerGetSnapshotAsync(
         [Description("Optional flag whether to include the call stack frames. Defaults to true.")] bool? includeCallStack = null,
         [Description("Optional maximum number of call stack frames to return. Defaults to 10.")] int? maxFrames = null,
@@ -684,6 +689,9 @@ public sealed class McpTools
         [Description("Optional flag whether to include recent logs from the output window. Defaults to true.")] bool? includeRecentLogs = null,
         [Description("Optional maximum number of recent output log lines to return. Defaults to 30.")] int? recentLogLines = null,
         [Description("Optional output window pane source (e.g. 'debug' or 'build'). Defaults to 'debug'.")] string? logSource = null,
+        [Description("Optional flag whether to include exception/assertion details when paused in break mode. Defaults to true.")] bool? includeExceptionInfo = null,
+        [Description("Optional flag whether to include thread list details. Defaults to false.")] bool? includeThreads = null,
+        [Description("Optional maximum number of threads to return when includeThreads is true. Defaults to 20.")] int? maxThreads = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerGetSnapshotAsync(
@@ -694,6 +702,9 @@ public sealed class McpTools
             includeRecentLogs ?? true,
             recentLogLines,
             logSource,
+            includeExceptionInfo ?? true,
+            includeThreads ?? false,
+            maxThreads,
             vsInstanceId,
             cancellationToken));
 

@@ -152,6 +152,9 @@ internal sealed class DebuggerProvider
 		var locals = new List<DebuggerVariableInfo>();
 		var warnings = new List<BridgeWarning>();
 		string? recentLogs = null;
+		DebuggerGetExceptionInfoResponse? exceptionInfo = null;
+		int? totalThreads = null;
+		List<ThreadInfo>? threadList = null;
 
 		if (isDebugging)
 		{
@@ -179,6 +182,59 @@ internal sealed class DebuggerProvider
 
 			try
 			{
+				EnvDTE.Threads? ths = debugger.CurrentProgram?.Threads;
+				if (ths == null && debugger.CurrentProcess?.Programs != null)
+				{
+					foreach (EnvDTE.Program prog in debugger.CurrentProcess.Programs)
+					{
+						if (prog.Threads != null)
+						{
+							ths = prog.Threads;
+							break;
+						}
+					}
+				}
+
+				if (ths != null)
+				{
+					totalThreads = ths.Count;
+					if (request.IncludeThreads)
+					{
+						threadList = new List<ThreadInfo>();
+						var maxTh = Clamp(request.MaxThreads ?? 20, 1, 100);
+						var idx = 0;
+						foreach (EnvDTE.Thread t in ths)
+						{
+							if (idx >= maxTh) break;
+							int tid = 0;
+							string tname = string.Empty;
+							bool isAlive = true;
+							bool isFrozen = false;
+							string? priority = null;
+							try { tid = t.ID; } catch { }
+							try { tname = t.Name ?? string.Empty; } catch { }
+							try { isAlive = t.IsAlive; } catch { }
+							try { isFrozen = t.IsFrozen; } catch { }
+							try { priority = t.Priority; } catch { }
+
+							threadList.Add(new ThreadInfo
+							{
+								Id = tid,
+								Name = tname,
+								IsCurrent = threadId.HasValue && tid == threadId.Value,
+								IsAlive = isAlive,
+								IsFrozen = isFrozen,
+								Priority = priority
+							});
+							idx++;
+						}
+					}
+				}
+			}
+			catch { }
+
+			try
+			{
 				breakReason = GetBreakReasonString(debugger.LastBreakReason);
 			}
 			catch { }
@@ -195,6 +251,19 @@ internal sealed class DebuggerProvider
 				}
 			}
 			catch { }
+
+			if (request.IncludeExceptionInfo)
+			{
+				try
+				{
+					var excResp = await GetExceptionInfoAsync(new DebuggerGetExceptionInfoRequest(), cancellationToken);
+					if (excResp != null && excResp.HasException)
+					{
+						exceptionInfo = excResp;
+					}
+				}
+				catch { }
+			}
 
 			if (request.IncludeCallStack)
 			{
@@ -304,6 +373,9 @@ internal sealed class DebuggerProvider
 			Locals = locals,
 			RecentLogs = recentLogs,
 			LogSource = request.IncludeRecentLogs ? (request.LogSource ?? "debug") : null,
+			ExceptionInfo = exceptionInfo,
+			TotalThreadCount = totalThreads,
+			Threads = threadList,
 			Warnings = warnings
 		};
 	}
@@ -2032,24 +2104,46 @@ internal sealed class DebuggerProvider
 				}
 				catch { }
 
-				return response;
+				// Do not return early if $exception succeeded; continue to check if assertion or additional context exists in logs
 			}
 		}
 		catch { }
 
-		// 2. Fallback: Check if LastBreakReason was an exception (e.g. C++ or native unhandled)
+		// 2. Scan recent Debug Output Window logs for assertion or native crash details
+		if (_outputWindowProvider != null)
+		{
+			try
+			{
+				var logResp = await _outputWindowProvider.GetLogsAsync(new GetOutputWindowLogsRequest
+				{
+					Source = "debug",
+					MaxChars = 8000
+				}, cancellationToken);
+
+				if (!string.IsNullOrEmpty(logResp.Text))
+				{
+					AssertionLogParser.ScanLogsForAssertionOrException(logResp.Text, response);
+				}
+			}
+			catch { }
+		}
+
+		// 3. Fallback: Check if LastBreakReason was an exception (e.g. C++ or native unhandled)
 		if (debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionThrown ||
 			debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionNotHandled)
 		{
 			response.HasException = true;
-			response.Message = "Debugger paused due to an exception (native/unmanaged or CLR first-chance).";
+			if (string.IsNullOrEmpty(response.Message))
+			{
+				response.Message = "Debugger paused due to an exception (native/unmanaged or CLR first-chance).";
+			}
 			try
 			{
 				var errExpr = debugger.GetExpression("$err,hr", UseAutoExpandRules: false, Timeout: 1000);
 				if (errExpr != null && errExpr.IsValidValue)
 				{
-					response.HResult = errExpr.Value;
-					response.RawDetails = errExpr.Value;
+					response.HResult ??= errExpr.Value;
+					response.RawDetails ??= errExpr.Value;
 				}
 			}
 			catch { }

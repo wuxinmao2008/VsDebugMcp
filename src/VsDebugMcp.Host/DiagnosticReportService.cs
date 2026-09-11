@@ -363,26 +363,7 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
         string? improvement,
         Dictionary<string, string> envSummary)
     {
-        var title = $"[Tool Friction] {targetTool}: {issueType}";
-
-        var bodyBuilder = new StringBuilder();
-        bodyBuilder.AppendLine("### 🛠️ Target MCP Tool");
-        bodyBuilder.AppendLine($"`{targetTool}` (Category: `{issueType}`)");
-        bodyBuilder.AppendLine();
-        bodyBuilder.AppendLine("### 📝 Agent Technical Summary");
-        bodyBuilder.AppendLine(summary);
-        bodyBuilder.AppendLine();
-        if (!string.IsNullOrWhiteSpace(improvement))
-        {
-            bodyBuilder.AppendLine("### 💡 Suggested Improvement");
-            bodyBuilder.AppendLine(improvement);
-            bodyBuilder.AppendLine();
-        }
-        bodyBuilder.AppendLine("### 🖥️ Environment Diagnostics");
-        foreach (var kvp in envSummary)
-        {
-            bodyBuilder.AppendLine($"- **{kvp.Key}**: {kvp.Value}");
-        }
+        var title = $"[Tool Friction]: {targetTool}: {issueType}";
 
         var sbEnv = new StringBuilder();
         foreach (var kvp in envSummary)
@@ -392,12 +373,11 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
 
         var envText = sbEnv.ToString().TrimEnd();
 
-        // Keep within conservative URL limits (< 2000 chars total)
+        // Keep within conservative URL limits (< 2000 chars total) for GitHub Issue Form
         var baseUrl = "https://github.com/wuxinmao2008/VsDebugMcp/issues/new";
         var queryBuilder = new StringBuilder();
-        queryBuilder.Append("title=").Append(Uri.EscapeDataString(title));
-        queryBuilder.Append("&body=").Append(Uri.EscapeDataString(bodyBuilder.ToString()));
-        queryBuilder.Append("&template=tool-friction.yml");
+        queryBuilder.Append("template=tool-friction.yml");
+        queryBuilder.Append("&title=").Append(Uri.EscapeDataString(title));
         queryBuilder.Append("&tool=").Append(Uri.EscapeDataString(targetTool));
         queryBuilder.Append("&category=").Append(Uri.EscapeDataString(issueType));
         queryBuilder.Append("&summary=").Append(Uri.EscapeDataString(summary));
