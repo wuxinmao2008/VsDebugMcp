@@ -52,6 +52,7 @@ internal sealed class SharedHostProcessManager
             return false;
         }
 
+        Process? hostProcess = null;
         try
         {
             _diagnostics?.LogInfo($"正在准备启动 Host 进程: {hostPath}");
@@ -64,26 +65,27 @@ internal sealed class SharedHostProcessManager
                 WindowStyle = ProcessWindowStyle.Hidden
             };
 
-        var resolvedDotNetRoot = TryResolveDotNetRoot();
-        if (string.IsNullOrEmpty(resolvedDotNetRoot))
-        {
-            ActivityLog.LogError(LogSource, "net8_runtime_missing");
-            _diagnostics?.LogError("未检测到可用的 .NET 8 运行时（VS 2019 环境需系统安装 .NET 8）。请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
-            _diagnostics?.ShowErrorBanner("缺少 .NET 8 运行时，请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
-            return false;
-        }
+            var resolvedDotNetRoot = TryResolveDotNetRoot();
+            if (string.IsNullOrEmpty(resolvedDotNetRoot))
+            {
+                ActivityLog.LogError(LogSource, "net8_runtime_missing");
+                _diagnostics?.LogError("未检测到可用的 64 位 .NET 8 运行时（VS 2017/2019 环境需系统安装 64 位 .NET 8）。请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
+                _diagnostics?.ShowErrorBanner("缺少 64 位 .NET 8 运行时，请安装 .NET 8 Desktop Runtime: https://aka.ms/dotnet/8.0/runtime", "net8_runtime_missing");
+                return false;
+            }
 
-        _diagnostics?.LogInfo($"已为 Host 配置 .NET 运行时目录 (DOTNET_ROOT): {resolvedDotNetRoot}");
-        startInfo.EnvironmentVariables["DOTNET_ROOT"] = resolvedDotNetRoot;
+            _diagnostics?.LogInfo($"已为 Host 配置 .NET 运行时目录 (DOTNET_ROOT): {resolvedDotNetRoot}");
+            startInfo.EnvironmentVariables["DOTNET_ROOT"] = resolvedDotNetRoot;
+            startInfo.EnvironmentVariables.Remove("DOTNET_ROOT(x86)");
 
-        var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        startInfo.EnvironmentVariables["PATH"] = resolvedDotNetRoot + Path.PathSeparator + currentPath;
+            var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            startInfo.EnvironmentVariables["PATH"] = resolvedDotNetRoot + Path.PathSeparator + currentPath;
 
-        var hostProcess = Process.Start(startInfo);
-        if (hostProcess is not null)
-        {
-            JobObjectHelper.TryAssignProcess(hostProcess);
-        }
+            hostProcess = Process.Start(startInfo);
+            if (hostProcess is not null)
+            {
+                JobObjectHelper.TryAssignProcess(hostProcess);
+            }
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -97,6 +99,15 @@ internal sealed class SharedHostProcessManager
         for (var attempt = 0; attempt < 60; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (hostProcess != null && hostProcess.HasExited)
+            {
+                ActivityLog.LogError(LogSource, "host_process_exited");
+                _diagnostics?.LogError($"Host 进程异常退出，退出码: {hostProcess.ExitCode} (0x{hostProcess.ExitCode:X})。请确认已安装 64 位 .NET 8 桌面运行时。", "host_process_exited");
+                _diagnostics?.ShowErrorBanner("Host 进程异常退出，请确认安装了 64 位 .NET 8 Runtime", "host_process_exited");
+                return false;
+            }
+
             try
             {
                 await _client.GetStatusAsync(cancellationToken).ConfigureAwait(false);
@@ -116,7 +127,7 @@ internal sealed class SharedHostProcessManager
         }
 
         ActivityLog.LogError(LogSource, "host_start_timeout");
-        _diagnostics?.LogError("等待 Host 上线超时（5秒）。可能原因：端口 43260 被占用或 Host 异常退出。", "host_start_timeout");
+        _diagnostics?.LogError("等待 Host 上线超时（15秒）。可能原因：端口 43260 被占用或 Host 异常退出。", "host_start_timeout");
         _diagnostics?.ShowErrorBanner("Host 上线超时，请检查端口 43260 是否被占用", "host_start_timeout");
         return false;
     }
@@ -146,16 +157,31 @@ internal sealed class SharedHostProcessManager
             _diagnostics?.LogInfo($"探测 VS 内置 .NET 运行时异常: {exception.Message}");
         }
 
-        var envDotNetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        if (!string.IsNullOrEmpty(envDotNetRoot) && File.Exists(Path.Combine(envDotNetRoot, "dotnet.exe")) && HasNet8Runtime(envDotNetRoot))
+        // 2. VsDebugMcp.Host is published as win-x64. On 64-bit Windows, a 32-bit IDE process (VS 2017/2019)
+        // returns "C:\Program Files (x86)" for SpecialFolder.ProgramFiles.
+        // We MUST prioritize 64-bit Program Files (ProgramW6432) so the 64-bit Host loads the 64-bit .NET 8 runtime!
+        var programW6432 = Environment.GetEnvironmentVariable("ProgramW6432");
+        if (!string.IsNullOrEmpty(programW6432))
         {
-            return envDotNetRoot;
+            var x64Path = Path.Combine(programW6432, "dotnet");
+            if (File.Exists(Path.Combine(x64Path, "dotnet.exe")) && HasNet8Runtime(x64Path))
+            {
+                return x64Path;
+            }
         }
 
+        // 3. Fallback to standard ProgramFiles (which is 64-bit on 64-bit OS when running in 64-bit process)
         var defaultPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet");
         if (File.Exists(Path.Combine(defaultPath, "dotnet.exe")) && HasNet8Runtime(defaultPath))
         {
             return defaultPath;
+        }
+
+        // 4. Fallback to DOTNET_ROOT environment variable
+        var envDotNetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrEmpty(envDotNetRoot) && File.Exists(Path.Combine(envDotNetRoot, "dotnet.exe")) && HasNet8Runtime(envDotNetRoot))
+        {
+            return envDotNetRoot;
         }
 
         return null;
