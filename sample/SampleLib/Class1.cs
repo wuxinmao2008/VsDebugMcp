@@ -1,6 +1,6 @@
-﻿namespace SampleLib;
-
-public class Class1
+namespace SampleLib
 {
-
+    public class Class1
+    {
+    }
 }
