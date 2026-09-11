@@ -4,7 +4,7 @@ param(
 
     [string]$Platform = "AnyCPU",
 
-    [ValidateSet("Auto", "2026", "2022", "2019", "All")]
+    [ValidateSet("Auto", "2026", "2022", "2019", "2017", "All")]
     [string]$TargetVs = "Auto",
 
     [string]$VsixTargetFramework = "",
@@ -110,8 +110,8 @@ Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Green
 # 4. Determine tasks to execute
 $buildTasks = @()
 
-if ($TargetVs -eq "2019") {
-    $buildTasks += @{ Name = "VS 2019 (v16.x)"; Project = $projectPath2019; Tfm = $null }
+if ($TargetVs -eq "2019" -or $TargetVs -eq "2017") {
+    $buildTasks += @{ Name = "VS 2017 / 2019 (v15.x / v16.x)"; Project = $projectPath2019; Tfm = $null }
 }
 elseif ($TargetVs -eq "2022") {
     $buildTasks += @{ Name = "VS 2022 (v17.x)"; Project = $projectPath2026; Tfm = "vs2022" }
@@ -122,7 +122,7 @@ elseif ($TargetVs -eq "2026") {
 elseif ($TargetVs -eq "All") {
     $buildTasks += @{ Name = "VS 2026 (v18.x)"; Project = $projectPath2026; Tfm = "vs2026_5" }
     $buildTasks += @{ Name = "VS 2022 (v17.x)"; Project = $projectPath2026; Tfm = "vs2022" }
-    $buildTasks += @{ Name = "VS 2019 (v16.x)"; Project = $projectPath2019; Tfm = $null }
+    $buildTasks += @{ Name = "VS 2017 / 2019 (v15.x / v16.x)"; Project = $projectPath2019; Tfm = $null }
 }
 else {
     # Auto
