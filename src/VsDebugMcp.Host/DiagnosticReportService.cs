@@ -272,7 +272,9 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
                     {
                         archetypes.Add("F# (fsproj)");
                     }
-                    else if (path.Contains("CMake", StringComparison.OrdinalIgnoreCase) || path.EndsWith("CMakeLists.txt", StringComparison.OrdinalIgnoreCase))
+                    else if (string.Equals(proj.Kind, "cmake", StringComparison.OrdinalIgnoreCase) ||
+                             path.Contains("CMake", StringComparison.OrdinalIgnoreCase) ||
+                             path.EndsWith("CMakeLists.txt", StringComparison.OrdinalIgnoreCase))
                     {
                         archetypes.Add("CMake");
                     }

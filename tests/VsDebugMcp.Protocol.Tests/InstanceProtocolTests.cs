@@ -1361,4 +1361,78 @@ public sealed class InstanceProtocolTests
         Assert.Equal(2, snapRespCopy.Threads.Count);
         Assert.Equal("Main Thread", snapRespCopy.Threads[0].Name);
     }
+
+    [Fact]
+    public void CMakeProjectAndFilesRoundTripThroughSharedSerializer()
+    {
+        var projResponse = new GetProjectsInSolutionResponse
+        {
+            VsInstanceId = "vs-42",
+            Solution = new SolutionInfo
+            {
+                IsOpen = true,
+                Name = "SampleCMake",
+                FilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\CMakeLists.txt",
+                Directory = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\",
+                ProjectCount = 1
+            },
+            Projects = new List<SolutionProjectInfo>
+            {
+                new()
+                {
+                    Id = "cmake:root",
+                    Name = "SampleCMake",
+                    ProjectFilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\CMakeLists.txt",
+                    ProjectDirectory = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake",
+                    ProjectGuid = "cmake:root",
+                    TypeGuid = "cmake",
+                    Kind = "cmake",
+                    IsLoaded = true,
+                    IsUnsupported = false
+                }
+            }
+        };
+
+        var json = BridgeJson.Serialize(projResponse);
+        var copy = BridgeJson.Deserialize<GetProjectsInSolutionResponse>(json);
+
+        Assert.Equal("SampleCMake", copy.Solution.Name);
+        Assert.Single(copy.Projects);
+        var proj = copy.Projects[0];
+        Assert.Equal("cmake:root", proj.Id);
+        Assert.Equal("cmake", proj.Kind);
+        Assert.False(proj.IsUnsupported);
+        Assert.EndsWith("CMakeLists.txt", proj.ProjectFilePath);
+
+        var filesResponse = new GetFilesInProjectResponse
+        {
+            VsInstanceId = "vs-42",
+            TotalFileCount = 3,
+            Projects = new List<ProjectFilesGroup>
+            {
+                new()
+                {
+                    ProjectId = "cmake:root",
+                    ProjectName = "SampleCMake",
+                    ProjectFilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\CMakeLists.txt",
+                    FileCount = 3,
+                    Files = new List<ProjectFileInfo>
+                    {
+                        new() { FilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\CMakeLists.txt", RelativePath = "CMakeLists.txt", Extension = ".txt" },
+                        new() { FilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\src\core\include\core\logger.h", RelativePath = @"src\core\include\core\logger.h", Extension = ".h" },
+                        new() { FilePath = @"D:\VsDebugMcp\VsDebugMcp\sample\SampleCMake\src\app\main.cpp", RelativePath = @"src\app\main.cpp", Extension = ".cpp" }
+                    }
+                }
+            }
+        };
+
+        var filesJson = BridgeJson.Serialize(filesResponse);
+        var filesCopy = BridgeJson.Deserialize<GetFilesInProjectResponse>(filesJson);
+
+        Assert.Equal(3, filesCopy.TotalFileCount);
+        Assert.Single(filesCopy.Projects);
+        Assert.Equal("cmake:root", filesCopy.Projects[0].ProjectId);
+        Assert.Equal(3, filesCopy.Projects[0].Files.Count);
+        Assert.Equal(@"src\core\include\core\logger.h", filesCopy.Projects[0].Files[1].RelativePath);
+    }
 }

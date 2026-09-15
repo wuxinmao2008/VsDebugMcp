@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio;
@@ -34,7 +35,7 @@ internal sealed class SolutionProjectProvider
 			var response = new GetProjectsInSolutionResponse
 			{
 				VsInstanceId = _vsInstanceId,
-				Solution = ReadSolutionInfo(solution)
+				Solution = await ReadSolutionInfoAsync(solution, cancellationToken)
 			};
 
 			if (!response.Solution.IsOpen)
@@ -83,6 +84,8 @@ internal sealed class SolutionProjectProvider
 				}
 			}
 
+			EnrichCMakeWorkspace(response);
+
 			response.Solution.ProjectCount = response.Projects.Count;
 			return response;
 		}
@@ -100,16 +103,108 @@ internal sealed class SolutionProjectProvider
 		}
 	}
 
-	private static SolutionInfo ReadSolutionInfo(IVsSolution solution)
+	private static void EnrichCMakeWorkspace(GetProjectsInSolutionResponse response)
 	{
-		ThreadHelper.ThrowIfNotOnUIThread();
+		var solutionDir = response.Solution.Directory;
+		if (string.IsNullOrWhiteSpace(solutionDir))
+		{
+			return;
+		}
+
+		var cmakeListsPath = Path.Combine(solutionDir, "CMakeLists.txt");
+		if (!File.Exists(cmakeListsPath))
+		{
+			return;
+		}
+
+		var hasConventionalProject = false;
+		foreach (var project in response.Projects)
+		{
+			if (!project.IsUnsupported && !string.IsNullOrWhiteSpace(project.ProjectFilePath))
+			{
+				hasConventionalProject = true;
+				break;
+			}
+		}
+
+		if (!hasConventionalProject)
+		{
+			response.Projects.RemoveAll(p =>
+				string.Equals(p.TypeGuid, "6bb5f8f0-4483-11d3-8bcf-00c04f8ec28c", StringComparison.OrdinalIgnoreCase) ||
+				string.IsNullOrWhiteSpace(p.ProjectFilePath));
+
+			response.Warnings.RemoveAll(w =>
+				string.Equals(w.Code, "project_path_unavailable", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(w.Code, "project_type_unavailable", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(w.Code, "project_guid_unavailable", StringComparison.OrdinalIgnoreCase));
+
+			var cleanDir = solutionDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+			var projectName = string.IsNullOrWhiteSpace(response.Solution.Name)
+				? Path.GetFileName(cleanDir)
+				: response.Solution.Name;
+
+			response.Projects.Add(new SolutionProjectInfo
+			{
+				Id = "cmake:root",
+				Name = projectName,
+				ProjectFilePath = cmakeListsPath,
+				ProjectDirectory = cleanDir,
+				ProjectGuid = "cmake:root",
+				TypeGuid = "cmake",
+				Kind = "cmake",
+				IsLoaded = true,
+				IsUnsupported = false
+			});
+		}
+	}
+
+	private async Task<SolutionInfo> ReadSolutionInfoAsync(IVsSolution solution, CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 		var isOpen = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_IsSolutionOpen, false);
+		var baseName = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionBaseName, string.Empty);
+		var fileName = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionFileName, string.Empty);
+		var directory = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionDirectory, string.Empty);
+
+		if (!isOpen || string.IsNullOrWhiteSpace(directory))
+		{
+			try
+			{
+				var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+				if (dte?.Solution != null)
+				{
+					var dteFullName = dte.Solution.FullName;
+					if (!string.IsNullOrWhiteSpace(dteFullName) && Directory.Exists(dteFullName))
+					{
+						var cmakeLists = Path.Combine(dteFullName, "CMakeLists.txt");
+						if (File.Exists(cmakeLists))
+						{
+							isOpen = true;
+							var cleanPath = dteFullName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+							if (string.IsNullOrWhiteSpace(baseName))
+							{
+								baseName = Path.GetFileName(cleanPath);
+							}
+							if (string.IsNullOrWhiteSpace(fileName))
+							{
+								fileName = cmakeLists;
+							}
+							directory = cleanPath + Path.DirectorySeparatorChar;
+						}
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
+
 		return new SolutionInfo
 		{
 			IsOpen = isOpen,
-			Name = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionBaseName, string.Empty),
-			FilePath = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionFileName, string.Empty),
-			Directory = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionDirectory, string.Empty)
+			Name = baseName,
+			FilePath = fileName,
+			Directory = directory
 		};
 	}
 

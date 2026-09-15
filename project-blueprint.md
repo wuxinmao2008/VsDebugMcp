@@ -12,7 +12,27 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-11 更新）
+## 实施进度（2026-09-15 更新）
+
+### Phase 7A：CMake 与 Open Folder 工作区生命周期与文件树适配 (v0.1.21.0)
+
+- **工作区自动加载生命周期 (AutoLoad Lifecycle)**：
+  - 在 `VsDebugMcp_VsixPackage.cs` 中增加 `[ProvideAutoLoad(VSConstants.UICONTEXT.FolderOpened_string, ...)]` 与 `EmptySolution_string`；
+  - 彻底解决通过“文件 -> 打开 -> 文件夹”或外部传入 CMake 路径启动 VS 时插件未能随 VS 自动拉起的问题。
+- **CMake 工作区规范工程识别 (`vs_get_projects_in_solution`)**：
+  - 引入 CMake 工作区探测机制，识别根目录下的 `CMakeLists.txt`；
+  - 将 VS Open Folder 自动生成的虚拟杂项层级转换为第一公民 CMake 工程（`Kind: "cmake"`, `Id: "cmake:root"`, `ProjectFilePath: ".../CMakeLists.txt"`, `IsUnsupported: false`）；
+  - 消除无物理工程文件引发的 `project_path_unavailable` 警告，保持与传统 SLN 项目的向下兼容。
+- **工作区源码文件树智能检索 (`vs_get_files_in_project`)**：
+  - 在 CMake 模式下支持全目录树深度递归遍历；
+  - 内置严密黑名单目录过滤（自动排除 `.vs/`、`build/`、`out/`、`bin/`、`obj/`、`CMakeFiles/` 及带有 `build-`/`out-` 前缀的临时生成目录）；
+  - 完美支持按扩展名精确过滤（如 `.cpp`、`.h`、`.cmake` 等），并内置 5000 文件安全上限与截断提示；
+  - 返回规范的 `RelativePath`，便于 Agent 建立项目全局索引。
+- **自包含多层级 CMake 测试工程 (`sample/SampleCMake`)**：
+  - 新增三级嵌套的现代 C++17 CMake 示例工程，包含 `core`、`modules/calculator`、`app` 及 `tests`，原生接入 `CMakePresets.json`（`x64-Debug`/`x64-Release`）与 CTest 自动化测试。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (27/27 PASS) + `VsDebugMcp.Host.Tests` (181/181 PASS)，全套 208 个单元测试 100% 通过；
+  - 组件版本统一升级至 **`0.1.21.0`**。
 
 ### 架构升级：全版本 (VS 2017 ~ VS 2026) 共享项目架构与多目标交叉编译落地
 

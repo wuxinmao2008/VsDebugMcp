@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21.0] - 2026-09-15
+
 ### Added
+- **CMake & Open Folder Workspace Support (Phase 7A)**:
+  - **AutoLoad Lifecycle Enhancement**: Added `VSConstants.UICONTEXT.FolderOpened_string` and `EmptySolution_string` triggers to `VsDebugMcp_VsixPackage`, ensuring the extension activates and connects seamlessly when opening folder-based CMake workspaces.
+  - **CMake Workspace Detection (`vs_get_projects_in_solution`)**: Identifies CMake workspaces via `CMakeLists.txt` detection, filtering out dummy "Miscellaneous Files" hierarchies and surfacing a first-class `cmake:root` project (`Kind: "cmake"`, `IsUnsupported: false`).
+  - **Workspace Source File Traversal (`vs_get_files_in_project`)**: Recursively enumerates source files across nested folders, automatically filtering noise directories (`.vs/`, `build/`, `out/`, `bin/`, `obj/`, `CMakeFiles/`) with extension filtering and safety limits.
+  - **Nested CMake Sample Project**: Added comprehensive nested CMake test target `sample/SampleCMake` with `CMakePresets.json` and CTest support.
+  - **Automated Verification**: 208/208 unit tests pass (27/27 Protocol, 181/181 Host).
+
+### Added (Previous)
 - **Enhanced Assertion & Native Exception Extraction, Aggregated Diagnostic Snapshot, and Long-Running Task Wait Mode (Phase 6A)**:
   - **Structured Assertion & Native Exception Diagnostics (`vs_debugger_get_exception_info`)**:
     - Adds `AssertionLogParser` in `VsDebugMcp.Protocol` to automatically inspect Output Window Debug logs upon breaking.

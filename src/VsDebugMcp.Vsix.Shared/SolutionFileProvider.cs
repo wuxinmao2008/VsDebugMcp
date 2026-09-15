@@ -39,9 +39,85 @@ internal sealed class SolutionFileProvider
 			};
 
 			var isOpen = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_IsSolutionOpen, false);
+			var solutionDir = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionDirectory, string.Empty);
+			var solutionName = ReadSolutionProperty(solution, __VSPROPID.VSPROPID_SolutionBaseName, string.Empty);
+
+			if (!isOpen || string.IsNullOrWhiteSpace(solutionDir))
+			{
+				try
+				{
+					var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
+					if (dte?.Solution != null)
+					{
+						var dteFullName = dte.Solution.FullName;
+						if (!string.IsNullOrWhiteSpace(dteFullName) && Directory.Exists(dteFullName))
+						{
+							var dteCMake = Path.Combine(dteFullName, "CMakeLists.txt");
+							if (File.Exists(dteCMake))
+							{
+								isOpen = true;
+								solutionDir = dteFullName;
+								if (string.IsNullOrWhiteSpace(solutionName))
+								{
+									solutionName = Path.GetFileName(dteFullName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+								}
+							}
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
+
 			if (!isOpen)
 			{
 				return response;
+			}
+
+			var extensionFilter = ParseExtensionFilter(request.ExtensionFilter);
+			var requestedProjectId = request.ProjectId?.Trim();
+
+			var cleanSolutionDir = !string.IsNullOrWhiteSpace(solutionDir)
+				? solutionDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+				: string.Empty;
+			var cmakeListsPath = !string.IsNullOrEmpty(cleanSolutionDir)
+				? Path.Combine(cleanSolutionDir, "CMakeLists.txt")
+				: string.Empty;
+			var isCmakeWorkspace = !string.IsNullOrEmpty(cmakeListsPath) && File.Exists(cmakeListsPath);
+
+			if (isCmakeWorkspace)
+			{
+				var isMatchingCMakeProject = string.IsNullOrEmpty(requestedProjectId) ||
+					string.Equals(requestedProjectId, "cmake:root", StringComparison.OrdinalIgnoreCase) ||
+					requestedProjectId.StartsWith("cmake", StringComparison.OrdinalIgnoreCase);
+
+				if (isMatchingCMakeProject)
+				{
+					var cmakeFiles = new List<ProjectFileInfo>();
+					TraverseCMakeWorkspace(
+						cleanSolutionDir,
+						extensionFilter,
+						cmakeFiles,
+						response.Warnings,
+						cancellationToken);
+
+					var cmakeProjectName = string.IsNullOrWhiteSpace(solutionName)
+						? Path.GetFileName(cleanSolutionDir)
+						: solutionName;
+
+					response.Projects.Add(new ProjectFilesGroup
+					{
+						ProjectId = "cmake:root",
+						ProjectName = cmakeProjectName,
+						ProjectFilePath = cmakeListsPath,
+						Files = cmakeFiles,
+						FileCount = cmakeFiles.Count
+					});
+
+					response.TotalFileCount = cmakeFiles.Count;
+					return response;
+				}
 			}
 
 			var onlyThisType = Guid.Empty;
@@ -53,9 +129,6 @@ internal sealed class SolutionFileProvider
 			{
 				throw new SolutionStateUnavailableException();
 			}
-
-			var extensionFilter = ParseExtensionFilter(request.ExtensionFilter);
-			var requestedProjectId = request.ProjectId?.Trim();
 
 			var items = new IVsHierarchy[1];
 			var projectIndex = 0;
@@ -451,5 +524,108 @@ internal sealed class SolutionFileProvider
 		{
 			return fallback;
 		}
+	}
+
+	private const int MaxCMakeFilesLimit = 5000;
+	private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
+	{
+		".vs",
+		".git",
+		".svn",
+		".hg",
+		"build",
+		"out",
+		"bin",
+		"obj",
+		"CMakeFiles",
+		"node_modules",
+		".idea"
+	};
+
+	private static void TraverseCMakeWorkspace(
+		string rootDir,
+		HashSet<string>? extensionFilter,
+		List<ProjectFileInfo> files,
+		List<BridgeWarning> warnings,
+		CancellationToken cancellationToken)
+	{
+		var queue = new Queue<string>();
+		queue.Enqueue(rootDir);
+
+		while (queue.Count > 0)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var currentDir = queue.Dequeue();
+
+			try
+			{
+				foreach (var subDir in Directory.EnumerateDirectories(currentDir))
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					var dirName = Path.GetFileName(subDir);
+					if (string.IsNullOrEmpty(dirName) || IgnoredDirectories.Contains(dirName))
+					{
+						continue;
+					}
+
+					if (dirName.StartsWith("build-", StringComparison.OrdinalIgnoreCase) ||
+						dirName.StartsWith("out-", StringComparison.OrdinalIgnoreCase) ||
+						dirName.StartsWith("build_", StringComparison.OrdinalIgnoreCase))
+					{
+						continue;
+					}
+
+					queue.Enqueue(subDir);
+				}
+
+				foreach (var filePath in Directory.EnumerateFiles(currentDir))
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					var fileName = Path.GetFileName(filePath);
+					if (string.IsNullOrEmpty(fileName))
+					{
+						continue;
+					}
+
+					if (string.Equals(fileName, "CMakeCache.txt", StringComparison.OrdinalIgnoreCase) ||
+						fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+					{
+						continue;
+					}
+
+					var ext = Path.GetExtension(filePath);
+					if (extensionFilter is not null && !extensionFilter.Contains(ext.ToLowerInvariant()))
+					{
+						continue;
+					}
+
+					if (files.Count >= MaxCMakeFilesLimit)
+					{
+						warnings.Add(new BridgeWarning
+						{
+							Code = "file_count_truncated",
+							Message = $"The file count reached the maximum limit ({MaxCMakeFilesLimit}). Additional files were omitted.",
+							ProjectId = "cmake:root"
+						});
+						files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
+						return;
+					}
+
+					var relPath = MakeRelativePath(rootDir, filePath);
+					files.Add(new ProjectFileInfo
+					{
+						FilePath = filePath,
+						RelativePath = relPath,
+						Extension = ext
+					});
+				}
+			}
+			catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+			{
+				// Inaccessible or deleted directory - skip gracefully
+			}
+		}
+
+		files.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 	}
 }
