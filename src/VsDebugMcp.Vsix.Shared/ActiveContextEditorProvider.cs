@@ -201,6 +201,37 @@ internal sealed class ActiveContextEditorProvider
             SolutionPath = slnPath
         };
 
+        if (CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
+        {
+            var presets = CMakePresetsParser.LoadWorkspacePresets(cmakeRoot);
+            if (presets.Count > 0)
+            {
+                string activePresetName = CMakeWorkspaceState.GetActivePreset(cmakeRoot, presets);
+                var activePreset = presets.Find(p => string.Equals(p.Name, activePresetName, StringComparison.OrdinalIgnoreCase)) ?? presets[0];
+
+                response.ActiveConfigurationName = activePreset.Name;
+                response.ActivePlatformName = activePreset.Architecture;
+
+                foreach (var preset in presets)
+                {
+                    string name = preset.Name;
+                    string platform = preset.Architecture;
+                    string fullName = string.IsNullOrEmpty(platform) ? name : $"{name}|{platform}";
+                    bool isActive = string.Equals(name, activePresetName, StringComparison.OrdinalIgnoreCase);
+
+                    response.Configurations.Add(new SolutionConfigurationInfo
+                    {
+                        Name = name,
+                        PlatformName = platform,
+                        FullName = fullName,
+                        IsActive = isActive
+                    });
+                }
+
+                return response;
+            }
+        }
+
         var solutionBuild = dte.Solution.SolutionBuild;
         if (solutionBuild != null)
         {
@@ -275,6 +306,41 @@ internal sealed class ActiveContextEditorProvider
         if (dte.Debugger != null && dte.Debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
         {
             throw new ActiveContextEditorException(BridgeErrorCodes.CannotSwitchConfigurationWhileDebugging, "Cannot switch solution configuration while debugging is active.", false);
+        }
+
+        if (CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
+        {
+            var presets = CMakePresetsParser.LoadWorkspacePresets(cmakeRoot);
+            if (presets.Count > 0)
+            {
+                string prevPresetCfg = CMakeWorkspaceState.GetActivePreset(cmakeRoot, presets);
+                var prevPreset = presets.Find(p => string.Equals(p.Name, prevPresetCfg, StringComparison.OrdinalIgnoreCase));
+                string prevPresetPlat = prevPreset?.Architecture ?? string.Empty;
+
+                var matchedPreset = presets.Find(p =>
+                    string.Equals(p.Name, request.Configuration!.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(request.Platform) || string.Equals(p.Architecture, request.Platform!.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+                if (matchedPreset == null)
+                {
+                    string msg = string.IsNullOrWhiteSpace(request.Platform)
+                        ? $"CMake preset '{request.Configuration}' was not found."
+                        : $"CMake preset '{request.Configuration}' with platform '{request.Platform}' was not found.";
+                    throw new ActiveContextEditorException(BridgeErrorCodes.ConfigurationNotFound, msg, false);
+                }
+
+                CMakeWorkspaceState.SetActivePreset(cmakeRoot, matchedPreset.Name);
+
+                return new SetSolutionConfigurationResponse
+                {
+                    VsInstanceId = _vsInstanceId,
+                    Success = true,
+                    PreviousConfiguration = prevPresetCfg,
+                    PreviousPlatform = prevPresetPlat,
+                    ActiveConfiguration = matchedPreset.Name,
+                    ActivePlatform = matchedPreset.Architecture
+                };
+            }
         }
 
         var solutionBuild = dte.Solution.SolutionBuild

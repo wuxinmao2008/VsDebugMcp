@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22.0] - 2026-09-15
+
+### Added
+- **CMakePresets Configuration Switching & CMake Build Driving (Phase 7B)**:
+  - **CMakePresets Model & Parser (`CMakePresetsModel.cs`)**:
+    - Adds `CMakeConfigurePreset` and `CMakePresetsParser` in `VsDebugMcp.Protocol`.
+    - Parses `CMakePresets.json` (and `CMakeUserPresets.json`) at workspace root, filtering out `hidden: true` presets, extracting preset names, architectures (`x64`, `x86`, `ARM64`), build types, and evaluating `${sourceDir}` / `${presetName}` binary directories.
+  - **Presets Configuration Discovery & Switching (`vs_get_solution_configurations`, `vs_set_solution_configuration`)**:
+    - Discovers and exposes CMake configure presets alongside conventional SLN configurations with `isActive` status tracking.
+    - Enables switching active presets via `vs_set_solution_configuration`, maintaining workspace session state in `CMakeWorkspaceState`.
+  - **Dual-Track Build System & IDE Output Window Integration (`SolutionBuildProvider`)**:
+    - Preserves existing `IVsSolutionBuildManager2` pipeline for conventional SLN solutions.
+    - Implements automated CMake build driver using host Visual Studio tools (`VsDevCmd.bat`, `cmake.exe`, `ninja.exe`).
+    - Enforces single-flight build locking and blocks builds during active debug sessions.
+    - Streams build output line-by-line in real time into Visual Studio's "生成" (Build) `OutputWindowPane`.
+    - Supports `vs_get_build_status` lifecycle polling (`starting` -> `running` -> `succeeded` / `failed` / `cancelled`) and `vs_cancel_build` process tree termination.
+  - **Automated Verification**:
+    - Added unit test suite `CMakePresetsTests.cs` covering preset parsing, hidden preset filtering, variable evaluation, and user presets.
+    - Total automated test suite: 212/212 PASS (31/31 Protocol, 181/181 Host).
+    - Acceptance test script `scripts/test_acceptance_phase7b.py`: 100% PASS against running Visual Studio 2026 instance.
+
 ## [0.1.21.0] - 2026-09-15
 
 ### Added

@@ -14,6 +14,28 @@
 
 ## 实施进度（2026-09-15 更新）
 
+### Phase 7B：CMakePresets 配置切换与 CMake 双轨构建驱动 (v0.1.22.0)
+
+- **CMakePresets 规范模型与解析器 (`CMakePresetsModel.cs`)**：
+  - 在 `VsDebugMcp.Protocol` 中新增 `CMakeConfigurePreset` 与 `CMakePresetsParser`；
+  - 解析工作区根目录的 `CMakePresets.json`（及用户级 `CMakeUserPresets.json`），精准过滤 `hidden: true` 项；
+  - 提取预设名称、架构（`x64`/`x86`/`ARM64`）、构建类型（`Debug`/`Release` 等），并自动计算 `${sourceDir}` 与 `${presetName}` 宏变量路径。
+- **配置与预设发现与切换 (`vs_get_solution_configurations`, `vs_set_solution_configuration`)**：
+  - 在 CMake 工作区下无缝向 MCP Client 呈现所有可见 configure presets，并标记当前 `isActive` 状态；
+  - 支持通过 `vs_set_solution_configuration` 切换目标活动预设，并由 `CMakeWorkspaceState` 统一维护工作区级会话状态；
+  - 调试中状态防御：若处于调试模式，拒绝切换配置并返回 `cannot_switch_configuration_while_debugging`。
+- **双轨构建驱动与输出窗口集成 (`SolutionBuildProvider`)**：
+  - 常规 SLN 轨：继续沿用 `IVsSolutionBuildManager2` + `IVsUpdateSolutionEvents`；
+  - CMake 轨：
+    - 自动定位宿主 Visual Studio 内置工具链（`VsDevCmd.bat`、`cmake.exe`、`ninja.exe`）；
+    - 进程与任务生命周期管理：单飞互斥锁控制、状态流转 `Starting` -> `Running` -> `Succeeded` / `Failed` / `Cancelled`，精确记录各项 UTC 时间戳；
+    - 实时输出同步：通过 `OutputWindowPane` 将 CMake 配置与 Ninja 编译日志实时重定向写入 IDE“生成”（Build）窗格，MCP 工具 `vs_get_output_window_logs` 可即时读取；
+    - 任务句柄取消支持：`vs_cancel_build` 联动 `taskkill /F /T /PID` 安全终止构建进程树；
+- **自动化测试与实测验收**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (31/31 PASS) + `VsDebugMcp.Host.Tests` (181/181 PASS)，全套 212 个单元测试 100% 通过；
+  - 在线验收测试 `scripts/test_acceptance_phase7b.py` 100% PASS，验证预设发现、切换、构建启动、状态轮询与 IDE 日志回读完整闭环；
+  - 组件版本统一升级至 **`0.1.22.0`**。
+
 ### Phase 7A：CMake 与 Open Folder 工作区生命周期与文件树适配 (v0.1.21.0)
 
 - **工作区自动加载生命周期 (AutoLoad Lifecycle)**：

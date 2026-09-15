@@ -4,10 +4,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 1. Check if Visual Studio Experimental Instance is running
-$expVs = Get-CimInstance Win32_Process -Filter "Name = 'devenv.exe'" | Where-Object { $_.CommandLine -match 'RootSuffix.*Exp' }
-if ($expVs) {
-    Write-Error "Detected running Visual Studio Experimental Instance (PID: $($expVs.ProcessId)). Please close it first to release DLL locks!"
+# 1. Check if Visual Studio is running
+$runningVs = Get-CimInstance Win32_Process -Filter "Name = 'devenv.exe'"
+if ($runningVs) {
+    Write-Error "Detected running Visual Studio instance (PID: $(($runningVs | Select-Object -ExpandProperty ProcessId) -join ', ')). Please close Visual Studio first to release DLL locks!"
     exit 1
 }
 
@@ -32,35 +32,39 @@ if (-not $candidates) {
 $vsixPath = $candidates[0]
 Write-Host "Using VSIX package: $vsixPath (LastWrite: $((Get-Item $vsixPath).LastWriteTime))" -ForegroundColor Cyan
 
-# 4. Locate experimental instance extension directory
+# 4. Locate installed extension directories
 $expBasePath = "$env:LOCALAPPDATA\Microsoft\VisualStudio"
-$targetDll = Get-ChildItem -Path $expBasePath -Recurse -Filter "VsDebugMcp.Vsix.dll" -ErrorAction SilentlyContinue | 
-             Where-Object { $_.FullName -match '\\18\.0_[^\\\\]+Exp\\extensions\\' } | 
-             Select-Object -First 1
+$targetDlls = Get-ChildItem -Path $expBasePath -Recurse -Filter "VsDebugMcp.Vsix.dll" -ErrorAction SilentlyContinue | 
+             Where-Object { $_.FullName -match '\\18\.0_[^\\\\]+(?:Exp)?\\extensions\\' }
 
-if (-not $targetDll) {
-    Write-Error "Could not find installed VsDebugMcp extension in Experimental Instance! Please install via VSIX once."
+if (-not $targetDlls) {
+    Write-Error "Could not find installed VsDebugMcp extension directory! Please install via VSIX once."
     exit 1
 }
 
-$deployDir = $targetDll.DirectoryName
-Write-Host "Target deployment directory: $deployDir" -ForegroundColor Cyan
+foreach ($targetDll in $targetDlls) {
+    $deployDir = $targetDll.DirectoryName
+    Write-Host "`nTarget deployment directory: $deployDir" -ForegroundColor Cyan
 
-# 5. Extract latest VSIX to directory
-Write-Host "Extracting latest VSIX package..." -ForegroundColor Green
-tar.exe -xf $vsixPath -C $deployDir
+    # 5. Extract latest VSIX to directory
+    Write-Host "Extracting latest VSIX package..." -ForegroundColor Green
+    tar.exe -xf $vsixPath -C $deployDir
 
-# 6. Touch configurationchanged file to trigger VS cache refresh
-$extensionsDir = Split-Path $deployDir -Parent
-$stampFile = Join-Path $extensionsDir "extensions.configurationchanged"
-Set-Content -Path $stampFile -Value (Get-Date).ToString("o")
+    # 6. Touch configurationchanged file to trigger VS cache refresh
+    $extensionsDir = Split-Path $deployDir -Parent
+    $stampFile = Join-Path $extensionsDir "extensions.configurationchanged"
+    Set-Content -Path $stampFile -Value (Get-Date).ToString("o")
 
-# 7. Verify deployed versions
-$deployedVsixDll = Join-Path $deployDir "VsDebugMcp.Vsix.dll"
-$deployedHostExe = Join-Path $deployDir "Host\VsDebugMcp.Host.exe"
+    # 7. Verify deployed versions
+    $deployedVsixDll = Join-Path $deployDir "VsDebugMcp.Vsix.dll"
+    $deployedHostExe = Join-Path $deployDir "Host\VsDebugMcp.Host.exe"
 
-$vsixVer = (Get-Item $deployedVsixDll).VersionInfo.ProductVersion
-$hostVer = (Get-Item $deployedHostExe).VersionInfo.ProductVersion
+    $vsixVer = if (Test-Path $deployedVsixDll) { (Get-Item $deployedVsixDll).VersionInfo.ProductVersion } else { "N/A" }
+    $hostVer = if (Test-Path $deployedHostExe) { (Get-Item $deployedHostExe).VersionInfo.ProductVersion } else { "N/A" }
+
+    Write-Host "  VsDebugMcp.Vsix.dll Version: $vsixVer" -ForegroundColor White
+    Write-Host "  VsDebugMcp.Host.exe Version: $hostVer" -ForegroundColor White
+}
 
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "VSIX Extension Deployed Successfully!" -ForegroundColor Green
