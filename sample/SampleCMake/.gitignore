@@ -1,0 +1,7 @@
+build/
+out/
+.vs/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+*.log
