@@ -171,7 +171,7 @@ internal sealed class SolutionProjectProvider
 			try
 			{
 				var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
-				if (dte?.Solution != null)
+				if (dte != null && dte.Solution != null)
 				{
 					var dteFullName = dte.Solution.FullName;
 					if (!string.IsNullOrWhiteSpace(dteFullName) && Directory.Exists(dteFullName))

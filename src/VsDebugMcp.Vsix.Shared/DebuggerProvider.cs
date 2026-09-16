@@ -1199,6 +1199,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("step_over", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 			{
 				throw new DebuggerProviderException(
@@ -1216,6 +1217,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("step_into", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 			{
 				throw new DebuggerProviderException(
@@ -1233,6 +1235,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("step_out", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 			{
 				throw new DebuggerProviderException(
@@ -1250,6 +1253,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("continue", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 			{
 				if (debugger.CurrentMode == dbgDebugMode.dbgRunMode)
@@ -1274,6 +1278,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("pause", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
 			{
 				return;
@@ -1296,6 +1301,7 @@ internal sealed class DebuggerProvider
 	{
 		return await ExecuteControlCommandAsync("stop", cancellationToken, debugger =>
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 			if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
 			{
 				return;
@@ -1361,7 +1367,7 @@ internal sealed class DebuggerProvider
 		DebuggerStartRequest request,
 		CancellationToken cancellationToken)
 	{
-		if (!_executionLock.Wait(0))
+		if (!await _executionLock.WaitAsync(0, cancellationToken))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DebuggerBusy,
@@ -1426,7 +1432,7 @@ internal sealed class DebuggerProvider
 				}
 
 				return await LaunchTargetAsync(
-					resolvedExe,
+					resolvedExe!,
 					request.Arguments,
 					request.WorkingDirectory,
 					request.WaitForBreak,
@@ -2470,7 +2476,7 @@ internal sealed class DebuggerProvider
 		DebuggerAttachRequest request,
 		CancellationToken cancellationToken)
 	{
-		if (!_executionLock.Wait(0))
+		if (!await _executionLock.WaitAsync(0, cancellationToken))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DebuggerBusy,
@@ -2647,7 +2653,7 @@ internal sealed class DebuggerProvider
 		DebuggerAutoAttachRequest request,
 		CancellationToken cancellationToken)
 	{
-		if (!_executionLock.Wait(0))
+		if (!await _executionLock.WaitAsync(0, cancellationToken))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DebuggerBusy,
@@ -2798,12 +2804,12 @@ internal sealed class DebuggerProvider
 			{
 				if (targetProc is Process2 proc2Engine && engines != null && engines.Count > 0)
 				{
-					var availableEngines = new List<EnvDTE80.Engine>();
+					var availableEngines = new List<(EnvDTE80.Engine Engine, string Name, string Id)>();
 					if (proc2Engine.Transport?.Engines != null)
 					{
 						foreach (EnvDTE80.Engine eng in proc2Engine.Transport.Engines)
 						{
-							availableEngines.Add(eng);
+							availableEngines.Add((eng, eng.Name ?? string.Empty, eng.ID ?? string.Empty));
 						}
 					}
 
@@ -2814,11 +2820,15 @@ internal sealed class DebuggerProvider
 						var trimmed = reqEngine.Trim();
 						var match = availableEngines.Find(e =>
 							string.Equals(e.Name, trimmed, StringComparison.OrdinalIgnoreCase) ||
-							string.Equals(e.ID, trimmed, StringComparison.OrdinalIgnoreCase))
-							?? availableEngines.Find(e =>
-							e.Name != null && e.Name.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) >= 0);
+							string.Equals(e.Id, trimmed, StringComparison.OrdinalIgnoreCase));
 
-						if (match == null)
+						if (match.Engine == null)
+						{
+							match = availableEngines.Find(e =>
+								!string.IsNullOrEmpty(e.Name) && e.Name.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) >= 0);
+						}
+
+						if (match.Engine == null)
 						{
 							var availableNames = availableEngines.Select(e => e.Name).ToList();
 							throw new DebuggerProviderException(
@@ -2826,9 +2836,10 @@ internal sealed class DebuggerProvider
 								$"Debugger engine '{trimmed}' not found for process {targetProc.Name} (PID: {targetProc.ProcessID}). Available engines: {string.Join(", ", availableNames)}");
 						}
 
-						if (!matchedEngines.Contains(match))
+						if (!matchedEngines.Contains(match.Engine))
 						{
-							matchedEngines.Add(match);
+							matchedEngines.Add(match.Engine);
+							attachedEngines.Add(match.Name);
 						}
 					}
 
@@ -2840,8 +2851,6 @@ internal sealed class DebuggerProvider
 					{
 						proc2Engine.Attach2(matchedEngines.ToArray());
 					}
-
-					attachedEngines = matchedEngines.Select(e => e.Name).ToList();
 				}
 				else
 				{
@@ -2992,7 +3001,7 @@ internal sealed class DebuggerProvider
 		DebuggerDetachRequest request,
 		CancellationToken cancellationToken)
 	{
-		if (!_executionLock.Wait(0))
+		if (!await _executionLock.WaitAsync(0, cancellationToken))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DebuggerBusy,
@@ -3218,7 +3227,7 @@ internal sealed class DebuggerProvider
 		CancellationToken cancellationToken,
 		Action<Debugger> executeAction)
 	{
-		if (!_executionLock.Wait(0))
+		if (!await _executionLock.WaitAsync(0, cancellationToken))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DebuggerBusy,
@@ -3529,7 +3538,7 @@ internal sealed class DebuggerProvider
 
 		if (!string.IsNullOrWhiteSpace(frame.FileName))
 		{
-			var fn = frame.FileName;
+			var fn = frame.FileName!;
 			if (fn.IndexOf("\\include\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
 			    fn.IndexOf("/include/", StringComparison.OrdinalIgnoreCase) >= 0 ||
 			    fn.IndexOf("\\ucrt\\", StringComparison.OrdinalIgnoreCase) >= 0 ||

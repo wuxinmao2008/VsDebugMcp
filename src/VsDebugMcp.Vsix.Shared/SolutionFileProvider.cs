@@ -47,7 +47,7 @@ internal sealed class SolutionFileProvider
 				try
 				{
 					var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE80.DTE2;
-					if (dte?.Solution != null)
+					if (dte != null && dte.Solution != null)
 					{
 						var dteFullName = dte.Solution.FullName;
 						if (!string.IsNullOrWhiteSpace(dteFullName) && Directory.Exists(dteFullName))
@@ -90,7 +90,7 @@ internal sealed class SolutionFileProvider
 			{
 				var isMatchingCMakeProject = string.IsNullOrEmpty(requestedProjectId) ||
 					string.Equals(requestedProjectId, "cmake:root", StringComparison.OrdinalIgnoreCase) ||
-					requestedProjectId.StartsWith("cmake", StringComparison.OrdinalIgnoreCase);
+					requestedProjectId!.StartsWith("cmake", StringComparison.OrdinalIgnoreCase);
 
 				if (isMatchingCMakeProject)
 				{

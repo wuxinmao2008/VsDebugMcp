@@ -122,7 +122,7 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
             catch
             {
             }
-        });
+        }).FileAndForget("vs/debugmcp/status");
     }
 
     public void ShowErrorBanner(string message, string errorCode, Func<Task>? retryAction = null)
@@ -167,7 +167,7 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
             {
                 ActivityLog.LogError("VsDebugMcp", "Failed to show InfoBar: " + ex.Message);
             }
-        });
+        }).FileAndForget("vs/debugmcp/errorbanner");
     }
 
     public void ClearErrorBanner()
@@ -182,7 +182,7 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
             catch
             {
             }
-        });
+        }).FileAndForget("vs/debugmcp/clearerrorbanner");
     }
 
     private void ClearErrorBannerCore()
@@ -215,7 +215,7 @@ public sealed class VsDiagnosticService : IVsDiagnosticSink, IVsInfoBarUIEvents,
             catch
             {
             }
-        });
+        }).FileAndForget("vs/debugmcp/activateoutputpane");
     }
 
     public void OnClosed(IVsInfoBarUIElement infoBarUIElement)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -62,7 +62,7 @@ public static class AssertionLogParser
             response.HasException = true;
             response.HResult ??= lastMatch.Groups["code"].Value.Trim();
             response.ExceptionType ??= lastMatch.Groups["code"].Value.Trim();
-            if (string.IsNullOrEmpty(response.Message) || response.Message.StartsWith("Debugger paused due to an exception"))
+            if (string.IsNullOrEmpty(response.Message) || response.Message!.StartsWith("Debugger paused due to an exception"))
             {
                 response.Message = lastMatch.Groups["desc"].Value.Trim();
             }

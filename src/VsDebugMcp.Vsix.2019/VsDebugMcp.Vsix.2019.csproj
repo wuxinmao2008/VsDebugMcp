@@ -14,6 +14,8 @@
     <IsPackable>false</IsPackable>
     <Version>0.1.24.0</Version>
     <DefineConstants>$(DefineConstants);VS2019</DefineConstants>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <NoWarn>$(NoWarn);1762</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>false</VsixDeployOnDebug>
@@ -63,7 +65,10 @@
     </Content>
   </ItemGroup>
   <Target Name="PublishVsDebugMcpHost" BeforeTargets="GetVsixSourceItems">
-    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained false --output &quot;$(HostPublishDirectory)&quot;" />
+    <Exec Command="dotnet publish &quot;$(HostProject)&quot; --configuration $(Configuration) --runtime win-x64 --self-contained false --output &quot;$(HostPublishDirectory)&quot; --nologo --no-restore"
+          UseUtf8Encoding="Always"
+          StdErrEncoding="UTF-8"
+          StdOutEncoding="UTF-8" />
     <ItemGroup>
       <Content Include="$(HostPublishDirectory)**\*" Exclude="$(HostPublishDirectory)**\*.pdb">
         <IncludeInVSIX>true</IncludeInVSIX>
