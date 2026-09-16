@@ -11,7 +11,8 @@
     <VisualStudioSDKImplicitPackageVersion>17.14.40265</VisualStudioSDKImplicitPackageVersion>
     <HostProject>$(MSBuildProjectDirectory)\..\VsDebugMcp.Host\VsDebugMcp.Host.csproj</HostProject>
     <HostPublishDirectory>$(BaseIntermediateOutputPath)host\$(Configuration)\</HostPublishDirectory>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>AnyCPU</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <IsPackable>false</IsPackable>
     <Version>0.1.24.0</Version>
     <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
@@ -33,7 +34,7 @@
     <TestWindowDir>$([System.IO.Path]::Combine('$(VsInstallRoot)', 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'TestWindow'))\</TestWindowDir>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" />
+    <ProjectReference Include="..\VsDebugMcp.Protocol\VsDebugMcp.Protocol.csproj" SetPlatform="Platform=AnyCPU" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />

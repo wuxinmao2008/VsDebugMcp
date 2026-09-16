@@ -143,14 +143,28 @@ $builtPackages = @()
 
 foreach ($task in $buildTasks) {
     Write-Host "`n>>> Building $($task.Name)..." -ForegroundColor Magenta
+    $actualPlatform = if ($task.Project -eq $projectPath2019) { "AnyCPU" } else { $Platform }
+    $actualVsRoot = $vsInstallRoot
+    if ($task.Project -eq $projectPath2019) {
+        $vs2019Candidates = @(
+            "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community",
+            "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional",
+            "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
+        )
+        $detected2019 = $vs2019Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($detected2019) {
+            $actualVsRoot = $detected2019
+        }
+    }
+
     $msbuildArgs = @(
         "`"$($task.Project)`"",
         "/restore",
         "/t:$target",
         "/p:Configuration=$Configuration",
-        "/p:Platform=$Platform",
+        "/p:Platform=$actualPlatform",
         "/p:DeployExtension=false",
-        "/p:VsInstallRoot=`"$vsInstallRoot`"",
+        "/p:VsInstallRoot=`"$actualVsRoot`"",
         "/m:1",
         "/nr:false",
         "/v:minimal"
