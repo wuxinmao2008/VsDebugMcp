@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **CTest Test Debugging (`vs_debug_test_by_id`)**:
     - For `ctest:*` test IDs, resolves the test executable target and working directory from discovery metadata and launches native debugging with breakpoint support.
   - **Automated Verification**:
-    - Added unit test suite `CTestParserTests.cs` (34/34 Protocol tests PASS, 181/181 Host tests PASS).
-    - Added acceptance script `scripts/test_acceptance_phase7c.py`.
+    - Added unit test suite `CTestParserTests.cs` and `CMakePresetsTests.cs` (35/35 Protocol tests PASS, 181/181 Host tests PASS; total 216/216 PASS).
+    - Added acceptance script `scripts/test_acceptance_phase7c.py` (100% PASS against running Visual Studio 2026 instance).
+    - Published completion report `docs/phase7c-cmake-debugging-and-ctest-report.md`.
 
 ## [0.1.22.0] - 2026-09-15
 

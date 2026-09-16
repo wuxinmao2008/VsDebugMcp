@@ -3,7 +3,7 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 全系列（VS 2017 ~ VS 2026 / VS 15.x ~ 18.x）提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0 ~ Phase 5E 全部完成并完成全链路在线实测验收，51 个 MCP 工具全量就绪。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
+- 阶段：Phase 0 ~ Phase 7C 全部完成并完成全链路在线实测验收，51 个 MCP 工具全量就绪并原生扩展支持现代 CMake 与 CTest 体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
 - 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 工程架构演进：核心业务逻辑 100% 聚合于显式 C# 共享项目 `VsDebugMcp.Vsix.Shared.shproj`，以源码级直接注入编译，零额外运行时 DLL。分别由 `VsDebugMcp.Vsix` (VS 2022~2026 64-bit) 和 `VsDebugMcp.Vsix.2019` (VS 2017~2019 32-bit) 独立打包。
@@ -12,27 +12,30 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-15 更新）
+## 实施进度（2026-09-16 更新）
 
-### Phase 7C：CMake 目标启动调试与 CTest 单元测试体系集成 (v0.1.23.0)
+### Phase 7C：CMake 目标启动调试与 CTest 单元测试体系集成已完成开发并通过全链路在线实测验收 (v0.1.23.0)
 
 - **CTest 规范模型与双重解析 (`CTestModels.cs`, `CTestParser`)**：
   - 在 `VsDebugMcp.Protocol` 中实现 `CTestItem`、`CTestRunResult` 与 `CTestCaseOutcome`；
   - 基于 `ctest.exe --test-dir <binaryDir> --show-only=json-v1` 解析提取测试用例名称、关联源文件、行号、工作目录及目标二进制路径；
-  - 基于 JUnit XML（`--output-junit`）精准解析测试通过/失败/跳过计数、毫秒级耗时、失败堆栈与标准输出。
+  - 基于 JUnit XML（`--output-junit`）精准解析测试通过/失败/跳过计数、毫秒级耗时、失败堆栈与标准输出；
+  - 增强 `CTestParser.ExtractValidJson` 过滤 CTest stdout 杂质信息，确保健壮解析。
 - **CMake 目标直启原生调试 (`vs_debugger_start`)**：
   - 扩展 `vs_debugger_start` 协议入参：`target`、`arguments`、`workingDirectory`；
-  - 利用 `VsShellUtilities.LaunchDebugger` 与 `NativeOnly_guid` 引擎直接拉起任意 CMake 构建产物（如 `SampleCMakeApp.exe`），无缝挂载原生 C++ 调试器；
-  - 支持 `waitForBreak` 与断点预设，启动后精确停留于首个断点处，支持即时读取调用栈及局部变量。
+  - 支持依据目标名称（如 `SampleCMakeApp.exe`）在当前 CMake 活动预设构建目录中自动递归定位可执行二进制；
+  - 利用 `VsShellUtilities.LaunchDebugger` 与 `NativeOnly_guid` 引擎直接拉起 CMake 产物并挂载原生 C++ 调试器；
+  - 支持 `waitForBreak` 与断点预设，启动后精确停留于目标断点处，支持即时读取调用栈及局部变量。
 - **CTest 测试资源发现与运行管理 (`vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run`)**：
-  - `vs_get_tests`：在 CMake 工作区自动通过 CTest 探针发现测试用例，统一以 `ctest:<name>` 作为 testId；
+  - `vs_get_tests`：在 CMake 工作区自动通过 CTest 探针发现测试用例，统一以 `ctest:<name>` 作为 testId，支持按关键字过滤；
   - `vs_run_tests`：驱动 CTest 按指定正则执行测试，实时重定向输出至 IDE“测试”窗格，自动解析 JUnit 产物并维护 `TestRunStatusResponse` 完整生命周期；
   - `vs_cancel_test_run`：针对活动 CTest 进程树实施 `taskkill /F /T` 安全撤销。
 - **CTest 用例独立调试启动 (`vs_debug_test_by_id`)**：
-  - 针对 `ctest:*` 格式测试用例，自动解析其对应二进制文件与工作目录，经由 `LaunchTargetAsync` 挂载原生调试器。
+  - 针对 `ctest:*` 格式测试用例，自动解析其对应二进制文件与工作目录，经由 `LaunchTargetAsync` 挂载原生调试器命中用例断点。
 - **自动化测试与实测验收**：
-  - 单元测试：`VsDebugMcp.Protocol.Tests` (34/34 PASS) + `VsDebugMcp.Host.Tests` (181/181 PASS)，全套 215 个单元测试 100% 通过；
-  - 验收脚本：`scripts/test_acceptance_phase7c.py`；
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (35/35 PASS) + `VsDebugMcp.Host.Tests` (181/181 PASS)，全套 216 个单元测试 100% 通过；
+  - 在线实测：`scripts/test_acceptance_phase7c.py` 100% PASS，验证 Visual Studio 2026 下 CTest 发现、异步执行、状态轮询、CMake 目标原生调试与 CTest 用例调试完整闭环；
+  - 验收报告：归档至 [`docs/phase7c-cmake-debugging-and-ctest-report.md`](file:///d:/VsDebugMcp/VsDebugMcp/docs/phase7c-cmake-debugging-and-ctest-report.md)；
   - 组件版本统一升级至 **`0.1.23.0`**。
 
 ### Phase 7B：CMakePresets 配置切换与 CMake 双轨构建驱动 (v0.1.22.0)

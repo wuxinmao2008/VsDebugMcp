@@ -70,17 +70,17 @@ MCP 客户端 (Cursor / Claude / VS Code)
 ### 2. 解决方案与工程上下文 (4 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
-| `vs_get_projects_in_solution` | 是 | 获取当前打开解决方案中的所有项目信息（项目名、路径、GUID） |
-| `vs_get_files_in_project` | 是 | 高效提取工程源码文件树，支持 C++ 筛选器（Filters）结构与扩展名过滤 |
-| `vs_get_solution_configurations` | 是 | 查询解决方案的所有配置与平台组合（Debug/Release、x64 等）及活动配置 |
-| `vs_set_solution_configuration` | 否 | 动态激活并切换解决方案配置与平台（带调试态防死锁保护） |
+| `vs_get_projects_in_solution` | 是 | 获取当前打开解决方案或 CMake 工作区项目信息（支持传统 SLN 与现代 CMakeLists.txt） |
+| `vs_get_files_in_project` | 是 | 高效提取工程源码文件树，支持 C++ 筛选器结构、CMake 源码树递归遍历及构建缓存过滤 |
+| `vs_get_solution_configurations` | 是 | 查询构建配置与平台组合（Debug/Release，或 CMakePresets 中的 configure presets）及活动配置 |
+| `vs_set_solution_configuration` | 否 | 动态激活并切换构建配置/CMake 预设（带调试态防死锁保护） |
 
 ### 3. 构建生命周期与输出日志 (6 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
-| `vs_run_build` | 否 | 非阻塞触发全方案或单工程构建，返回异步跟踪句柄 `buildTaskId` |
+| `vs_run_build` | 否 | 非阻塞触发构建（自动适配 MSBuild 解决方案或 VS 内置 CMake/Ninja 工具链），返回 `buildTaskId` |
 | `vs_get_build_status` | 是 | 轮询构建任务进度（starting, running, succeeded, failed, cancelled） |
-| `vs_cancel_build` | 否 | 及时取消正在执行中的后台构建任务 |
+| `vs_cancel_build` | 否 | 及时取消正在执行中的后台构建任务（安全终止构建进程树） |
 | `vs_get_output_window_logs` | 是 | 获取 Visual Studio 输出窗口指定窗格（生成、调试等）文本，支持截断控制 |
 | `vs_get_output_panes` | 是 | 自省枚举输出窗口中所有活动窗格（含生成、调试及用户自定义 UILOG 等） |
 | `vs_get_errors` | 是 | 查询错误列表诊断，支持 Error Table 原生提取与 Build Output 双正则双轨保底 |
@@ -94,7 +94,7 @@ MCP 客户端 (Cursor / Claude / VS Code)
 ### 5. 调试生命周期与进程附加 (12 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
-| `vs_debugger_start` | 否 | 设计模式下程序化启动调试（F5），支持自动着陆探测（`waitForBreak`） |
+| `vs_debugger_start` | 否 | 程序化启动调试（支持标准 F5 启动或直接拉起 CMake 目标程序并挂载原生 C++ 调试器），支持自动着陆探测（`waitForBreak`） |
 | `vs_debugger_continue` | 否 | 恢复被调试进程执行（Continue），直至下一断点或退出 |
 | `vs_debugger_pause` | 否 | 暂停正在运行中的被调试目标进程（进入中断模式） |
 | `vs_debugger_stop` | 否 | 终止调试会话，平稳安全返回设计模式 |
@@ -132,14 +132,14 @@ MCP 客户端 (Cursor / Claude / VS Code)
 | `vs_debugger_evaluate_expressions` | 是 | 单次 RPC 批量求值多个表达式，支持单项错误隔离 |
 | `vs_debugger_get_locals` | 是 | 自动识别并提取当前栈帧所有形参（Arguments）与局部变量（Locals） |
 
-### 8. 测试资源管理器与单测驱动调试 (5 个工具)
+### 8. 测试资源管理器与 CTest 测试体系 (5 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
-| `vs_get_tests` | 是 | 发现解决方案内所有单元测试用例，支持按名称/类名/命名空间过滤 |
-| `vs_run_tests` | 否 | 异步发起单测执行（支持全量运行或指定测试 ID 集合过滤执行） |
+| `vs_get_tests` | 是 | 发现测试用例（支持 Visual Studio Test Window MEF 用例及 CTest 单元测试，前缀 `ctest:`） |
+| `vs_run_tests` | 否 | 异步发起单测执行（支持全量/过滤运行，CTest 实时重定向至“测试”输出窗格并解析 JUnit 结果） |
 | `vs_get_test_run_status` | 是 | 轮询测试运行生命周期、通过/失败计数、总耗时及各测试项独立结果 |
-| `vs_cancel_test_run` | 否 | 即时取消正在运行中的测试任务 |
-| `vs_debug_test_by_id` | 否 | 专有单测调试通道，下断触发测试调试，支持自动着陆与栈顶帧即时返回 |
+| `vs_cancel_test_run` | 否 | 即时取消正在运行中的测试任务（支持安全终止 CTest 进程树） |
+| `vs_debug_test_by_id` | 否 | 专有单测调试通道，下断触发测试调试（支持 CTest 原生二进制自动挂载与断点精准捕获） |
 
 ### 9. 智能体交互与问题反馈 (1 个工具)
 | 工具名称 | 只读 | 功能描述 |
@@ -251,13 +251,13 @@ VsDebugMcp follows an enterprise-grade **Hybrid Architecture (OOP Host + VSIX Br
 The extension exposes **51 production-ready MCP tools** across 9 core domains:
 
 1. **Service & Multi-Instance Routing (4 tools)**: `vs_health`, `vs_capabilities`, `vs_list_instances`, `vs_find_instances`.
-2. **Solution & Project Context (4 tools)**: `vs_get_projects_in_solution`, `vs_get_files_in_project`, `vs_get_solution_configurations`, `vs_set_solution_configuration`.
-3. **Build Lifecycle & Logs (6 tools)**: `vs_run_build`, `vs_get_build_status`, `vs_cancel_build`, `vs_get_output_window_logs`, `vs_get_output_panes`, `vs_get_errors`.
+2. **Solution & Project Context (4 tools)**: `vs_get_projects_in_solution` (SLN & CMakeLists.txt), `vs_get_files_in_project` (filters & CMake trees), `vs_get_solution_configurations` (Debug/Release & CMakePresets), `vs_set_solution_configuration`.
+3. **Build Lifecycle & Logs (6 tools)**: `vs_run_build` (MSBuild & CMake/Ninja), `vs_get_build_status`, `vs_cancel_build`, `vs_get_output_window_logs`, `vs_get_output_panes`, `vs_get_errors`.
 4. **Editor Collaboration & Navigation (2 tools)**: `vs_get_active_document`, `vs_navigate_to`.
-5. **Debugger Lifecycle & Process Attach (12 tools)**: `vs_debugger_start`, `vs_debugger_continue`, `vs_debugger_pause`, `vs_debugger_stop`, `vs_debugger_step_over`, `vs_debugger_step_into`, `vs_debugger_step_out`, `vs_debugger_get_processes`, `vs_debugger_find_solution_processes`, `vs_debugger_attach_process`, `vs_debugger_auto_attach`, `vs_debugger_detach`.
+5. **Debugger Lifecycle & Process Attach (12 tools)**: `vs_debugger_start` (F5 & CMake target native launch), `vs_debugger_continue`, `vs_debugger_pause`, `vs_debugger_stop`, `vs_debugger_step_over`, `vs_debugger_step_into`, `vs_debugger_step_out`, `vs_debugger_get_processes`, `vs_debugger_find_solution_processes`, `vs_debugger_attach_process`, `vs_debugger_auto_attach`, `vs_debugger_detach`.
 6. **Debugger Diagnostics & Breakpoints (12 tools)**: `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_get_call_stack`, `vs_debugger_set_next_statement`, `vs_debugger_set_breakpoints`, `vs_debugger_list_breakpoints`, `vs_debugger_clear_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_get_exception_info`, `vs_debugger_get_modules`.
 7. **Deep Inspection, Memory & Evaluation (5 tools)**: `vs_debugger_get_snapshot`, `vs_debugger_read_memory`, `vs_debugger_evaluate_expr`, `vs_debugger_evaluate_expressions`, `vs_debugger_get_locals`.
-8. **Test Explorer & Test-Driven Debugging (5 tools)**: `vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run`, `vs_debug_test_by_id`.
+8. **Test Explorer & CTest Suite (5 tools)**: `vs_get_tests` (Test Window & CTest), `vs_run_tests` (JUnit report parsing), `vs_get_test_run_status`, `vs_cancel_test_run`, `vs_debug_test_by_id` (CTest native debugging).
 9. **Agent Feedback & Diagnostic Reporting (1 tool)**: `vs_report_mcp_issue`.
 
 ---

@@ -4,7 +4,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/wuxinmao2008/VsDebugMcp?color=blue&label=release)](https://github.com/wuxinmao2008/VsDebugMcp/releases)
 [![Visual Studio Support](https://img.shields.io/badge/Visual%20Studio-2017%20%7C%202019%20%7C%202022%20%7C%202026-purple.svg?logo=visualstudio)](https://github.com/wuxinmao2008/VsDebugMcp)
 [![.NET Supported](https://img.shields.io/badge/.NET-8.0%20%7C%20Framework%204.7.2-512BD4.svg?logo=dotnet)](https://github.com/wuxinmao2008/VsDebugMcp)
-[![Tests](https://img.shields.io/badge/tests-191%20passed-brightgreen.svg?logo=githubactions)](https://github.com/wuxinmao2008/VsDebugMcp/actions)
+[![Tests](https://img.shields.io/badge/tests-216%20passed-brightgreen.svg?logo=githubactions)](https://github.com/wuxinmao2008/VsDebugMcp/actions)
 [![License](https://img.shields.io/github/license/wuxinmao2008/VsDebugMcp?color=orange)](LICENSE.txt)
 
 Visual Studio (VS 2017 ~ VS 2026 / VS 15.x ~ 18.x) MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
@@ -92,6 +92,14 @@ Each Visual Studio process registers a session identity derived from its PID and
 ### Agent Interactive Feedback & Diagnostic Reporting (Phase 5E)
 - `vs_report_mcp_issue` — Agent-driven tool friction and bug reporting with DLP privacy filtering, local audit markdown export, and prefilled GitHub Issue creation
 
+### Modern CMake & CTest Subsystem (Phase 7A, 7B, 7C)
+- `vs_get_projects_in_solution` & `vs_get_files_in_project` — Native CMake workspace detection (`CMakeLists.txt`), full recursive file tree traversal, and build artifact filtering (`.vs`, `out`, `build`).
+- `vs_get_solution_configurations` & `vs_set_solution_configuration` — CMake configure presets discovery (`CMakePresets.json` / `CMakeUserPresets.json`) and active preset dynamic switching with debugging interlock.
+- `vs_run_build`, `vs_get_build_status`, `vs_cancel_build` — Dual-track CMake/Ninja build driving via bundled Visual Studio tools (`VsDevCmd.bat`, `cmake.exe`, `ninja.exe`), live streaming to Output Window "Build" pane.
+- `vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run` — CTest test suite discovery (`--show-only=json-v1`), async execution with regex filtering, JUnit XML result parsing, process cancellation, and "Test" pane streaming.
+- `vs_debugger_start` — CMake target executable launch (`target`, `arguments`, `workingDirectory`) with native C++ debugger attached (`VsShellUtilities.LaunchDebugger`).
+- `vs_debug_test_by_id` — Direct CTest test execution under native debugger with breakpoint capture.
+
 ### Client Onboarding & Ecosystem Guide (Phase 4D)
 - Native Visual Studio top-level menu: **`Extensions (扩展) -> VsDebugMcp`**
 - Interactive WPF Configuration Guide with presets for **VS Code**, **Cursor**, **Claude Desktop**, **Antigravity**, and **Codex/Windsurf**
@@ -151,10 +159,10 @@ All VSIX projects can be cross-compiled cleanly using the Visual Studio 2026 (VS
 
 ## Validation status
 
-- Automated unit tests: 191/191 PASS (100% across Protocol and Host test suites: 21 Protocol, 170 Host).
+- Automated unit tests: 216/216 PASS (100% across Protocol and Host test suites: 35 Protocol, 181 Host).
 - Multi-target packaging verification: Both `VsDebugMcp.Vsix.vsix` (64-bit, ~8.2MB) and `VsDebugMcp.Vsix.2019.vsix` (32-bit, ~7.8MB) package cleanly with embedded framework-dependent Host executables.
-- End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path.
-- Verified capability domains: Solution structure & files context, IDE build lifecycle & raw output capture, Debugger F5 launch / break detection / stepping / locals / multi-thread inspection / expression evaluation, and Test Explorer test discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
+- End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path across both traditional Solutions and modern CMake workspaces.
+- Verified capability domains: Solution & CMake workspace structure, file tree discovery, IDE build lifecycle & raw output capture, CMakePresets switching & CMake/Ninja dual-track builds, Debugger F5 launch / target binary launch / break detection / stepping / locals / multi-thread inspection / expression evaluation / memory reading, and Test Explorer & CTest discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 
 ## Security and privacy
 
