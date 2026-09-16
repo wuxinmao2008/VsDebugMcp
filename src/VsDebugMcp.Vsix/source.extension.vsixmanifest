@@ -6,7 +6,7 @@
     <Description>Connect AI agents to Visual Studio via MCP for solution discovery, build control, diagnostics, hybrid debugging, virtual memory inspection, and test automation.</Description>
     <MoreInfo>https://github.com/wuxinmao2008/VsDebugMcp</MoreInfo>
     <License>LICENSE.txt</License>
-    <ReleaseNotes>CHANGELOG.md</ReleaseNotes>
+    <ReleaseNotes>https://github.com/wuxinmao2008/VsDebugMcp/blob/master/CHANGELOG.md</ReleaseNotes>
     <Icon>Assets\logo.png</Icon>
     <PreviewImage>Assets\logo.png</PreviewImage>
     <Tags>MCP;Model Context Protocol;AI Agent;Claude;Cursor;Visual Studio;Debugger;Build;Diagnostics;Testing;Qt;PLC;Automation;Memory</Tags>
