@@ -33,6 +33,19 @@ public static class CMakePresetsParser
             var root = doc.RootElement;
             if (root.TryGetProperty("configurePresets", out var presetsEl) && presetsEl.ValueKind == JsonValueKind.Array)
             {
+                var allPresetsByName = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                foreach (var p in presetsEl.EnumerateArray())
+                {
+                    if (p.TryGetProperty("name", out var pnEl))
+                    {
+                        var pn = pnEl.GetString();
+                        if (!string.IsNullOrEmpty(pn))
+                        {
+                            allPresetsByName[pn!] = p;
+                        }
+                    }
+                }
+
                 foreach (var presetEl in presetsEl.EnumerateArray())
                 {
                     bool hidden = false;
@@ -79,6 +92,46 @@ public static class CMakePresetsParser
                     if (presetEl.TryGetProperty("binaryDir", out var bEl))
                     {
                         rawBinaryDir = bEl.GetString() ?? string.Empty;
+                    }
+
+                    // Traverse inherits for binaryDir and generator if not set
+                    if (string.IsNullOrWhiteSpace(rawBinaryDir) || string.IsNullOrWhiteSpace(generator))
+                    {
+                        if (presetEl.TryGetProperty("inherits", out var inEl))
+                        {
+                            var parentNames = new List<string>();
+                            if (inEl.ValueKind == JsonValueKind.String)
+                            {
+                                parentNames.Add(inEl.GetString() ?? string.Empty);
+                            }
+                            else if (inEl.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var item in inEl.EnumerateArray())
+                                {
+                                    parentNames.Add(item.GetString() ?? string.Empty);
+                                }
+                            }
+
+                            foreach (var parentName in parentNames)
+                            {
+                                if (allPresetsByName.TryGetValue(parentName, out var parentEl))
+                                {
+                                    if (string.IsNullOrWhiteSpace(rawBinaryDir) && parentEl.TryGetProperty("binaryDir", out var pbEl))
+                                    {
+                                        rawBinaryDir = pbEl.GetString() ?? string.Empty;
+                                    }
+                                    if (string.IsNullOrWhiteSpace(generator) && parentEl.TryGetProperty("generator", out var pgEl))
+                                    {
+                                        generator = pgEl.GetString() ?? string.Empty;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawBinaryDir))
+                    {
+                        rawBinaryDir = "${sourceDir}/out/build/${presetName}";
                     }
 
                     string arch = string.Empty;

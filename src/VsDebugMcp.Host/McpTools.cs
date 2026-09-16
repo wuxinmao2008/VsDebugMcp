@@ -421,15 +421,21 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Starts debugging the active startup project in the open solution (equivalent to F5).")]
+    [Description("Starts debugging the active startup project (F5) or a specific target executable.")]
     public Task<DebuggerExecutionResponse> DebuggerStartAsync(
         [Description("Optional flag whether to wait for the program to enter break mode before returning. Defaults to true.")] bool? waitForBreak = null,
         [Description("Optional timeout in milliseconds to wait for a breakpoint or pause when waitForBreak is true. Defaults to 5000.")] int? timeoutMs = null,
+        [Description("Optional target executable file name or path (e.g. 'SampleCMakeApp.exe' or 'C:/path/to/app.exe').")] string? target = null,
+        [Description("Optional command line arguments to pass to the target executable.")] string? arguments = null,
+        [Description("Optional working directory for the target executable.")] string? workingDirectory = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerStartAsync(
             waitForBreak ?? true,
             timeoutMs,
+            target,
+            arguments,
+            workingDirectory,
             vsInstanceId,
             cancellationToken));
 

@@ -13,6 +13,7 @@ using EnvDTE80;
 using EnvDTE90;
 using EnvDTE90a;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using VsDebugMcp.Protocol;
 
 namespace VsDebugMcp_Vsix;
@@ -1166,6 +1167,57 @@ internal sealed class DebuggerProvider
 		});
 	}
 
+	internal async Task<DebuggerExecutionResponse> LaunchTargetAsync(
+		string exePath,
+		string? arguments,
+		string? workingDir,
+		bool waitForBreak,
+		int? timeoutMs,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerAlreadyRunning,
+				$"The debugger is already running (current mode: {GetModeString(debugger.CurrentMode)}). Use continue or step instead.");
+		}
+
+		var previousMode = GetModeString(debugger.CurrentMode);
+
+		var targetInfo = new VsDebugTargetInfo
+		{
+			cbSize = (uint)Marshal.SizeOf(typeof(VsDebugTargetInfo)),
+			dlo = DEBUG_LAUNCH_OPERATION.DLO_CreateProcess,
+			bstrExe = exePath,
+			bstrCurDir = !string.IsNullOrWhiteSpace(workingDir) ? workingDir : Path.GetDirectoryName(exePath),
+			bstrArg = arguments ?? string.Empty,
+			clsidCustom = Microsoft.VisualStudio.VSConstants.DebugEnginesGuids.NativeOnly_guid,
+			fSendStdoutToOutputWindow = 0
+		};
+
+		VsShellUtilities.LaunchDebugger(_package, targetInfo);
+
+		if (waitForBreak)
+		{
+			var waitTimeout = Clamp(timeoutMs ?? 5000, 500, 30000);
+			var sw = System.Diagnostics.Stopwatch.StartNew();
+			while (sw.ElapsedMilliseconds < waitTimeout)
+			{
+				await Task.Delay(100, cancellationToken);
+				await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+				if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode || debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+				{
+					break;
+				}
+			}
+		}
+
+		return CaptureExecutionResult(debugger, "start", previousMode);
+	}
+
 	public async Task<DebuggerExecutionResponse> StartAsync(
 		DebuggerStartRequest request,
 		CancellationToken cancellationToken)
@@ -1194,6 +1246,53 @@ internal sealed class DebuggerProvider
 				throw new DebuggerProviderException(
 					BridgeErrorCodes.DebuggerAlreadyRunning,
 					$"The debugger is already running (current mode: {GetModeString(debugger.CurrentMode)}). Use continue or step instead.");
+			}
+
+			if (!string.IsNullOrWhiteSpace(request.Target))
+			{
+				string target = request.Target!.Trim();
+				string? resolvedExe = null;
+				if (Path.IsPathRooted(target) && File.Exists(target))
+				{
+					resolvedExe = target;
+				}
+				else if (CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
+				{
+					var presets = CMakePresetsParser.LoadWorkspacePresets(cmakeRoot);
+					var activePresetName = CMakeWorkspaceState.GetActivePreset(cmakeRoot, presets);
+					var activePreset = presets.Find(p => string.Equals(p.Name, activePresetName, StringComparison.OrdinalIgnoreCase)) ?? presets.FirstOrDefault();
+					var binaryDir = activePreset?.BinaryDir;
+
+					string targetFileName = target;
+					if (!targetFileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+					{
+						targetFileName += ".exe";
+					}
+
+					if (!string.IsNullOrEmpty(binaryDir) && Directory.Exists(binaryDir))
+					{
+						var found = Directory.GetFiles(binaryDir, targetFileName, SearchOption.AllDirectories);
+						if (found.Length > 0)
+						{
+							resolvedExe = found[0];
+						}
+					}
+				}
+
+				if (string.IsNullOrEmpty(resolvedExe) || !File.Exists(resolvedExe))
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.FileNotFound,
+						$"Target executable '{request.Target}' was not found. Please build the project first (vs_run_build).");
+				}
+
+				return await LaunchTargetAsync(
+					resolvedExe,
+					request.Arguments,
+					request.WorkingDirectory,
+					request.WaitForBreak,
+					request.TimeoutMs,
+					cancellationToken);
 			}
 
 			var previousMode = GetModeString(debugger.CurrentMode);

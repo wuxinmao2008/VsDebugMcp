@@ -142,6 +142,9 @@ public interface IBridgeService
     Task<DebuggerExecutionResponse> DebuggerStartAsync(
         bool waitForBreak,
         int? timeoutMs,
+        string? target,
+        string? arguments,
+        string? workingDirectory,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -706,6 +709,9 @@ public sealed class BridgeService : IBridgeService
     public Task<DebuggerExecutionResponse> DebuggerStartAsync(
         bool waitForBreak,
         int? timeoutMs,
+        string? target,
+        string? arguments,
+        string? workingDirectory,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -714,7 +720,10 @@ public sealed class BridgeService : IBridgeService
                 new DebuggerStartRequest
                 {
                     WaitForBreak = waitForBreak,
-                    TimeoutMs = timeoutMs
+                    TimeoutMs = timeoutMs,
+                    Target = target,
+                    Arguments = arguments,
+                    WorkingDirectory = workingDirectory
                 },
                 cancellationToken),
             cancellationToken);

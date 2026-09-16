@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
+using EnvDTE80;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -32,6 +36,7 @@ internal sealed class TestExplorerProvider : IDisposable
     private readonly DebuggerProvider _debuggerProvider;
     private ActiveTestRunContext? _activeRun;
     private ActiveTestRunContext? _lastRun;
+    private System.Diagnostics.Process? _activeCTestProcess;
 
     public TestExplorerProvider(
         AsyncPackage package,
@@ -180,66 +185,84 @@ internal sealed class TestExplorerProvider : IDisposable
 
     public async Task<GetTestsResponse> GetTestsAsync(GetTestsRequest request, CancellationToken cancellationToken)
     {
-        var testsService = await EnsureServicesAsync(cancellationToken);
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-
-        var rawTests = await testsService.GetTestsAsync();
+        var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
 
         var items = new List<VsTestItem>();
-        if (rawTests != null)
+
+        // 1. If CMake workspace, discover CTest tests
+        if (dte != null && CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
         {
-            foreach (var test in rawTests)
+            var ctestItems = await GetCTestTestsAsync(cmakeRoot, request.ProjectName, request.Filter, cancellationToken);
+            items.AddRange(ctestItems);
+        }
+
+        // 2. Try MEF TestWindow for managed/MSBuild tests
+        try
+        {
+            var testsService = await EnsureServicesAsync(cancellationToken);
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var rawTests = await testsService.GetTestsAsync();
+            if (rawTests != null)
             {
-                var source = TestAccessor.GetSource(test) ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(request.ProjectName))
+                foreach (var test in rawTests)
                 {
-                    if (source.IndexOf(request.ProjectName, StringComparison.OrdinalIgnoreCase) < 0)
+                    var source = TestAccessor.GetSource(test) ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(request.ProjectName))
                     {
-                        continue;
-                    }
-                }
-
-                var displayName = TestAccessor.GetDisplayName(test);
-                var fqn = TestAccessor.GetFullyQualifiedName(test);
-                if (!string.IsNullOrWhiteSpace(request.Filter))
-                {
-                    var matchDisplay = displayName.IndexOf(request.Filter, StringComparison.OrdinalIgnoreCase) >= 0;
-                    var matchFqn = fqn.IndexOf(request.Filter, StringComparison.OrdinalIgnoreCase) >= 0;
-                    if (!matchDisplay && !matchFqn)
-                    {
-                        continue;
-                    }
-                }
-
-                string? lastError = null;
-                var results = TestAccessor.GetResults(test);
-                if (results != null)
-                {
-                    foreach (var r in results)
-                    {
-                        var msg = ResultAccessor.GetErrorMessage(r);
-                        if (!string.IsNullOrWhiteSpace(msg))
+                        if (source.IndexOf(request.ProjectName, StringComparison.OrdinalIgnoreCase) < 0)
                         {
-                            lastError = msg;
-                            break;
+                            continue;
                         }
                     }
-                }
 
-                items.Add(new VsTestItem
-                {
-                    TestId = TestAccessor.GetId(test).ToString(),
-                    DisplayName = displayName,
-                    FullyQualifiedName = fqn,
-                    FilePath = TestAccessor.GetFilePath(test),
-                    LineNumber = TestAccessor.GetLineNumber(test),
-                    ProjectId = TestAccessor.GetProjectId(test),
-                    Source = string.IsNullOrEmpty(source) ? null : source,
-                    State = TestAccessor.GetState(test),
-                    DurationMs = TestAccessor.GetDurationMs(test),
-                    LastErrorMessage = lastError
-                });
+                    var displayName = TestAccessor.GetDisplayName(test);
+                    var fqn = TestAccessor.GetFullyQualifiedName(test);
+                    if (!string.IsNullOrWhiteSpace(request.Filter))
+                    {
+                        var matchDisplay = displayName.IndexOf(request.Filter, StringComparison.OrdinalIgnoreCase) >= 0;
+                        var matchFqn = fqn.IndexOf(request.Filter, StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (!matchDisplay && !matchFqn)
+                        {
+                            continue;
+                        }
+                    }
+
+                    string? lastError = null;
+                    var results = TestAccessor.GetResults(test);
+                    if (results != null)
+                    {
+                        foreach (var r in results)
+                        {
+                            var msg = ResultAccessor.GetErrorMessage(r);
+                            if (!string.IsNullOrWhiteSpace(msg))
+                            {
+                                lastError = msg;
+                                break;
+                            }
+                        }
+                    }
+
+                    items.Add(new VsTestItem
+                    {
+                        TestId = TestAccessor.GetId(test).ToString(),
+                        DisplayName = displayName,
+                        FullyQualifiedName = fqn,
+                        FilePath = TestAccessor.GetFilePath(test),
+                        LineNumber = TestAccessor.GetLineNumber(test),
+                        ProjectId = TestAccessor.GetProjectId(test),
+                        Source = string.IsNullOrEmpty(source) ? null : source,
+                        State = TestAccessor.GetState(test),
+                        DurationMs = TestAccessor.GetDurationMs(test),
+                        LastErrorMessage = lastError
+                    });
+                }
             }
+        }
+        catch (TestExplorerProviderException ex) when (items.Count > 0)
+        {
+            _diagnostics?.LogInfo($"[TestExplorer] MEF TestWindow unavailable in CMake workspace: {ex.Message}");
         }
 
         return new GetTestsResponse
@@ -250,8 +273,157 @@ internal sealed class TestExplorerProvider : IDisposable
         };
     }
 
+    private static string ResolveCTestExe()
+    {
+        try
+        {
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            if (!string.IsNullOrEmpty(baseDir))
+            {
+                var bundledCTest = Path.GetFullPath(Path.Combine(baseDir, @"CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"));
+                if (File.Exists(bundledCTest))
+                {
+                    return bundledCTest;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            var procPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(procPath))
+            {
+                var ideDir = Path.GetDirectoryName(procPath);
+                if (!string.IsNullOrEmpty(ideDir))
+                {
+                    var bundledCTest = Path.GetFullPath(Path.Combine(ideDir, @"CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"));
+                    if (File.Exists(bundledCTest))
+                    {
+                        return bundledCTest;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        var standardCandidates = new[]
+        {
+            @"C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe",
+            @"C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe",
+            @"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe"
+        };
+        foreach (var c in standardCandidates)
+        {
+            if (File.Exists(c)) return c;
+        }
+
+        return "ctest.exe";
+    }
+
+    private async Task<List<VsTestItem>> GetCTestTestsAsync(
+        string cmakeRoot,
+        string? projectNameFilter,
+        string? filter,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<VsTestItem>();
+        try
+        {
+            var presets = CMakePresetsParser.LoadWorkspacePresets(cmakeRoot);
+            if (presets.Count == 0) return result;
+
+            var activePresetName = CMakeWorkspaceState.GetActivePreset(cmakeRoot, presets);
+            var activePreset = presets.Find(p => string.Equals(p.Name, activePresetName, StringComparison.OrdinalIgnoreCase)) ?? presets[0];
+
+            var binaryDir = activePreset.BinaryDir;
+            if (string.IsNullOrWhiteSpace(binaryDir) || !Directory.Exists(binaryDir))
+            {
+                _diagnostics?.LogWarning($"[TestExplorer] CMake binaryDir does not exist: {binaryDir}");
+                return result;
+            }
+
+            var ctestExe = ResolveCTestExe();
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ctestExe,
+                Arguments = $"--test-dir \"{binaryDir}\" --show-only=json-v1",
+                WorkingDirectory = binaryDir,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8
+            };
+
+            string jsonOutput;
+            using (var proc = new System.Diagnostics.Process { StartInfo = psi })
+            {
+                proc.Start();
+                jsonOutput = await proc.StandardOutput.ReadToEndAsync();
+                proc.WaitForExit(5000);
+            }
+
+            var ctestItems = CTestParser.ParseDiscoveryJson(jsonOutput);
+            foreach (var item in ctestItems)
+            {
+                if (!string.IsNullOrWhiteSpace(projectNameFilter))
+                {
+                    if (item.Name.IndexOf(projectNameFilter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                        item.Command.IndexOf(projectNameFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(filter))
+                {
+                    if (item.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                        item.Command.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+                }
+
+                result.Add(new VsTestItem
+                {
+                    TestId = $"ctest:{item.Name}",
+                    DisplayName = item.Name,
+                    FullyQualifiedName = $"ctest:{item.Name}",
+                    FilePath = !string.IsNullOrEmpty(item.FilePath) ? item.FilePath : null,
+                    LineNumber = item.LineNumber > 0 ? item.LineNumber : null,
+                    ProjectId = cmakeRoot,
+                    Source = !string.IsNullOrEmpty(item.Command) ? item.Command : null,
+                    State = "NotRun",
+                    DurationMs = null
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _diagnostics?.LogError($"[TestExplorer] GetCTestTestsAsync error: {ex.Message}");
+        }
+
+        return result;
+    }
+
     public async Task<RunTestsResponse> RunTestsAsync(RunTestsRequest request, CancellationToken cancellationToken)
     {
+        await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
+
+        bool hasCTestIds = request.TestIds != null && request.TestIds.Any(id => id.StartsWith("ctest:", StringComparison.OrdinalIgnoreCase));
+        string cmakeRoot = string.Empty;
+        bool isCMakeWorkspace = dte != null && CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out cmakeRoot);
+
+        if (isCMakeWorkspace && (hasCTestIds || (request.TestIds == null || request.TestIds.Count == 0)))
+        {
+            return await RunCTestTestsAsync(dte!, cmakeRoot, request, cancellationToken);
+        }
+
         var testsService = await EnsureServicesAsync(cancellationToken);
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
@@ -403,6 +575,257 @@ internal sealed class TestExplorerProvider : IDisposable
         };
     }
 
+    private async Task<RunTestsResponse> RunCTestTestsAsync(
+        DTE2 dte,
+        string cmakeRoot,
+        RunTestsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var presets = CMakePresetsParser.LoadWorkspacePresets(cmakeRoot);
+        if (presets.Count == 0)
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.BuildStateUnavailable,
+                "No CMake presets found in workspace.",
+                false);
+        }
+
+        var activePresetName = CMakeWorkspaceState.GetActivePreset(cmakeRoot, presets);
+        var activePreset = presets.Find(p => string.Equals(p.Name, activePresetName, StringComparison.OrdinalIgnoreCase)) ?? presets[0];
+
+        var binaryDir = activePreset.BinaryDir;
+        if (string.IsNullOrWhiteSpace(binaryDir) || !Directory.Exists(binaryDir))
+        {
+            throw new TestExplorerProviderException(
+                BridgeErrorCodes.BuildStateUnavailable,
+                $"CMake binary directory does not exist: '{binaryDir}'. Please build the project first.",
+                false);
+        }
+
+        var runId = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        var now = DateTimeOffset.UtcNow;
+
+        var targetTestNames = new List<string>();
+        if (request.TestIds != null && request.TestIds.Count > 0)
+        {
+            foreach (var id in request.TestIds)
+            {
+                if (id.StartsWith("ctest:", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetTestNames.Add(id.Substring(6).Trim());
+                }
+                else
+                {
+                    targetTestNames.Add(id.Trim());
+                }
+            }
+        }
+
+        var runContext = new ActiveTestRunContext(runId, new List<Guid>(), now)
+        {
+            IsCTest = true,
+            TargetCTestNames = targetTestNames,
+            TotalCount = targetTestNames.Count > 0 ? targetTestNames.Count : 1
+        };
+
+        lock (_sync)
+        {
+            if (_activeRun != null && (_activeRun.State == TestRunStates.Starting || _activeRun.State == TestRunStates.Running))
+            {
+                throw new TestExplorerProviderException(
+                    BridgeErrorCodes.TestRunBusy,
+                    $"A test run '{_activeRun.TestRunId}' is already in progress.",
+                    false);
+            }
+
+            _activeRun = runContext;
+            _lastRun = runContext;
+        }
+
+        runContext.State = TestRunStates.Running;
+
+        // Output Window Pane for Test streaming
+        OutputWindowPane? testPane = null;
+        try
+        {
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            foreach (OutputWindowPane pane in dte.ToolWindows.OutputWindow.OutputWindowPanes)
+            {
+                if (pane.Name.Equals("Test", StringComparison.OrdinalIgnoreCase) ||
+                    pane.Name.Equals("测试", StringComparison.OrdinalIgnoreCase))
+                {
+                    testPane = pane;
+                    break;
+                }
+            }
+            if (testPane == null)
+            {
+                testPane = dte.ToolWindows.OutputWindow.OutputWindowPanes.Add("测试");
+            }
+            testPane?.Activate();
+            testPane?.Clear();
+        }
+        catch { }
+
+        void WriteOutput(string line)
+        {
+            try
+            {
+                _ = _package.JoinableTaskFactory.RunAsync(async () =>
+                {
+                    await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    testPane?.OutputString(line + Environment.NewLine);
+                });
+            }
+            catch { }
+        }
+
+        WriteOutput($"------ 已启动 CTest 测试: 配置: {activePreset.Name} ------");
+
+        var junitPath = Path.Combine(Path.GetTempPath(), $"ctest_junit_{Guid.NewGuid():N}.xml");
+        var ctestExe = ResolveCTestExe();
+
+        string args = $"--test-dir \"{binaryDir}\" --output-on-failure --output-junit \"{junitPath}\"";
+        if (targetTestNames.Count > 0)
+        {
+            string filterRegex = "^(" + string.Join("|", targetTestNames.Select(Regex.Escape)) + ")$";
+            args += $" -R \"{filterRegex}\"";
+        }
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = ctestExe,
+            Arguments = args,
+            WorkingDirectory = binaryDir,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        _ = Task.Run(async () =>
+        {
+            System.Diagnostics.Process? proc = null;
+            try
+            {
+                proc = new System.Diagnostics.Process { StartInfo = psi };
+                proc.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) WriteOutput(e.Data);
+                };
+                proc.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null) WriteOutput(e.Data);
+                };
+
+                lock (_sync)
+                {
+                    _activeCTestProcess = proc;
+                }
+
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                while (!proc.HasExited)
+                {
+                    await Task.Delay(100);
+                }
+
+                WriteOutput($"------ CTest 已完成，退出代码: {proc.ExitCode} ------");
+
+                CTestRunResult? parsedResult = null;
+                if (File.Exists(junitPath))
+                {
+                    try
+                    {
+                        string xml = File.ReadAllText(junitPath);
+                        parsedResult = CTestParser.ParseJUnitXml(xml);
+                    }
+                    catch (Exception ex)
+                    {
+                        _diagnostics?.LogError($"[TestExplorer] Error reading/parsing JUnit XML: {ex.Message}");
+                    }
+                }
+
+                lock (_sync)
+                {
+                    if (runContext.State == TestRunStates.Running)
+                    {
+                        var resultsList = new List<VsTestResult>();
+                        int passed = 0, failed = 0, skipped = 0;
+
+                        if (parsedResult != null)
+                        {
+                            foreach (var kvp in parsedResult.TestOutcomes)
+                            {
+                                var tc = kvp.Value;
+                                if (string.Equals(tc.State, "Passed", StringComparison.OrdinalIgnoreCase)) passed++;
+                                else if (string.Equals(tc.State, "Failed", StringComparison.OrdinalIgnoreCase)) failed++;
+                                else if (string.Equals(tc.State, "Skipped", StringComparison.OrdinalIgnoreCase)) skipped++;
+
+                                resultsList.Add(new VsTestResult
+                                {
+                                    TestId = $"ctest:{tc.Name}",
+                                    DisplayName = tc.Name,
+                                    Outcome = tc.State,
+                                    DurationMs = tc.DurationMs,
+                                    ErrorMessage = tc.ErrorMessage,
+                                    StandardOutput = tc.SystemOut
+                                });
+                            }
+                        }
+
+                        runContext.UpdateResults(resultsList, passed, failed, skipped);
+                        runContext.TotalCount = resultsList.Count;
+                        runContext.State = (failed > 0 || proc.ExitCode != 0) ? TestRunStates.Failed : TestRunStates.Completed;
+                        runContext.CompletedAt = DateTimeOffset.UtcNow;
+                    }
+
+                    if (_activeRun == runContext)
+                    {
+                        _activeRun = null;
+                    }
+                    _activeCTestProcess = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogError($"[TestExplorer] CTest run failed: {ex.Message}");
+                lock (_sync)
+                {
+                    runContext.State = TestRunStates.Failed;
+                    runContext.CompletedAt = DateTimeOffset.UtcNow;
+                    if (_activeRun == runContext)
+                    {
+                        _activeRun = null;
+                    }
+                    _activeCTestProcess = null;
+                }
+            }
+            finally
+            {
+                proc?.Dispose();
+                try
+                {
+                    if (File.Exists(junitPath)) File.Delete(junitPath);
+                }
+                catch { }
+            }
+        });
+
+        return new RunTestsResponse
+        {
+            VsInstanceId = _vsInstanceId,
+            TestRunId = runId,
+            State = TestRunStates.Running,
+            TotalCount = targetTestNames.Count,
+            StartedAt = now.ToString("O")
+        };
+    }
+
     public async Task<DebugTestResponse> DebugTestAsync(DebugTestRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.TestId))
@@ -413,7 +836,6 @@ internal sealed class TestExplorerProvider : IDisposable
                 false);
         }
 
-        var testsService = await EnsureServicesAsync(cancellationToken);
         await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
         var debugger = await _debuggerProvider.GetDebuggerAsync(cancellationToken);
@@ -435,6 +857,66 @@ internal sealed class TestExplorerProvider : IDisposable
                     false);
             }
         }
+
+        // CTest test debugging branch
+        if (request.TestId.StartsWith("ctest:", StringComparison.OrdinalIgnoreCase))
+        {
+            var testName = request.TestId.Substring(6).Trim();
+            var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
+            if (dte == null || !CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
+            {
+                throw new TestExplorerProviderException(
+                    BridgeErrorCodes.SolutionStateUnavailable,
+                    "CMake workspace is not available.",
+                    false);
+            }
+
+            var ctestItems = await GetCTestTestsAsync(cmakeRoot, null, testName, cancellationToken);
+            var matchedTest = ctestItems.FirstOrDefault(t =>
+                string.Equals(t.DisplayName, testName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t.TestId, request.TestId, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedTest == null || string.IsNullOrWhiteSpace(matchedTest.Source))
+            {
+                throw new TestExplorerProviderException(
+                    BridgeErrorCodes.TestNotFound,
+                    $"CTest '{request.TestId}' was not found or has no executable target command.",
+                    false);
+            }
+
+            var exePath = matchedTest.Source!;
+            var workDir = Path.GetDirectoryName(exePath);
+
+            var execResult = await _debuggerProvider.LaunchTargetAsync(
+                exePath,
+                null,
+                workDir,
+                request.WaitForBreak ?? true,
+                request.TimeoutMs,
+                cancellationToken);
+
+            var runId = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var now = DateTimeOffset.UtcNow;
+
+            return new DebugTestResponse
+            {
+                VsInstanceId = _vsInstanceId,
+                TestRunId = runId,
+                TestId = request.TestId,
+                TestDisplayName = testName,
+                IsDebugging = execResult.IsDebugging,
+                DebuggerMode = execResult.CurrentMode,
+                LastBreakReason = execResult.LastBreakReason,
+                TopFrame = execResult.TopFrame,
+                CurrentProcessId = execResult.CurrentProcessId,
+                CurrentThreadId = execResult.CurrentThreadId,
+                StartedAt = now.ToString("O"),
+                Warnings = execResult.Warnings
+            };
+        }
+
+        var testsService = await EnsureServicesAsync(cancellationToken);
+        await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
         var allTests = await testsService.GetTestsAsync();
         object? targetTest = null;
@@ -462,17 +944,17 @@ internal sealed class TestExplorerProvider : IDisposable
         var testFqn = TestAccessor.GetFullyQualifiedName(targetTest);
         var testDisplayName = TestAccessor.GetDisplayName(targetTest);
 
-        var runId = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-        var now = DateTimeOffset.UtcNow;
-        var runContext = new ActiveTestRunContext(runId, new List<Guid> { testGuid }, now);
+        var runIdMef = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        var nowMef = DateTimeOffset.UtcNow;
+        var runContextMef = new ActiveTestRunContext(runIdMef, new List<Guid> { testGuid }, nowMef);
 
         lock (_sync)
         {
-            _activeRun = runContext;
-            _lastRun = runContext;
+            _activeRun = runContextMef;
+            _lastRun = runContextMef;
         }
 
-        runContext.State = TestRunStates.Running;
+        runContextMef.State = TestRunStates.Running;
 
         if (_operationBroker == null)
         {
@@ -498,9 +980,9 @@ internal sealed class TestExplorerProvider : IDisposable
                 {
                     lock (_sync)
                     {
-                        runContext.State = TestRunStates.Failed;
-                        runContext.CompletedAt = DateTimeOffset.UtcNow;
-                        if (_activeRun == runContext)
+                        runContextMef.State = TestRunStates.Failed;
+                        runContextMef.CompletedAt = DateTimeOffset.UtcNow;
+                        if (_activeRun == runContextMef)
                         {
                             _activeRun = null;
                         }
@@ -512,9 +994,9 @@ internal sealed class TestExplorerProvider : IDisposable
                 _diagnostics?.LogError($"[TestExplorer] Error in DebugTestsByFilterAsync for {testFqn}: {ex.Message}");
                 lock (_sync)
                 {
-                    runContext.State = TestRunStates.Failed;
-                    runContext.CompletedAt = DateTimeOffset.UtcNow;
-                    if (_activeRun == runContext)
+                    runContextMef.State = TestRunStates.Failed;
+                    runContextMef.CompletedAt = DateTimeOffset.UtcNow;
+                    if (_activeRun == runContextMef)
                     {
                         _activeRun = null;
                     }
@@ -528,10 +1010,10 @@ internal sealed class TestExplorerProvider : IDisposable
             await Task.Delay(TimeSpan.FromSeconds(120));
             lock (_sync)
             {
-                if (_activeRun == runContext && runContext.State == TestRunStates.Running)
+                if (_activeRun == runContextMef && runContextMef.State == TestRunStates.Running)
                 {
-                    _diagnostics?.LogWarning($"[TestExplorer] Safety watchdog reached for debug run {runId}; finalizing.");
-                    _ = FinalizeRunAsync(runContext);
+                    _diagnostics?.LogWarning($"[TestExplorer] Safety watchdog reached for debug run {runIdMef}; finalizing.");
+                    _ = FinalizeRunAsync(runContextMef);
                 }
             }
         });
@@ -554,7 +1036,7 @@ internal sealed class TestExplorerProvider : IDisposable
                     break;
                 }
 
-                if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode && runContext.State != TestRunStates.Running)
+                if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode && runContextMef.State != TestRunStates.Running)
                 {
                     warnings.Add(new BridgeWarning
                     {
@@ -580,7 +1062,7 @@ internal sealed class TestExplorerProvider : IDisposable
         return new DebugTestResponse
         {
             VsInstanceId = _vsInstanceId,
-            TestRunId = runId,
+            TestRunId = runIdMef,
             TestId = testGuid.ToString(),
             TestDisplayName = testDisplayName,
             IsDebugging = executionResult.IsDebugging,
@@ -589,7 +1071,7 @@ internal sealed class TestExplorerProvider : IDisposable
             TopFrame = executionResult.TopFrame,
             CurrentProcessId = executionResult.CurrentProcessId,
             CurrentThreadId = executionResult.CurrentThreadId,
-            StartedAt = now.ToString("O"),
+            StartedAt = nowMef.ToString("O"),
             Warnings = warnings
         };
     }
@@ -633,8 +1115,8 @@ internal sealed class TestExplorerProvider : IDisposable
             }
         }
 
-        // If currently running, do a live refresh of results
-        if (run.State == TestRunStates.Running)
+        // If currently running, do a live refresh of results (MEF only)
+        if (run.State == TestRunStates.Running && !run.IsCTest)
         {
             try
             {
@@ -665,6 +1147,7 @@ internal sealed class TestExplorerProvider : IDisposable
     public async Task<CancelTestRunResponse> CancelTestRunAsync(CancelTestRunRequest request, CancellationToken cancellationToken)
     {
         ActiveTestRunContext? run;
+        System.Diagnostics.Process? ctestProc = null;
         lock (_sync)
         {
             if (!string.IsNullOrWhiteSpace(request.TestRunId))
@@ -696,9 +1179,31 @@ internal sealed class TestExplorerProvider : IDisposable
             run.State = TestRunStates.Cancelled;
             run.CompletedAt = DateTimeOffset.UtcNow;
             _activeRun = null;
+
+            ctestProc = _activeCTestProcess;
+            _activeCTestProcess = null;
         }
 
-        if (_operationBroker != null)
+        if (ctestProc != null && !ctestProc.HasExited)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "taskkill.exe",
+                    Arguments = $"/F /T /PID {ctestProc.Id}",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                System.Diagnostics.Process.Start(psi)?.WaitForExit(3000);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics?.LogWarning($"[TestExplorer] Error cancelling CTest process: {ex.Message}");
+            }
+        }
+
+        if (_operationBroker != null && !run.IsCTest)
         {
             try
             {
@@ -837,9 +1342,11 @@ internal sealed class TestExplorerProvider : IDisposable
 
         public string TestRunId { get; }
         public List<Guid> TargetGuids { get; }
+        public List<string>? TargetCTestNames { get; set; }
+        public bool IsCTest { get; set; }
         public DateTimeOffset StartedAt { get; }
         public DateTimeOffset? CompletedAt { get; set; }
-        public int TotalCount { get; }
+        public int TotalCount { get; set; }
         public string State { get; set; }
         public int PassedCount { get; private set; }
         public int FailedCount { get; private set; }

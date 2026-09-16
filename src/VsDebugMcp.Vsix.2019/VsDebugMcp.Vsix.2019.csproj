@@ -12,7 +12,7 @@
     <Platforms>AnyCPU;x64</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <IsPackable>false</IsPackable>
-    <Version>0.1.22.0</Version>
+    <Version>0.1.23.0</Version>
     <DefineConstants>$(DefineConstants);VS2019</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">

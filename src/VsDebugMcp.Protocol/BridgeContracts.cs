@@ -516,6 +516,15 @@ public sealed class DebuggerStartRequest
 
     [DataMember(Name = "timeoutMs", Order = 2, EmitDefaultValue = false)]
     public int? TimeoutMs { get; set; }
+
+    [DataMember(Name = "target", Order = 3, EmitDefaultValue = false)]
+    public string? Target { get; set; }
+
+    [DataMember(Name = "arguments", Order = 4, EmitDefaultValue = false)]
+    public string? Arguments { get; set; }
+
+    [DataMember(Name = "workingDirectory", Order = 5, EmitDefaultValue = false)]
+    public string? WorkingDirectory { get; set; }
 }
 
 [DataContract]

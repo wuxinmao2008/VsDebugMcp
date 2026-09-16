@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.23.0] - 2026-09-15
+
+### Added
+- **CMake Target Debug Launch & CTest Unit Testing Integration (Phase 7C)**:
+  - **CTest Discovery & Result Parsing (`CTestModels.cs`, `CTestParser`)**:
+    - Discovers CMake CTest tests via `ctest.exe --test-dir <binaryDir> --show-only=json-v1` into `CTestItem` with source file, line number, working directory, and executable target path.
+    - Parses CTest JUnit XML test outcomes (`CTestParser.ParseJUnitXml`) into `CTestRunResult` with total, passed, failed, duration, error messages, and standard output.
+  - **CMake Target Launch Debugging (`vs_debugger_start`)**:
+    - Supports `target`, `arguments`, and `workingDirectory` arguments in `vs_debugger_start` to launch and attach the native C++ debugger directly to CMake build target executables (`VsShellUtilities.LaunchDebugger` with `NativeOnly_guid`).
+    - Supports `waitForBreak` and `timeoutMs` to pause and inspect break mode state on initial launch.
+  - **CTest Execution & Test Explorer Integration (`vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run`)**:
+    - `vs_get_tests`: seamlessly discovers CTest tests in CMake workspaces alongside standard Test Explorer tests with test ID prefix `ctest:`.
+    - `vs_run_tests`: drives CTest execution with test filtering (`-R`), streaming output to the Visual Studio Output Window "测试" (Test) pane, and parsing test results into `TestRunStatusResponse`.
+    - `vs_cancel_test_run`: terminates running CTest process trees via `taskkill /F /T`.
+  - **CTest Test Debugging (`vs_debug_test_by_id`)**:
+    - For `ctest:*` test IDs, resolves the test executable target and working directory from discovery metadata and launches native debugging with breakpoint support.
+  - **Automated Verification**:
+    - Added unit test suite `CTestParserTests.cs` (34/34 Protocol tests PASS, 181/181 Host tests PASS).
+    - Added acceptance script `scripts/test_acceptance_phase7c.py`.
+
 ## [0.1.22.0] - 2026-09-15
 
 ### Added

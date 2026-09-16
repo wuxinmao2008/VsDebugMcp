@@ -14,6 +14,27 @@
 
 ## 实施进度（2026-09-15 更新）
 
+### Phase 7C：CMake 目标启动调试与 CTest 单元测试体系集成 (v0.1.23.0)
+
+- **CTest 规范模型与双重解析 (`CTestModels.cs`, `CTestParser`)**：
+  - 在 `VsDebugMcp.Protocol` 中实现 `CTestItem`、`CTestRunResult` 与 `CTestCaseOutcome`；
+  - 基于 `ctest.exe --test-dir <binaryDir> --show-only=json-v1` 解析提取测试用例名称、关联源文件、行号、工作目录及目标二进制路径；
+  - 基于 JUnit XML（`--output-junit`）精准解析测试通过/失败/跳过计数、毫秒级耗时、失败堆栈与标准输出。
+- **CMake 目标直启原生调试 (`vs_debugger_start`)**：
+  - 扩展 `vs_debugger_start` 协议入参：`target`、`arguments`、`workingDirectory`；
+  - 利用 `VsShellUtilities.LaunchDebugger` 与 `NativeOnly_guid` 引擎直接拉起任意 CMake 构建产物（如 `SampleCMakeApp.exe`），无缝挂载原生 C++ 调试器；
+  - 支持 `waitForBreak` 与断点预设，启动后精确停留于首个断点处，支持即时读取调用栈及局部变量。
+- **CTest 测试资源发现与运行管理 (`vs_get_tests`, `vs_run_tests`, `vs_get_test_run_status`, `vs_cancel_test_run`)**：
+  - `vs_get_tests`：在 CMake 工作区自动通过 CTest 探针发现测试用例，统一以 `ctest:<name>` 作为 testId；
+  - `vs_run_tests`：驱动 CTest 按指定正则执行测试，实时重定向输出至 IDE“测试”窗格，自动解析 JUnit 产物并维护 `TestRunStatusResponse` 完整生命周期；
+  - `vs_cancel_test_run`：针对活动 CTest 进程树实施 `taskkill /F /T` 安全撤销。
+- **CTest 用例独立调试启动 (`vs_debug_test_by_id`)**：
+  - 针对 `ctest:*` 格式测试用例，自动解析其对应二进制文件与工作目录，经由 `LaunchTargetAsync` 挂载原生调试器。
+- **自动化测试与实测验收**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (34/34 PASS) + `VsDebugMcp.Host.Tests` (181/181 PASS)，全套 215 个单元测试 100% 通过；
+  - 验收脚本：`scripts/test_acceptance_phase7c.py`；
+  - 组件版本统一升级至 **`0.1.23.0`**。
+
 ### Phase 7B：CMakePresets 配置切换与 CMake 双轨构建驱动 (v0.1.22.0)
 
 - **CMakePresets 规范模型与解析器 (`CMakePresetsModel.cs`)**：
