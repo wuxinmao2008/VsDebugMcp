@@ -245,12 +245,13 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Clears breakpoints in Visual Studio. For safety, at least one of clearAll (set to true), filePath, or breakpointId must be specified.")]
+    [Description("Clears breakpoints in Visual Studio. Specify clearAll: true, sessionOnly: true (to only clear breakpoints set in current MCP session), filePath, or breakpointId.")]
     public Task<DebuggerClearBreakpointsResponse> DebuggerClearBreakpointsAsync(
-        [Description("Optional flag to clear all breakpoints across the solution. Must be explicitly set to true if filePath and breakpointId are omitted.")] bool? clearAll = null,
+        [Description("Optional flag to clear all breakpoints across the solution. Must be explicitly set to true if filePath, breakpointId, and sessionOnly are omitted.")] bool? clearAll = null,
         [Description("Optional source file path to clear breakpoints from.")] string? filePath = null,
         [Description("Optional 1-based line number to clear when filePath is specified. If omitted with filePath, clears all breakpoints in the file.")] int? line = null,
         [Description("Optional specific breakpoint ID (e.g. 'full/path.cpp:42') to clear.")] string? breakpointId = null,
+        [Description("Optional flag. If true, only clears breakpoints created during the current MCP debugging session, preserving user-created breakpoints.")] bool? sessionOnly = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerClearBreakpointsAsync(
@@ -258,6 +259,7 @@ public sealed class McpTools
             filePath,
             line,
             breakpointId,
+            sessionOnly,
             vsInstanceId,
             cancellationToken));
 
@@ -289,13 +291,15 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the call stack of the active or specified thread when the debugger is paused in break mode, including source file paths, line and column numbers, module names, and user-code flags.")]
+    [Description("Returns the call stack of the active or specified thread when the debugger is paused in break mode, including source file paths, line and column numbers, module names, and user-code flags. Supports filtering to user-code only or collapsing external runtime frames (Qt, CRT, Windows).")]
     public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
         [Description("Optional thread ID. Omit it to retrieve the call stack for the current active thread.")] int? threadId = null,
         [Description("Optional maximum number of frames to retrieve from 1 to 200. Defaults to 50.")] int? maxFrames = null,
+        [Description("Optional flag. If true, only returns user code frames, filtering out external library/system frames (Qt, CRT, Windows).")] bool? userCodeOnly = null,
+        [Description("Optional flag. If true, groups and collapses consecutive external library/system frames into summary frames.")] bool? collapseExternal = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
-        InvokeAsync(() => _bridgeService.DebuggerGetCallStackAsync(threadId, maxFrames, vsInstanceId, cancellationToken));
+        InvokeAsync(() => _bridgeService.DebuggerGetCallStackAsync(threadId, maxFrames, userCodeOnly, collapseExternal, vsInstanceId, cancellationToken));
 
     [McpServerTool(
         Name = "vs_debugger_evaluate_expr",

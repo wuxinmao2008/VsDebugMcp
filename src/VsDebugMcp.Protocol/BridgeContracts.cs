@@ -381,6 +381,12 @@ public sealed class DebuggerGetCallStackRequest
 
     [DataMember(Name = "maxFrames", Order = 2, EmitDefaultValue = false)]
     public int? MaxFrames { get; set; }
+
+    [DataMember(Name = "userCodeOnly", Order = 3, EmitDefaultValue = false)]
+    public bool? UserCodeOnly { get; set; }
+
+    [DataMember(Name = "collapseExternal", Order = 4, EmitDefaultValue = false)]
+    public bool? CollapseExternal { get; set; }
 }
 
 [DataContract]
@@ -403,6 +409,12 @@ public sealed class DebuggerGetCallStackResponse
 
     [DataMember(Name = "truncated", Order = 6)]
     public bool Truncated { get; set; }
+
+    [DataMember(Name = "firstUserFrameIndex", Order = 7, EmitDefaultValue = false)]
+    public int? FirstUserFrameIndex { get; set; }
+
+    [DataMember(Name = "userCodeFramesCount", Order = 8, EmitDefaultValue = false)]
+    public int? UserCodeFramesCount { get; set; }
 }
 
 [DataContract]
@@ -1724,6 +1736,9 @@ public sealed class DebuggerClearBreakpointsRequest
 
     [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
     public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "sessionOnly", Order = 6, EmitDefaultValue = false)]
+    public bool? SessionOnly { get; set; }
 }
 
 [DataContract]

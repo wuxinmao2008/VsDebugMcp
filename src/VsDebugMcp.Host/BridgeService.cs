@@ -84,6 +84,7 @@ public interface IBridgeService
         string? filePath,
         int? line,
         string? breakpointId,
+        bool? sessionOnly,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -98,6 +99,8 @@ public interface IBridgeService
     Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
         int? threadId,
         int? maxFrames,
+        bool? userCodeOnly,
+        bool? collapseExternal,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -567,6 +570,7 @@ public sealed class BridgeService : IBridgeService
         string? filePath,
         int? line,
         string? breakpointId,
+        bool? sessionOnly,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -578,6 +582,7 @@ public sealed class BridgeService : IBridgeService
                     FilePath = filePath,
                     Line = line,
                     BreakpointId = breakpointId,
+                    SessionOnly = sessionOnly,
                     VsInstanceId = vsInstanceId
                 },
                 cancellationToken),
@@ -607,6 +612,8 @@ public sealed class BridgeService : IBridgeService
     public Task<DebuggerGetCallStackResponse> DebuggerGetCallStackAsync(
         int? threadId,
         int? maxFrames,
+        bool? userCodeOnly,
+        bool? collapseExternal,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -615,7 +622,9 @@ public sealed class BridgeService : IBridgeService
                 new DebuggerGetCallStackRequest
                 {
                     ThreadId = threadId,
-                    MaxFrames = maxFrames
+                    MaxFrames = maxFrames,
+                    UserCodeOnly = userCodeOnly,
+                    CollapseExternal = collapseExternal
                 },
                 cancellationToken),
             cancellationToken);

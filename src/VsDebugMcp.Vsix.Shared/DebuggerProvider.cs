@@ -46,6 +46,24 @@ internal sealed class DebuggerProvider
 	private readonly string _vsInstanceId;
 	private readonly OutputWindowProvider? _outputWindowProvider;
 	private readonly SemaphoreSlim _executionLock = new(1, 1);
+	private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _sessionBreakpointIds = new(StringComparer.OrdinalIgnoreCase);
+
+	public bool SuppressCrtDialogOnStart { get; set; } = ReadBoolEnv("VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_START", true);
+	public bool SuppressCrtDialogOnAttach { get; set; } = ReadBoolEnv("VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_ATTACH", false);
+
+	private static bool ReadBoolEnv(string name, bool defaultValue)
+	{
+		try
+		{
+			var val = Environment.GetEnvironmentVariable(name);
+			if (string.IsNullOrWhiteSpace(val)) return defaultValue;
+			if (bool.TryParse(val, out var b)) return b;
+			if (val == "1") return true;
+			if (val == "0") return false;
+		}
+		catch { }
+		return defaultValue;
+	}
 
 	public DebuggerProvider(
 		AsyncPackage package,
@@ -535,9 +553,21 @@ internal sealed class DebuggerProvider
 							}
 							catch { }
 
+							var bpId = $"{fullPath}:{bp.FileLine}";
+							_sessionBreakpointIds.TryAdd(bpId, 0);
+							try
+							{
+								var rawFile = bp.File;
+								if (!string.IsNullOrEmpty(rawFile))
+								{
+									_sessionBreakpointIds.TryAdd($"{rawFile}:{bp.FileLine}", 0);
+								}
+							}
+							catch { }
+
 							response.Breakpoints.Add(new BreakpointInfo
 							{
-								Id = $"{fullPath}:{bp.FileLine}",
+								Id = bpId,
 								FilePath = fullPath,
 								Line = bp.FileLine,
 								Column = bp.FileColumn,
@@ -618,12 +648,13 @@ internal sealed class DebuggerProvider
 		CancellationToken cancellationToken)
 	{
 		if (!request.ClearAll &&
+		    request.SessionOnly != true &&
 		    string.IsNullOrWhiteSpace(request.FilePath) &&
 		    string.IsNullOrWhiteSpace(request.BreakpointId))
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.InvalidRequest,
-				"Must specify 'clearAll: true', 'filePath', or 'breakpointId' to clear breakpoints. Preventing accidental full deletion.");
+				"Must specify 'clearAll: true', 'sessionOnly: true', 'filePath', or 'breakpointId' to clear breakpoints. Preventing accidental full deletion.");
 		}
 
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -660,7 +691,17 @@ internal sealed class DebuggerProvider
 
 				var bpId = !string.IsNullOrEmpty(bpFile) ? $"{bpFile}:{bpLine}" : $"bp:{bpLine}";
 
-				if (request.ClearAll)
+				if (request.SessionOnly == true)
+				{
+					var inSession = _sessionBreakpointIds.ContainsKey(bpId) ||
+					                (!string.IsNullOrEmpty(bpFile) && _sessionBreakpointIds.ContainsKey($"{bpFile}:{bpLine}"));
+					if (!inSession)
+					{
+						continue;
+					}
+				}
+
+				if (request.ClearAll || request.SessionOnly == true)
 				{
 					toDelete.Add(bp);
 				}
@@ -697,6 +738,17 @@ internal sealed class DebuggerProvider
 			{
 				try
 				{
+					string bpFile = string.Empty;
+					int bpLine = 0;
+					try { bpFile = bp.File ?? string.Empty; } catch { }
+					try { bpLine = bp.FileLine; } catch { }
+					var bpId = !string.IsNullOrEmpty(bpFile) ? $"{bpFile}:{bpLine}" : $"bp:{bpLine}";
+					_sessionBreakpointIds.TryRemove(bpId, out _);
+					if (!string.IsNullOrEmpty(bpFile))
+					{
+						_sessionBreakpointIds.TryRemove($"{bpFile}:{bpLine}", out _);
+					}
+
 					bp.Delete();
 					response.ClearedCount++;
 				}
@@ -708,6 +760,11 @@ internal sealed class DebuggerProvider
 						Message = $"Failed to delete breakpoint: {ex.Message}"
 					});
 				}
+			}
+
+			if (request.ClearAll && request.SessionOnly != true)
+			{
+				_sessionBreakpointIds.Clear();
 			}
 
 			response.RemainingCount = debugger.Breakpoints?.Count ?? 0;
@@ -906,11 +963,14 @@ internal sealed class DebuggerProvider
 		}
 
 		var maxFrames = Clamp(request.MaxFrames ?? DefaultMaxFrames, 1, MaxAllowedFrames);
-		var frames = new List<StackFrameInfo>();
 		var threadName = thread.Name ?? string.Empty;
 		var threadId = thread.ID;
 
 		var totalFrames = 0;
+		int? firstUserFrameIndex = null;
+		var userCodeFramesCount = 0;
+		var rawFrames = new List<StackFrameInfo>();
+
 		try
 		{
 			var stackFrames = thread.StackFrames;
@@ -921,12 +981,23 @@ internal sealed class DebuggerProvider
 				foreach (StackFrame frame in stackFrames)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
-					if (frameIndex >= maxFrames)
+					if (frameIndex >= MaxAllowedFrames)
 					{
 						break;
 					}
 
-					frames.Add(ReadStackFrame(frame, frameIndex));
+					var frameInfo = ReadStackFrame(frame, frameIndex);
+					var isExt = IsExternalFrame(frameInfo);
+					if (!isExt)
+					{
+						if (firstUserFrameIndex == null)
+						{
+							firstUserFrameIndex = frameIndex;
+						}
+						userCodeFramesCount++;
+					}
+
+					rawFrames.Add(frameInfo);
 					frameIndex++;
 				}
 			}
@@ -939,6 +1010,71 @@ internal sealed class DebuggerProvider
 				ex);
 		}
 
+		var frames = new List<StackFrameInfo>();
+		if (request.UserCodeOnly == true)
+		{
+			foreach (var f in rawFrames)
+			{
+				if (!IsExternalFrame(f))
+				{
+					frames.Add(f);
+					if (frames.Count >= maxFrames)
+					{
+						break;
+					}
+				}
+			}
+		}
+		else if (request.CollapseExternal == true)
+		{
+			var i = 0;
+			while (i < rawFrames.Count && frames.Count < maxFrames)
+			{
+				if (!IsExternalFrame(rawFrames[i]))
+				{
+					frames.Add(rawFrames[i]);
+					i++;
+				}
+				else
+				{
+					var startIdx = i;
+					var distinctModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+					while (i < rawFrames.Count && IsExternalFrame(rawFrames[i]))
+					{
+						var mod = rawFrames[i].Module;
+						if (!string.IsNullOrWhiteSpace(mod))
+						{
+							distinctModules.Add(Path.GetFileName(mod));
+						}
+						i++;
+					}
+
+					var count = i - startIdx;
+					if (count == 1)
+					{
+						frames.Add(rawFrames[startIdx]);
+					}
+					else
+					{
+						var modSummary = distinctModules.Count > 0 ? string.Join(", ", distinctModules.Take(3)) : "System & Runtime";
+						frames.Add(new StackFrameInfo
+						{
+							FrameIndex = startIdx,
+							FunctionName = $"[External Code: {modSummary} - {count} frames]",
+							UserCode = false
+						});
+					}
+				}
+			}
+		}
+		else
+		{
+			for (var i = 0; i < rawFrames.Count && i < maxFrames; i++)
+			{
+				frames.Add(rawFrames[i]);
+			}
+		}
+
 		return new DebuggerGetCallStackResponse
 		{
 			VsInstanceId = _vsInstanceId,
@@ -946,7 +1082,9 @@ internal sealed class DebuggerProvider
 			ThreadName = string.IsNullOrWhiteSpace(threadName) ? null : threadName,
 			Frames = frames,
 			TotalFrames = totalFrames,
-			Truncated = totalFrames > frames.Count
+			Truncated = totalFrames > frames.Count,
+			FirstUserFrameIndex = firstUserFrameIndex,
+			UserCodeFramesCount = userCodeFramesCount
 		};
 	}
 
@@ -1215,6 +1353,7 @@ internal sealed class DebuggerProvider
 			}
 		}
 
+		await TrySuppressCrtDialogAsync(isAttach: false, cancellationToken);
 		return CaptureExecutionResult(debugger, "start", previousMode);
 	}
 
@@ -1313,6 +1452,7 @@ internal sealed class DebuggerProvider
 				}
 			}
 
+			await TrySuppressCrtDialogAsync(isAttach: false, cancellationToken);
 			return CaptureExecutionResult(debugger, "start", previousMode);
 		}
 		finally
@@ -2736,6 +2876,8 @@ internal sealed class DebuggerProvider
 			}
 		}
 
+		await TrySuppressCrtDialogAsync(isAttach: true, cancellationToken);
+
 		var isDebugging = debugger.CurrentMode != dbgDebugMode.dbgDesignMode;
 		var currentMode = GetModeString(debugger.CurrentMode);
 		string? breakReason = null;
@@ -3357,6 +3499,141 @@ internal sealed class DebuggerProvider
 			Language = string.IsNullOrWhiteSpace(language) ? null : language,
 			Module = string.IsNullOrWhiteSpace(module) ? null : module
 		};
+	}
+
+	private static readonly HashSet<string> ExternalModulePrefixes = new(StringComparer.OrdinalIgnoreCase)
+	{
+		"ntdll", "kernel32", "kernelbase", "user32", "gdi32", "combase", "ole32", "shell32",
+		"ucrtbase", "ucrtbased", "msvcp", "msvcr", "vcruntime", "vcamp", "clr", "mscoree",
+		"qt5core", "qt5gui", "qt5widgets", "qt5network", "qt6core", "qt6gui", "qt6widgets", "qwindows"
+	};
+
+	private static bool IsExternalFrame(StackFrameInfo frame)
+	{
+		if (frame.UserCode.HasValue)
+		{
+			return !frame.UserCode.Value;
+		}
+
+		if (!string.IsNullOrWhiteSpace(frame.Module))
+		{
+			var mod = Path.GetFileNameWithoutExtension(frame.Module);
+			foreach (var prefix in ExternalModulePrefixes)
+			{
+				if (mod.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+				{
+					return true;
+				}
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(frame.FileName))
+		{
+			var fn = frame.FileName;
+			if (fn.IndexOf("\\include\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("/include/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("\\ucrt\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("\\Qt\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("/Qt/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("\\Program Files", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			    fn.IndexOf("/Program Files", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				return true;
+			}
+		}
+
+		if (string.IsNullOrWhiteSpace(frame.FileName))
+		{
+			var fn = frame.FunctionName ?? string.Empty;
+			if (fn.StartsWith("std::", StringComparison.Ordinal) ||
+			    fn.StartsWith("QCoreApplication", StringComparison.Ordinal) ||
+			    fn.StartsWith("QApplication", StringComparison.Ordinal) ||
+			    fn.StartsWith("QWidget", StringComparison.Ordinal) ||
+			    fn.StartsWith("operator delete", StringComparison.Ordinal) ||
+			    fn.StartsWith("operator new", StringComparison.Ordinal) ||
+			    fn.StartsWith("_Crt", StringComparison.Ordinal) ||
+			    fn.StartsWith("__scrt", StringComparison.Ordinal) ||
+			    fn.StartsWith("qDeleteInEventHandler", StringComparison.Ordinal))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private async Task TrySuppressCrtDialogAsync(bool isAttach, CancellationToken cancellationToken)
+	{
+		try
+		{
+			var enabled = isAttach ? SuppressCrtDialogOnAttach : SuppressCrtDialogOnStart;
+			if (!enabled)
+			{
+				return;
+			}
+
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+			var debugger = await GetDebuggerAsync(cancellationToken);
+
+			if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+			{
+				return;
+			}
+
+			var wasBreakMode = debugger.CurrentMode == dbgDebugMode.dbgBreakMode;
+			if (!wasBreakMode)
+			{
+				await Task.Delay(100, cancellationToken);
+				await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+				if (debugger.CurrentMode == dbgDebugMode.dbgRunMode)
+				{
+					try
+					{
+						debugger.Break(false);
+						var sw = System.Diagnostics.Stopwatch.StartNew();
+						while (sw.ElapsedMilliseconds < 1000 && debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+						{
+							await Task.Delay(50, cancellationToken);
+							await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+							if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+							{
+								return;
+							}
+						}
+					}
+					catch { }
+				}
+			}
+
+			if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+			{
+				try
+				{
+					// _CRT_ERROR = 2, _CRTDBG_MODE_DEBUG = 4
+					debugger.GetExpression("_CrtSetReportMode(2, 4)", UseAutoExpandRules: false, Timeout: 1000);
+					// _CRT_ASSERT = 1, _CRTDBG_MODE_DEBUG = 4
+					debugger.GetExpression("_CrtSetReportMode(1, 4)", UseAutoExpandRules: false, Timeout: 1000);
+				}
+				catch
+				{
+					// Safe ignore: Release builds or non-CRT modules don't export _CrtSetReportMode
+				}
+
+				if (!wasBreakMode && debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+				{
+					try
+					{
+						debugger.Go(false);
+					}
+					catch { }
+				}
+			}
+		}
+		catch
+		{
+			// Safe fallback: never block or fail debugger start/attach
+		}
 	}
 
 	private static string GetModeString(dbgDebugMode mode) => mode switch

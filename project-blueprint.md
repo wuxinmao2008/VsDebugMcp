@@ -14,6 +14,24 @@
 
 ## 实施进度（2026-09-16 更新）
 
+### Phase 8A：Native C++ 调试韧性与诊断体验优化已完成开发 (v0.1.24.0)
+
+- **CRT 调试弹窗压制 (Zero-Symbol Runtime Injection)**：
+  - 针对 MSVC CRT 在堆越界损坏或断言失败时弹出阻塞性模态框（MessageBox）并导致调试器卡在 `mode: running` 的痛点（Issue #3），实现零符号纯运行时注入管道；
+  - 启动或附加后短暂暂停执行 `_CrtSetReportMode(2, 4)` 与 `_CrtSetReportMode(1, 4)`，彻底杜绝弹窗，让 CRT 报错直接触发 `__debugbreak()`（`int 3`）直达真正的中断断点；
+  - 开关解耦与环境变量配置：`SuppressCrtDialogOnStart`（默认 true）与 `SuppressCrtDialogOnAttach`（默认 false），支持 `VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_START` 与 `VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_ATTACH`；
+  - 保持 MCP 工具接口纯净：`vs_debugger_start` 与 `vs_debugger_attach_process` 无新增参数负担。
+- **调用栈智能过滤与外部帧折叠 (`vs_debugger_get_call_stack`)**：
+  - 新增参数 `userCodeOnly: bool` 与 `collapseExternal: bool`；
+  - 智能识别 Windows SDK、CRT 运行时（`ucrtbase`、`kernel32`、`ntdll` 等）与 Qt 框架外部帧，支持自动将连续外部堆栈帧聚合为单一摘要帧（例如 `[External Code: Qt & Runtime - 18 frames]`）；
+  - 响应新增 `firstUserFrameIndex` 与 `userCodeFramesCount` 关键指标，彻底解决长调用栈 JSON 导致宿主客户端落盘临时文件的问题。
+- **断点会话隔离与定向清理 (`vs_debugger_clear_breakpoints`)**：
+  - 内部维护 `_sessionBreakpointIds` 线程安全集合，跟踪当前 MCP 会话所设置的所有探针断点；
+  - `vs_debugger_clear_breakpoints` 新增 `sessionOnly: bool` 参数，支持在排查结束后一键仅清理 MCP 探针断点，安全保护开发者在 IDE 中预先设置的个人断点。
+- **自动化测试验证**：
+  - 单元测试：`VsDebugMcp.Protocol.Tests` (38/38 PASS) + `VsDebugMcp.Host.Tests` (184/184 PASS)，全套 222 个单元测试 100% 通过；
+  - 组件版本统一升级至 **`0.1.24.0`**。
+
 ### Phase 7C：CMake 目标启动调试与 CTest 单元测试体系集成已完成开发并通过全链路在线实测验收 (v0.1.23.0)
 
 - **CTest 规范模型与双重解析 (`CTestModels.cs`, `CTestParser`)**：

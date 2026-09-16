@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.24.0] - 2026-09-16
+
+### Added
+- **Native C++ 调试韧性与诊断体验优化 (Phase 8A / Issue #3 闭环)**:
+  - **CRT 调试弹窗压制 (Zero-Symbol Runtime Injection)**:
+    - 针对 MSVC CRT 在断言失败或原生堆损坏时弹出阻塞性模态框（MessageBox）的问题，在调试启动与附加时引入静默运行时注入机制。
+    - 采用零符号短暂挂起方案（Break ➔ `_CrtSetReportMode(2, 4); _CrtSetReportMode(1, 4);` ➔ Go），免除对入口符号（`main`/`WinMain`/`qt_main`）的推测与依赖，完全保持用户 C++ 源码及工程配置零侵入。
+    - 开关配置解耦：提供 `SuppressCrtDialogOnStart`（默认 `true`）与 `SuppressCrtDialogOnAttach`（默认 `false`），支持环境变量 `VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_START` 与 `VSDEBUGMCP_SUPPRESS_CRT_DIALOG_ON_ATTACH`。
+    - MCP 工具接口保持纯净：`vs_debugger_start` 与 `vs_debugger_attach_process` 保持原始接口不变，消除 Agent 额外认知负担。
+  - **调用栈智能过滤与外部系统帧折叠 (`vs_debugger_get_call_stack`)**:
+    - 新增参数 `userCodeOnly: bool` 与 `collapseExternal: bool`。
+    - 智能识别 Windows SDK、CRT 运行时与 Qt 框架外部帧，支持自动将连续外部堆栈帧聚合为单一摘要帧（例如 `[External Code: Qt & Runtime - 18 frames]`）。
+    - 响应新增 `firstUserFrameIndex` 与 `userCodeFramesCount` 关键指标，彻底解决大调用栈 JSON 导致 Agent 触发临时文件落盘的问题。
+  - **断点会话隔离与一键清理 (`vs_debugger_clear_breakpoints`)**:
+    - 内部维护 `_sessionBreakpointIds` 线程安全集合，跟踪当前 MCP 会话所设置的所有探针断点。
+    - `vs_debugger_clear_breakpoints` 新增 `sessionOnly: bool` 参数，支持在排查结束后一键仅清理 MCP 探针断点，安全保护开发者在 IDE 中预先设置的个人断点。
+  - **自动化测试**:
+    - 新增 `Phase8aProtocolTests.cs`，扩展 `McpToolSchemaTests.cs`，单元测试套件全部通过 (222/222 PASS)。
+
 ## [0.1.23.0] - 2026-09-15
 
 ### Added
