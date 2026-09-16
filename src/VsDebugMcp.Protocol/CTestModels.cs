@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+#if NETSTANDARD2_0
+using Newtonsoft.Json.Linq;
+#else
 using System.Text.Json;
+#endif
 using System.Xml.Linq;
 
 namespace VsDebugMcp.Protocol;
@@ -44,6 +48,111 @@ public static class CTestParser
             return result;
         }
 
+#if NETSTANDARD2_0
+        try
+        {
+            int firstBrace = jsonContent.IndexOf('{');
+            if (firstBrace > 0)
+            {
+                jsonContent = jsonContent.Substring(firstBrace);
+            }
+            int lastBrace = jsonContent.LastIndexOf('}');
+            if (lastBrace >= 0 && lastBrace < jsonContent.Length - 1)
+            {
+                jsonContent = jsonContent.Substring(0, lastBrace + 1);
+            }
+
+            var root = JObject.Parse(jsonContent);
+
+            // Parse file paths from backtraceGraph
+            var filePaths = new List<string>();
+            var nodes = new List<(int fileIndex, int line)>();
+            if (root["backtraceGraph"] is JObject bgEl)
+            {
+                if (bgEl["files"] is JArray filesEl)
+                {
+                    foreach (var f in filesEl)
+                    {
+                        filePaths.Add((string?)f ?? string.Empty);
+                    }
+                }
+
+                if (bgEl["nodes"] is JArray nodesEl)
+                {
+                    foreach (var n in nodesEl)
+                    {
+                        int fileIdx = (int?)n["file"] ?? -1;
+                        int line = (int?)n["line"] ?? 0;
+                        nodes.Add((fileIdx, line));
+                    }
+                }
+            }
+
+            if (root["tests"] is JArray testsEl)
+            {
+                foreach (var tEl in testsEl)
+                {
+                    string name = (string?)tEl["name"] ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    string command = string.Empty;
+                    if (tEl["command"] is JArray cmdEl)
+                    {
+                        foreach (var c in cmdEl)
+                        {
+                            command = (string?)c ?? string.Empty;
+                            break;
+                        }
+                    }
+
+                    string workingDir = string.Empty;
+                    if (tEl["properties"] is JArray propsEl)
+                    {
+                        foreach (var p in propsEl)
+                        {
+                            if (string.Equals((string?)p["name"], "WORKING_DIRECTORY", StringComparison.OrdinalIgnoreCase))
+                            {
+                                workingDir = (string?)p["value"] ?? string.Empty;
+                                break;
+                            }
+                        }
+                    }
+
+                    string filePath = string.Empty;
+                    int lineNumber = 0;
+                    var btVal = (int?)tEl["backtrace"];
+                    if (btVal.HasValue)
+                    {
+                        int btIdx = btVal.Value;
+                        if (btIdx >= 0 && btIdx < nodes.Count)
+                        {
+                            var node = nodes[btIdx];
+                            if (node.fileIndex >= 0 && node.fileIndex < filePaths.Count)
+                            {
+                                filePath = filePaths[node.fileIndex];
+                                lineNumber = node.line;
+                            }
+                        }
+                    }
+
+                    result.Add(new CTestItem
+                    {
+                        Name = name,
+                        Command = command,
+                        WorkingDirectory = workingDir,
+                        FilePath = filePath,
+                        LineNumber = lineNumber
+                    });
+                }
+            }
+        }
+        catch
+        {
+        }
+#else
         try
         {
             int firstBrace = jsonContent.IndexOf('{');
@@ -148,6 +257,7 @@ public static class CTestParser
         catch
         {
         }
+#endif
 
         return result;
     }

@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+#if NETSTANDARD2_0
+using System.Linq;
+using Newtonsoft.Json.Linq;
+#else
 using System.Text.Json;
+#endif
 
 namespace VsDebugMcp.Protocol;
 
@@ -27,6 +32,179 @@ public static class CMakePresetsParser
             return list;
         }
 
+#if NETSTANDARD2_0
+        try
+        {
+            var root = JObject.Parse(jsonContent);
+            if (root["configurePresets"] is JArray presetsEl)
+            {
+                var allPresetsByName = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
+                foreach (var p in presetsEl.OfType<JObject>())
+                {
+                    var pn = (string?)p["name"];
+                    if (!string.IsNullOrEmpty(pn))
+                    {
+                        allPresetsByName[pn!] = p;
+                    }
+                }
+
+                foreach (var presetEl in presetsEl.OfType<JObject>())
+                {
+                    bool hidden = (bool?)presetEl["hidden"] ?? false;
+                    if (hidden)
+                    {
+                        continue;
+                    }
+
+                    string name = (string?)presetEl["name"] ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    string displayName = (string?)presetEl["displayName"] ?? string.Empty;
+                    string description = (string?)presetEl["description"] ?? string.Empty;
+                    string generator = (string?)presetEl["generator"] ?? string.Empty;
+                    string rawBinaryDir = (string?)presetEl["binaryDir"] ?? string.Empty;
+
+                    // Traverse inherits for binaryDir and generator if not set
+                    if (string.IsNullOrWhiteSpace(rawBinaryDir) || string.IsNullOrWhiteSpace(generator))
+                    {
+                        var inEl = presetEl["inherits"];
+                        if (inEl != null)
+                        {
+                            var parentNames = new List<string>();
+                            if (inEl.Type == JTokenType.String)
+                            {
+                                parentNames.Add((string)inEl!);
+                            }
+                            else if (inEl is JArray inArray)
+                            {
+                                foreach (var item in inArray)
+                                {
+                                    if (item.Type == JTokenType.String)
+                                    {
+                                        parentNames.Add((string)item!);
+                                    }
+                                }
+                            }
+
+                            foreach (var parentName in parentNames)
+                            {
+                                if (allPresetsByName.TryGetValue(parentName, out var parentEl))
+                                {
+                                    if (string.IsNullOrWhiteSpace(rawBinaryDir))
+                                    {
+                                        rawBinaryDir = (string?)parentEl["binaryDir"] ?? string.Empty;
+                                    }
+                                    if (string.IsNullOrWhiteSpace(generator))
+                                    {
+                                        generator = (string?)parentEl["generator"] ?? string.Empty;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawBinaryDir))
+                    {
+                        rawBinaryDir = "${sourceDir}/out/build/${presetName}";
+                    }
+
+                    string arch = string.Empty;
+                    var aEl = presetEl["architecture"];
+                    if (aEl != null)
+                    {
+                        if (aEl.Type == JTokenType.String)
+                        {
+                            arch = (string)aEl!;
+                        }
+                        else if (aEl is JObject aObj && aObj["value"] != null)
+                        {
+                            arch = (string?)aObj["value"] ?? string.Empty;
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(arch))
+                    {
+                        if (name.StartsWith("x64", StringComparison.OrdinalIgnoreCase))
+                        {
+                            arch = "x64";
+                        }
+                        else if (name.StartsWith("x86", StringComparison.OrdinalIgnoreCase) ||
+                                 name.StartsWith("win32", StringComparison.OrdinalIgnoreCase))
+                        {
+                            arch = "x86";
+                        }
+                        else if (name.StartsWith("arm64", StringComparison.OrdinalIgnoreCase))
+                        {
+                            arch = "ARM64";
+                        }
+                    }
+
+                    string buildType = string.Empty;
+                    if (presetEl["cacheVariables"] is JObject cvEl)
+                    {
+                        var btEl = cvEl["CMAKE_BUILD_TYPE"];
+                        if (btEl != null)
+                        {
+                            if (btEl.Type == JTokenType.String)
+                            {
+                                buildType = (string)btEl!;
+                            }
+                            else if (btEl is JObject bObj && bObj["value"] != null)
+                            {
+                                buildType = (string?)bObj["value"] ?? string.Empty;
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(buildType))
+                    {
+                        if (name.IndexOf("Debug", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            buildType = "Debug";
+                        }
+                        else if (name.IndexOf("RelWithDebInfo", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            buildType = "RelWithDebInfo";
+                        }
+                        else if (name.IndexOf("MinSizeRel", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            buildType = "MinSizeRel";
+                        }
+                        else if (name.IndexOf("Release", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            buildType = "Release";
+                        }
+                    }
+
+                    string evaluatedBinaryDir = string.Empty;
+                    if (!string.IsNullOrWhiteSpace(rawBinaryDir))
+                    {
+                        evaluatedBinaryDir = rawBinaryDir
+                            .Replace("${sourceDir}", workspaceRoot.TrimEnd('\\', '/'))
+                            .Replace("${presetName}", name);
+                    }
+
+                    list.Add(new CMakeConfigurePreset
+                    {
+                        Name = name,
+                        DisplayName = string.IsNullOrWhiteSpace(displayName) ? name : displayName,
+                        Description = description,
+                        Generator = generator,
+                        Architecture = arch,
+                        BuildType = buildType,
+                        BinaryDir = evaluatedBinaryDir
+                    });
+                }
+            }
+        }
+        catch
+        {
+            // Return any successfully parsed presets or empty list on invalid JSON
+        }
+#else
         try
         {
             using var doc = JsonDocument.Parse(jsonContent);
@@ -225,6 +403,7 @@ public static class CMakePresetsParser
         {
             // Return any successfully parsed presets or empty list on invalid JSON
         }
+#endif
 
         return list;
     }
