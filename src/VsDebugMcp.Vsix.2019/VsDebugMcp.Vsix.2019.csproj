@@ -16,6 +16,7 @@
     <DefineConstants>$(DefineConstants);VS2019</DefineConstants>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
     <NoWarn>$(NoWarn);1762</NoWarn>
+    <RootNamespace>VsDebugMcp_Vsix</RootNamespace>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <VsixDeployOnDebug>false</VsixDeployOnDebug>
