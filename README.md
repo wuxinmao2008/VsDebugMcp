@@ -85,9 +85,13 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_auto_attach` — One-click batch auto-attachment for solution processes
 - `vs_debugger_attach_process` with explicit mixed-mode `engines` parameter (`Native`, `Managed`)
 
-### Aggregated Diagnostic Snapshot & Memory Reading (Phase 5D)
-- `vs_debugger_get_snapshot` — Atomic, single-call capture of full debugging context (process, thread, stack, locals, debug logs)
-- `vs_debugger_read_memory` — Raw virtual memory byte inspection via Win32 `ReadProcessMemory` (HexDump and Base64)
+### Aggregated Diagnostic Snapshot, Post-Mortem DMP, Disassembly & Memory Reading (Phase 5D & Phase 8B)
+- `vs_debugger_get_snapshot` — Atomic, single-call capture of full debugging context (process, thread, stack, locals, exception details, debug logs)
+- `vs_debugger_get_exception_info` — Deep exception inspection across live sessions and Minidump (`.dmp`) `ExceptionStream` (exception code `0xC0000005`, access operation `read`/`write`, faulting virtual address)
+- `vs_debugger_read_memory` — Multi-tier virtual memory inspection across live Win32 `ReadProcessMemory`, Minidump `Memory64ListStream`/`MemoryListStream`, and debugger pointer evaluation fallback (with HexDump, Base64, and UTF-16 string preview)
+- `vs_debugger_get_disassembly` — Native assembly instruction inspection around any address or call stack frame with automatic PE `ImageBase` -> runtime `LoadAddress` rebasing
+- `vs_debugger_load_symbols` — Dynamic PDB symbol path registration via `IVsDebuggerSymbolSettingsManager120A` and live module symbol reload
+- `vs_run_build` — Solution-wide or targeted single-project (`projectName`) build with `action` (`build` / `rebuild` / `clean`) across MSBuild and CMake tracks
 
 ### Agent Interactive Feedback & Diagnostic Reporting (Phase 5E)
 - `vs_report_mcp_issue` — Agent-driven tool friction and bug reporting with DLP privacy filtering, local audit markdown export, and prefilled GitHub Issue creation

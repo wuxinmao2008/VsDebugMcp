@@ -3,16 +3,36 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 全系列（VS 2017 ~ VS 2026 / VS 15.x ~ 18.x）提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0 ~ Phase 7C 全部完成并完成全链路在线实测验收，51 个 MCP 工具全量就绪并原生扩展支持现代 CMake 与 CTest 体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
+- 阶段：Phase 0 ~ Phase 8B 全部完成开发，53 个 MCP 工具全量就绪并原生扩展支持现代 CMake、CTest 及 Minidump 事后崩溃分析与反汇编体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
 - 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 工程架构演进：核心业务逻辑 100% 聚合于显式 C# 共享项目 `VsDebugMcp.Vsix.Shared.shproj`，以源码级直接注入编译，零额外运行时 DLL。分别由 `VsDebugMcp.Vsix` (VS 2022~2026 64-bit) 和 `VsDebugMcp.Vsix.2019` (VS 2017~2019 32-bit) 独立打包。
-- 能力范围：构建/编译、断点设置、调试状态/调用栈/表达式求值诊断、输出窗口、项目工程与文件树、单元测试联动、进程虚拟内存透视。
+- 能力范围：构建/编译（整包或单项目 Build/Rebuild/Clean）、断点设置、调试状态/调用栈/表达式求值诊断、Minidump 异常流与内存流解析、无符号反汇编透视、动态 PDB 符号加载、输出窗口、项目工程与文件树、单元测试联动、进程虚拟内存透视。
 - 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43260` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-09-16 更新）
+## 实施进度（2026-10-13 更新）
+
+### Phase 8B：Minidump 事后调试、反汇编透视、动态符号加载与单项目构建已完成开发 (v0.1.25.0)
+
+- **Minidump 异常流解析 (`vs_debugger_get_exception_info` / `vs_debugger_get_snapshot`)**：
+  - 针对 `.dmp` 调试下输出窗格无异常日志导致 `hasException: false` 的盲区（Issue #4），新增零外部依赖的 `MinidumpParser.TryReadExceptionInfo` 直接解析 Minidump `ExceptionStream` (StreamType 6)；
+  - 精准提取异常码（如 `0xC0000005`）、异常类型名称（`EXCEPTION_ACCESS_VIOLATION`）、异常指令地址 `exceptionAddress`、崩溃线程 ID `faultingThreadId`、读写操作类型 `accessOperation` (`read`/`write`/`execute`) 与违规目标地址 `faultingAddress`。
+- **DMP 内存读取与三级降级 (`vs_debugger_read_memory`)**：
+  - 修复 `.dmp` 调试下 `ProcessID = 0` 导致 `Win32 OpenProcess error 87` 失败的问题；
+  - 实现三级内存读取架构：`win32_read_process_memory`（实时进程）➔ `minidump_stream`（直接解析 `.dmp` 的 `Memory64ListStream` Type 9 与 `MemoryListStream` Type 5）➔ `debugger_eval`（通过 `*(unsigned __int64*)` 表达式兜底读取）；
+  - 响应新增 `utf16Preview`（自动提取宽字符 `wchar_t*` 字符串）与 `readSource`。
+- **原生反汇编指令透视 (`vs_debugger_get_disassembly`, 工具 #52)**：
+  - 支持按地址 `address` 或栈帧序号 `frameIndex` 提取崩溃点前后的机器码与汇编指令，并标记当前/目标指令（`=>`）；
+  - 基于 PE `ImageBase` 与运行时 `LoadAddress` 自动重定位计算，并采用带 `/RANGE` 窄窗口优先、流式早停回退的 `dumpbin.exe /DISASM:BYTES` 机制。
+- **动态符号路径注入 (`vs_debugger_load_symbols`, 工具 #53)**：
+  - 通过 `IVsDebuggerSymbolSettingsManager120A` 动态注入 `.pdb` 文件或目录路径至 Visual Studio 调试器符号配置并保存生效，返回更新后的模块符号状态。
+- **单项目定向编译与 Rebuild/Clean (`vs_run_build`)**：
+  - 新增 `projectName` 与 `action` (`"build" | "rebuild" | "clean"`)，SLN 轨通过 `StartSimpleUpdateProjectConfiguration` 驱动单项目构建，CMake 轨映射 `--target` 与 `--clean-first`。
+- **C/C++ 字符串指针求值自动预览 (`vs_debugger_evaluate_expr` / `vs_debugger_evaluate_expressions`)**：
+  - 完善 MSVC 格式化修饰符（`,s`、`,su`、`,s8`、`,x`、`ptr,10`）文档指引，并在 `char*` / `wchar_t*` 求值仅返回裸地址时自动追加字符串预览。
+- **组件版本统一升级至 `0.1.25.0`**。
 
 ### Phase 8A：Native C++ 调试韧性与诊断体验优化已完成开发 (v0.1.24.0)
 

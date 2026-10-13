@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25.0] - 2026-10-13
+
+### Added
+- **Minidump 事后调试、无符号汇编透视、动态符号加载与单工程构建增强 (Phase 8B / Issue #4 闭环)**:
+  - **Minidump 异常流解析 (`vs_debugger_get_exception_info` / `vs_debugger_get_snapshot`)**:
+    - 针对 `.dmp` 调试下输出窗格为空导致 `hasException: false` 的盲区，新增零依赖 `MinidumpParser.TryReadExceptionInfo` 直接解析 Minidump `ExceptionStream` (StreamType 6)。
+    - 结构化返回异常码（如 `0xC0000005`）、异常类型名称（`EXCEPTION_ACCESS_VIOLATION`）、异常指令地址 `exceptionAddress`、崩溃线程 ID `faultingThreadId`、读写操作类型 `accessOperation` (`read`/`write`/`execute`) 与违规目标地址 `faultingAddress`。
+  - **DMP 内存读取与多级降级 (`vs_debugger_read_memory`)**:
+    - 修复 `.dmp` 会话中 `ProcessID = 0` 导致 `Win32 OpenProcess error 87` 失败的问题。
+    - 实现三级内存读取架构：实时进程优先走 `win32_read_process_memory` ➔ DMP 文件走 `minidump_stream`（直接解析 `Memory64ListStream` Type 9 与 `MemoryListStream` Type 5）➔ 调试器表达式 `*(unsigned __int64*)` 求值兜底 (`debugger_eval`)。
+    - 响应新增 `utf16Preview`（自动检测并提取宽字符 `wchar_t*` 文本）与 `readSource` 字段。
+  - **原生反汇编指令透视 (`vs_debugger_get_disassembly`, 工具 #52)**:
+    - 支持按内存地址 `address` 或调用栈帧序号 `frameIndex` 提取崩溃点前后的原生机器码与汇编指令（可指定 `instructionCount` 与 `instructionsBefore`），并自动高亮标记当前指令（`=>`）。
+    - 基于模块 PE `ImageBase` 与运行时 `LoadAddress` 自动完成重定位计算，并采用带 `/RANGE` 窄窗口优先、流式早停回退的 `dumpbin.exe /DISASM:BYTES` 双轨机制，即使无 PDB 符号也能秒级定位空指针或 `-1` 越界指令。
+  - **动态符号路径注入与重载 (`vs_debugger_load_symbols`, 工具 #53)**:
+    - 通过 `IVsDebuggerSymbolSettingsManager120A` 动态向 Visual Studio 调试器符号配置注入本地 `.pdb` 文件或目录路径并触发符号保存与加载，返回刷新后的模块符号状态列表。
+  - **单项目定向编译与 Rebuild/Clean 支持 (`vs_run_build`)**:
+    - 新增可选参数 `projectName`（按工程名称或唯一标识匹配单个项目）与 `action`（`"build" | "rebuild" | "clean"`）。
+    - SLN 轨通过 `IVsSolutionBuildManager2.StartSimpleUpdateProjectConfiguration` 精确驱动单工程 Build/Rebuild/Clean；CMake 轨自动映射 `--target <projectName>` 与 `--clean-first`。
+  - **C/C++ 字符串指针求值自动预览与格式化指引 (`vs_debugger_evaluate_expr` / `vs_debugger_evaluate_expressions`)**:
+    - 在工具参数说明中显式补充 MSVC 格式化修饰符（`,s`、`,su`、`,s8`、`,x`、`ptr,10`）。
+    - 当 `char*` 或 `wchar_t*` 表达式求值结果仅返回裸十六进制地址时，自动追加 `,s` / `,su` 二次求值并拼接可读字符串预览。
+  - **自动化测试**:
+    - 新增 `MinidumpParserTests.cs`，更新 `McpToolSchemaTests.cs`、`BridgeServiceExceptionTests.cs` 与 `DiagnosticSnapshotEnhancementTests.cs`，全量暴露 **53 个标准 MCP 工具**。
+
 ## [0.1.24.0] - 2026-09-16
 
 ### Added
