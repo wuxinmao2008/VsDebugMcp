@@ -646,6 +646,12 @@ public sealed class RunBuildRequest
 
     [DataMember(Name = "platform", Order = 2, EmitDefaultValue = false)]
     public string? Platform { get; set; }
+
+    [DataMember(Name = "projectName", Order = 3, EmitDefaultValue = false)]
+    public string? ProjectName { get; set; }
+
+    [DataMember(Name = "action", Order = 4, EmitDefaultValue = false)]
+    public string? Action { get; set; }
 }
 
 [DataContract]
@@ -703,6 +709,12 @@ public sealed class BuildTaskResponse
 
     [DataMember(Name = "topErrors", Order = 13, EmitDefaultValue = false)]
     public List<string>? TopErrors { get; set; }
+
+    [DataMember(Name = "projectName", Order = 14, EmitDefaultValue = false)]
+    public string? ProjectName { get; set; }
+
+    [DataMember(Name = "action", Order = 15, EmitDefaultValue = false)]
+    public string? Action { get; set; }
 }
 
 [DataContract]
@@ -1268,6 +1280,21 @@ public sealed class DebuggerGetExceptionInfoResponse
 
     [DataMember(Name = "assertionLine", Order = 13, EmitDefaultValue = false)]
     public int? AssertionLine { get; set; }
+
+    [DataMember(Name = "exceptionCode", Order = 14, EmitDefaultValue = false)]
+    public string? ExceptionCode { get; set; }
+
+    [DataMember(Name = "exceptionAddress", Order = 15, EmitDefaultValue = false)]
+    public string? ExceptionAddress { get; set; }
+
+    [DataMember(Name = "faultingThreadId", Order = 16, EmitDefaultValue = false)]
+    public int? FaultingThreadId { get; set; }
+
+    [DataMember(Name = "accessOperation", Order = 17, EmitDefaultValue = false)]
+    public string? AccessOperation { get; set; }
+
+    [DataMember(Name = "faultingAddress", Order = 18, EmitDefaultValue = false)]
+    public string? FaultingAddress { get; set; }
 }
 
 [DataContract]
@@ -2089,6 +2116,12 @@ public sealed class DebuggerReadMemoryResponse
 
     [DataMember(Name = "warnings", Order = 9)]
     public List<BridgeWarning> Warnings { get; set; } = new();
+
+    [DataMember(Name = "utf16Preview", Order = 10, EmitDefaultValue = false)]
+    public string? Utf16Preview { get; set; }
+
+    [DataMember(Name = "readSource", Order = 11, EmitDefaultValue = false)]
+    public string? ReadSource { get; set; }
 }
 
 [DataContract]
@@ -2132,5 +2165,115 @@ public sealed class ReportMcpIssueResponse
     public Dictionary<string, string> EnvironmentSummary { get; set; } = new();
 
     [DataMember(Name = "warnings", Order = 7)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetDisassemblyRequest
+{
+    [DataMember(Name = "address", Order = 1, EmitDefaultValue = false)]
+    public string? Address { get; set; }
+
+    [DataMember(Name = "frameIndex", Order = 2, EmitDefaultValue = false)]
+    public int? FrameIndex { get; set; }
+
+    [DataMember(Name = "instructionCount", Order = 3, EmitDefaultValue = false)]
+    public int? InstructionCount { get; set; }
+
+    [DataMember(Name = "instructionsBefore", Order = 4, EmitDefaultValue = false)]
+    public int? InstructionsBefore { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DisassemblyInstruction
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "bytes", Order = 2, EmitDefaultValue = false)]
+    public string? Bytes { get; set; }
+
+    [DataMember(Name = "instruction", Order = 3)]
+    public string Instruction { get; set; } = string.Empty;
+
+    [DataMember(Name = "symbol", Order = 4, EmitDefaultValue = false)]
+    public string? Symbol { get; set; }
+
+    [DataMember(Name = "sourceFile", Order = 5, EmitDefaultValue = false)]
+    public string? SourceFile { get; set; }
+
+    [DataMember(Name = "sourceLine", Order = 6, EmitDefaultValue = false)]
+    public int? SourceLine { get; set; }
+
+    [DataMember(Name = "isCurrentInstruction", Order = 7)]
+    public bool IsCurrentInstruction { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetDisassemblyResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "targetAddress", Order = 2)]
+    public string TargetAddress { get; set; } = string.Empty;
+
+    [DataMember(Name = "frameIndex", Order = 3, EmitDefaultValue = false)]
+    public int? FrameIndex { get; set; }
+
+    [DataMember(Name = "moduleName", Order = 4, EmitDefaultValue = false)]
+    public string? ModuleName { get; set; }
+
+    [DataMember(Name = "modulePath", Order = 5, EmitDefaultValue = false)]
+    public string? ModulePath { get; set; }
+
+    [DataMember(Name = "functionName", Order = 6, EmitDefaultValue = false)]
+    public string? FunctionName { get; set; }
+
+    [DataMember(Name = "instructions", Order = 7)]
+    public List<DisassemblyInstruction> Instructions { get; set; } = new();
+
+    [DataMember(Name = "formattedText", Order = 8)]
+    public string FormattedText { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 9)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerLoadSymbolsRequest
+{
+    [DataMember(Name = "symbolPath", Order = 1)]
+    public string SymbolPath { get; set; } = string.Empty;
+
+    [DataMember(Name = "moduleName", Order = 2, EmitDefaultValue = false)]
+    public string? ModuleName { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 3, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerLoadSymbolsResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "addedSymbolPaths", Order = 2)]
+    public List<string> AddedSymbolPaths { get; set; } = new();
+
+    [DataMember(Name = "allSymbolPaths", Order = 3)]
+    public List<string> AllSymbolPaths { get; set; } = new();
+
+    [DataMember(Name = "loadedModulesCount", Order = 4)]
+    public int LoadedModulesCount { get; set; }
+
+    [DataMember(Name = "modules", Order = 5)]
+    public List<ModuleInfo> Modules { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 6)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }

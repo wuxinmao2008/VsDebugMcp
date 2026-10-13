@@ -1152,6 +1152,11 @@ internal sealed class DebuggerProvider
 			string type = expr.Type ?? string.Empty;
 			bool isValid = expr.IsValidValue;
 
+			if (isValid)
+			{
+				val = EnrichCharPointerValue(dte, debugger, request.Expression, val, type, timeoutMs);
+			}
+
 			var resp = new DebuggerEvaluateExprResponse
 			{
 				VsInstanceId = _vsInstanceId,
@@ -1535,12 +1540,20 @@ internal sealed class DebuggerProvider
 					}
 					else
 					{
+						var val = expr.Value ?? string.Empty;
+						var type = expr.Type ?? string.Empty;
+						var isValid = expr.IsValidValue;
+						if (isValid)
+						{
+							val = EnrichCharPointerValue(dte, debugger, exprStr, val, type, timeoutMs);
+						}
+
 						results.Add(new DebuggerExpressionItemResult
 						{
 							Expression = exprStr,
-							Value = expr.Value ?? string.Empty,
-							Type = expr.Type ?? string.Empty,
-							IsValid = expr.IsValidValue
+							Value = val,
+							Type = type,
+							IsValid = isValid
 						});
 					}
 				}
@@ -1725,7 +1738,7 @@ internal sealed class DebuggerProvider
 		}
 
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-		var debugger = await GetDebuggerAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 
 		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
 		{
@@ -1742,100 +1755,118 @@ internal sealed class DebuggerProvider
 				"No debugged process is currently active.");
 		}
 
-		var pid = currentProcess.ProcessID;
+		var pid = 0;
+		try { pid = currentProcess.ProcessID; } catch { }
 		var rawAddress = request.Address.Trim();
-		ulong resolvedAddr = 0;
-		var parsed = false;
+		var resolvedAddr = TryResolveAddressExpression(debugger, rawAddress);
 
-		// 1. Try parse direct hex number e.g. "0x00401000", "0x7FFE1234", "00401000"
-		if (rawAddress.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-		{
-			parsed = ulong.TryParse(rawAddress.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
-		}
-		else if (rawAddress.All(c => Uri.IsHexDigit(c)) && rawAddress.Length >= 4)
-		{
-			parsed = ulong.TryParse(rawAddress, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
-		}
-
-		// 2. If not parsed directly, try evaluate as expression (e.g. pointer variable "pBuffer" or "&variable")
-		if (!parsed)
-		{
-			try
-			{
-				var expr = debugger.GetExpression(rawAddress, UseAutoExpandRules: false, Timeout: 2000);
-				if (expr != null && expr.IsValidValue && !string.IsNullOrWhiteSpace(expr.Value))
-				{
-					var val = expr.Value.Trim();
-					var match = Regex.Match(val, @"0x[0-9a-fA-F]+");
-					if (match.Success)
-					{
-						parsed = ulong.TryParse(match.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out resolvedAddr);
-					}
-					else if (ulong.TryParse(val, out var decAddr))
-					{
-						resolvedAddr = decAddr;
-						parsed = true;
-					}
-				}
-			}
-			catch { }
-		}
-
-		if (!parsed || resolvedAddr == 0)
+		if (resolvedAddr == 0)
 		{
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.InvalidMemoryAddress,
-				$"Unable to resolve memory address from '{request.Address}'. Ensure the variable or address is accessible in the current scope.");
+				$"Unable to resolve memory address from '{request.Address}'. Ensure the variable, register, or address is accessible in the current scope.");
 		}
 
 		var byteCount = Clamp(request.ByteCount, 1, 4096);
 		var warnings = new List<BridgeWarning>();
-
-		// 3. Read memory via Windows ReadProcessMemory
-		var hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid);
-		if (hProcess == IntPtr.Zero)
-		{
-			var lastError = Marshal.GetLastWin32Error();
-			throw new DebuggerProviderException(
-				BridgeErrorCodes.MemoryReadFailed,
-				$"Failed to open process (PID: {pid}) for reading memory. Win32 error code: {lastError}");
-		}
-
-		byte[] buffer = new byte[byteCount];
+		byte[]? buffer = null;
 		int bytesRead = 0;
+		string? readSource = null;
+		int lastWin32Error = 0;
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
 
-		try
+		// Tier 1: Live OS Process ReadProcessMemory (when PID > 0 and not a Minidump file)
+		if (pid > 0 && string.IsNullOrEmpty(dumpPath))
 		{
-			var success = ReadProcessMemory(hProcess, (IntPtr)(long)resolvedAddr, buffer, byteCount, out var bytesReadPtr);
-			bytesRead = (int)bytesReadPtr;
-
-			if (!success && bytesRead == 0)
+			var hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid);
+			if (hProcess != IntPtr.Zero)
 			{
-				var lastError = Marshal.GetLastWin32Error();
-				throw new DebuggerProviderException(
-					BridgeErrorCodes.MemoryReadFailed,
-					$"ReadProcessMemory failed at address 0x{resolvedAddr:X16} (size: {byteCount}). Win32 error code: {lastError}");
-			}
-
-			if (bytesRead < byteCount)
-			{
-				Array.Resize(ref buffer, bytesRead);
-				warnings.Add(new BridgeWarning
+				try
 				{
-					Code = "partial_memory_read",
-					Message = $"Requested {byteCount} bytes, but only {bytesRead} bytes could be read (likely reached end of valid virtual memory page)."
-				});
+					var tempBuf = new byte[byteCount];
+					var success = ReadProcessMemory(hProcess, (IntPtr)(long)resolvedAddr, tempBuf, byteCount, out var bytesReadPtr);
+					bytesRead = (int)bytesReadPtr;
+					if (success || bytesRead > 0)
+					{
+						if (bytesRead < byteCount)
+						{
+							Array.Resize(ref tempBuf, bytesRead);
+							warnings.Add(new BridgeWarning
+							{
+								Code = "partial_memory_read",
+								Message = $"Requested {byteCount} bytes, but only {bytesRead} bytes could be read (likely reached end of valid virtual memory page)."
+							});
+						}
+						buffer = tempBuf;
+						readSource = "win32_read_process_memory";
+					}
+					else
+					{
+						lastWin32Error = Marshal.GetLastWin32Error();
+					}
+				}
+				finally
+				{
+					CloseHandle(hProcess);
+				}
+			}
+			else
+			{
+				lastWin32Error = Marshal.GetLastWin32Error();
 			}
 		}
-		finally
+
+		// Tier 2: Direct Minidump (.dmp) Memory64ListStream / MemoryListStream read
+		if (buffer == null && !string.IsNullOrEmpty(dumpPath))
 		{
-			CloseHandle(hProcess);
+			if (MinidumpParser.TryReadMemory(dumpPath!, resolvedAddr, byteCount, out var dmpBytes) && dmpBytes.Length > 0)
+			{
+				buffer = dmpBytes;
+				bytesRead = dmpBytes.Length;
+				readSource = "minidump_stream";
+				if (bytesRead < byteCount)
+				{
+					warnings.Add(new BridgeWarning
+					{
+						Code = "partial_memory_read",
+						Message = $"Requested {byteCount} bytes, read {bytesRead} bytes from Minidump memory stream."
+					});
+				}
+			}
 		}
 
-		// 4. Format representations
+		// Tier 3: Debugger Expression Evaluator fallback (reads 8-byte chunks via *(unsigned __int64*)0xADDR,x)
+		if (buffer == null && debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+		{
+			if (TryReadMemoryViaExpressionEvaluator(debugger, resolvedAddr, byteCount, out var evalBytes))
+			{
+				buffer = evalBytes;
+				bytesRead = evalBytes.Length;
+				readSource = "debugger_eval";
+				if (bytesRead < byteCount)
+				{
+					warnings.Add(new BridgeWarning
+					{
+						Code = "partial_memory_read",
+						Message = $"Requested {byteCount} bytes, read {bytesRead} bytes via debugger expression evaluator."
+					});
+				}
+			}
+		}
+
+		if (buffer == null || bytesRead == 0)
+		{
+			var reason = !string.IsNullOrEmpty(dumpPath)
+				? $"Address 0x{resolvedAddr:X16} is not present in the captured memory ranges of Minidump '{Path.GetFileName(dumpPath)}'."
+				: $"ReadProcessMemory failed at address 0x{resolvedAddr:X16} (PID: {pid}, size: {byteCount}). Win32 error code: {lastWin32Error}";
+			throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, reason);
+		}
+
+		// Format representations
 		var hexBytes = string.Join(" ", buffer.Select(b => b.ToString("X2")));
 		var base64Data = Convert.ToBase64String(buffer);
 		var asciiRep = new string(buffer.Select(b => b >= 32 && b <= 126 ? (char)b : '.').ToArray());
+		var utf16Preview = MinidumpParser.ExtractUtf16Preview(buffer);
 
 		var sb = new StringBuilder();
 		for (int i = 0; i < buffer.Length; i += 16)
@@ -1876,6 +1907,8 @@ internal sealed class DebuggerProvider
 			HexBytes = hexBytes,
 			HexDump = sb.ToString(),
 			AsciiRepresentation = asciiRep,
+			Utf16Preview = utf16Preview,
+			ReadSource = readSource,
 			Base64Data = base64Data,
 			Warnings = warnings
 		};
@@ -2227,7 +2260,7 @@ internal sealed class DebuggerProvider
 		CancellationToken cancellationToken)
 	{
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-		var debugger = await GetDebuggerAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
 
 		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
 		{
@@ -2373,7 +2406,26 @@ internal sealed class DebuggerProvider
 			catch { }
 		}
 
-		// 3. Fallback: Check if LastBreakReason was an exception (e.g. C++ or native unhandled)
+		// 3. Check if active target is a Minidump (.dmp) file and parse ExceptionStream (StreamType 6)
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
+		if (!string.IsNullOrEmpty(dumpPath) && MinidumpParser.TryReadExceptionInfo(dumpPath, out var dmpExc) && dmpExc != null)
+		{
+			response.HasException = true;
+			response.ExceptionCode ??= dmpExc.ExceptionCodeHex;
+			response.ExceptionType ??= dmpExc.ExceptionName;
+			response.ExceptionAddress ??= dmpExc.ExceptionAddressHex;
+			response.FaultingThreadId ??= dmpExc.ThreadId;
+			response.AccessOperation ??= dmpExc.AccessOperation;
+			response.FaultingAddress ??= dmpExc.FaultingAddressHex;
+			response.HResult ??= dmpExc.ExceptionCodeHex;
+			if (string.IsNullOrWhiteSpace(response.Message))
+			{
+				response.Message = dmpExc.FormattedMessage;
+			}
+			response.RawDetails ??= dmpExc.FormattedMessage;
+		}
+
+		// 4. Fallback: Check if LastBreakReason was an exception (e.g. C++ or native unhandled)
 		if (debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionThrown ||
 			debugger.LastBreakReason == dbgEventReason.dbgEventReasonExceptionNotHandled)
 		{
@@ -2392,6 +2444,27 @@ internal sealed class DebuggerProvider
 				}
 			}
 			catch { }
+		}
+
+		// Enrich FaultingThreadId and ExceptionAddress if HasException is true
+		if (response.HasException)
+		{
+			if (!response.FaultingThreadId.HasValue)
+			{
+				try { response.FaultingThreadId = debugger.CurrentThread?.ID; } catch { }
+			}
+			if (string.IsNullOrEmpty(response.ExceptionAddress))
+			{
+				var ip = TryResolveAddressExpression(debugger, "rip");
+				if (ip == 0)
+				{
+					ip = TryResolveAddressExpression(debugger, "eip");
+				}
+				if (ip != 0)
+				{
+					response.ExceptionAddress = $"0x{ip:X16}";
+				}
+			}
 		}
 
 		return response;
@@ -3713,6 +3786,851 @@ internal sealed class DebuggerProvider
 				}
 			}
 		}
+	}
+
+	public async Task<DebuggerGetDisassemblyResponse> GetDisassemblyAsync(
+		DebuggerGetDisassemblyRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				$"The debugger must be paused in break mode to retrieve disassembly (current mode: {GetModeString(debugger.CurrentMode)}).");
+		}
+
+		var instructionCount = Clamp(request.InstructionCount ?? 20, 1, 200);
+		var instructionsBefore = Clamp(request.InstructionsBefore ?? 8, 0, Math.Min(100, instructionCount - 1));
+		var targetFrameIndex = request.FrameIndex ?? 0;
+
+		StackFrame? originalFrame = null;
+		var switchedFrame = false;
+
+		try
+		{
+			StackFrame? selectedFrame = debugger.CurrentStackFrame;
+			if (targetFrameIndex > 0 && debugger.CurrentThread?.StackFrames != null)
+			{
+				originalFrame = debugger.CurrentStackFrame;
+				var currentIndex = 0;
+				foreach (StackFrame frame in debugger.CurrentThread.StackFrames)
+				{
+					if (currentIndex == targetFrameIndex)
+					{
+						debugger.CurrentStackFrame = frame;
+						selectedFrame = frame;
+						switchedFrame = true;
+						break;
+					}
+					currentIndex++;
+				}
+			}
+
+			ulong targetAddr = 0;
+			if (!string.IsNullOrWhiteSpace(request.Address))
+			{
+				targetAddr = TryResolveAddressExpression(debugger, request.Address!.Trim());
+				if (targetAddr == 0)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.InvalidMemoryAddress,
+						$"Unable to resolve disassembly target address from '{request.Address}'.");
+				}
+			}
+			else
+			{
+				targetAddr = TryResolveAddressExpression(debugger, "rip");
+				if (targetAddr == 0)
+				{
+					targetAddr = TryResolveAddressExpression(debugger, "eip");
+				}
+				if (targetAddr == 0 && selectedFrame != null)
+				{
+					try
+					{
+						var fn = selectedFrame.FunctionName ?? string.Empty;
+						var hexMatch = Regex.Match(fn, @"0x[0-9a-fA-F]{6,16}");
+						if (hexMatch.Success)
+						{
+							ulong.TryParse(hexMatch.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out targetAddr);
+						}
+					}
+					catch { }
+				}
+
+				if (targetAddr == 0)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.DisassemblyUnavailable,
+						"Could not determine the instruction pointer (RIP/EIP) for the selected stack frame.");
+				}
+			}
+
+			string? frameFunctionName = null;
+			string? frameModuleName = null;
+			if (selectedFrame != null)
+			{
+				try { frameFunctionName = selectedFrame.FunctionName; } catch { }
+				try { frameModuleName = selectedFrame.Module; } catch { }
+			}
+
+			// Find containing module from Process3.Modules
+			string? moduleName = null;
+			string? modulePath = null;
+			ulong moduleLoadAddr = 0;
+			ulong moduleEndAddr = 0;
+
+			if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+			{
+				foreach (EnvDTE90.Module mod in proc3.Modules)
+				{
+					try
+					{
+						var start = mod.LoadAddress;
+						var end = mod.EndAddress;
+						if (start > 0 && end > start && targetAddr >= start && targetAddr < end)
+						{
+							moduleName = mod.Name;
+							modulePath = mod.Path;
+							moduleLoadAddr = start;
+							moduleEndAddr = end;
+							break;
+						}
+					}
+					catch { }
+				}
+
+				if (moduleLoadAddr == 0 && !string.IsNullOrWhiteSpace(frameModuleName))
+				{
+					var frameModShort = Path.GetFileName(frameModuleName);
+					foreach (EnvDTE90.Module mod in proc3.Modules)
+					{
+						try
+						{
+							var mName = mod.Name ?? string.Empty;
+							if (string.Equals(mName, frameModuleName, StringComparison.OrdinalIgnoreCase) ||
+							    string.Equals(Path.GetFileName(mName), frameModShort, StringComparison.OrdinalIgnoreCase))
+							{
+								moduleName = mod.Name;
+								modulePath = mod.Path;
+								moduleLoadAddr = mod.LoadAddress;
+								moduleEndAddr = mod.EndAddress;
+								break;
+							}
+						}
+						catch { }
+					}
+				}
+			}
+
+			var warnings = new List<BridgeWarning>();
+			var dumpPath = GetActiveDumpFilePath(dte, debugger);
+			var localPePath = ResolveLocalModuleBinaryPath(dte, modulePath, moduleName ?? frameModuleName, dumpPath);
+
+			if (!string.IsNullOrEmpty(localPePath) &&
+			    moduleLoadAddr > 0 &&
+			    MinidumpParser.TryReadPeImageBase(localPePath!, out var preferredImageBase))
+			{
+				var dumpbinExe = FindDumpbinExecutable();
+				if (!string.IsNullOrEmpty(dumpbinExe))
+				{
+					var instructions = await Task.Run(() =>
+						RunDumpbinDisassembly(
+							dumpbinExe!,
+							localPePath!,
+							preferredImageBase,
+							moduleLoadAddr,
+							targetAddr,
+							instructionCount,
+							instructionsBefore),
+						cancellationToken);
+
+					if (instructions.Count > 0)
+					{
+						var resolvedFn = instructions.FirstOrDefault(i => i.IsCurrentInstruction)?.Symbol
+						                 ?? instructions.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.Symbol))?.Symbol
+						                 ?? frameFunctionName;
+
+						return new DebuggerGetDisassemblyResponse
+						{
+							VsInstanceId = _vsInstanceId,
+							TargetAddress = $"0x{targetAddr:X16}",
+							FrameIndex = targetFrameIndex,
+							ModuleName = !string.IsNullOrWhiteSpace(moduleName) ? Path.GetFileName(moduleName) : Path.GetFileName(localPePath),
+							ModulePath = localPePath,
+							FunctionName = resolvedFn,
+							FormattedText = MinidumpParser.FormatDisassemblyText(instructions),
+							Instructions = instructions,
+							Warnings = warnings
+						};
+					}
+				}
+				else
+				{
+					warnings.Add(new BridgeWarning
+					{
+						Code = "dumpbin_not_found",
+						Message = "MSVC dumpbin.exe was not found in the Visual Studio installation."
+					});
+				}
+			}
+
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DisassemblyUnavailable,
+				$"Disassembly is unavailable at address 0x{targetAddr:X16} (module: {moduleName ?? frameModuleName ?? "unknown"}). Ensure the module binary is accessible locally.");
+		}
+		finally
+		{
+			if (switchedFrame && originalFrame != null)
+			{
+				try
+				{
+					debugger.CurrentStackFrame = originalFrame;
+				}
+				catch { }
+			}
+		}
+	}
+
+	public async Task<DebuggerLoadSymbolsResponse> LoadSymbolsAsync(
+		DebuggerLoadSymbolsRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.SymbolPath))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "SymbolPath is required.");
+		}
+
+		var rawPath = request.SymbolPath.Trim();
+		bool isFile = File.Exists(rawPath);
+		bool isDir = !isFile && Directory.Exists(rawPath);
+
+		if (!isFile && !isDir)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.FileNotFound,
+				$"The specified symbol path '{rawPath}' does not exist on disk.");
+		}
+
+		var fullPath = Path.GetFullPath(rawPath);
+		var symbolDirectory = isFile
+			? (Path.GetDirectoryName(fullPath) ?? fullPath)
+			: fullPath;
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotRunning,
+				"Cannot load symbols when the debugger is in design mode.");
+		}
+
+		var warnings = new List<BridgeWarning>();
+		var addedPaths = new List<string>();
+		var allPaths = new List<string>();
+		var symbolPathRegistered = false;
+
+		try
+		{
+			var shellDebugger = await _package.GetServiceAsync(typeof(SVsShellDebugger));
+			if (shellDebugger is Microsoft.VisualStudio.Debugger.Interop.IVsDebuggerSymbolSettingsManager120A symMgr)
+			{
+				var settings = symMgr.GetCurrentSymbolSettings();
+				if (settings?.SymbolPaths != null)
+				{
+					var normalizedDir = symbolDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+					var alreadyPresent = false;
+					for (int i = 0; i < settings.SymbolPaths.Count; i++)
+					{
+						var existing = settings.SymbolPaths[i];
+						if (!string.IsNullOrWhiteSpace(existing.Name))
+						{
+							if (string.Equals(
+								existing.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+								normalizedDir,
+								StringComparison.OrdinalIgnoreCase))
+							{
+								alreadyPresent = true;
+							}
+						}
+					}
+
+					if (!alreadyPresent)
+					{
+						settings.SymbolPaths.Add(symbolDirectory, true);
+						addedPaths.Add(symbolDirectory);
+					}
+
+					symMgr.SaveSymbolSettings(settings);
+					symbolPathRegistered = true;
+
+					for (int i = 0; i < settings.SymbolPaths.Count; i++)
+					{
+						var p = settings.SymbolPaths[i];
+						if (!string.IsNullOrWhiteSpace(p.Name))
+						{
+							allPaths.Add(p.Name);
+						}
+					}
+				}
+			}
+			else
+			{
+				warnings.Add(new BridgeWarning
+				{
+					Code = "symbol_settings_manager_unavailable",
+					Message = "IVsDebuggerSymbolSettingsManager120A is unavailable on SVsShellDebugger."
+				});
+			}
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
+		{
+			warnings.Add(new BridgeWarning
+			{
+				Code = "symbol_settings_update_failed",
+				Message = $"Failed to update Visual Studio symbol settings: {ex.Message}"
+			});
+		}
+
+		// Give Visual Studio a brief moment to reload symbols after SaveSymbolSettings
+		if (symbolPathRegistered)
+		{
+			await Task.Delay(200, cancellationToken);
+			await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		}
+
+		var moduleFilter = !string.IsNullOrWhiteSpace(request.ModuleName)
+			? request.ModuleName!.Trim()
+			: (isFile && fullPath.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+				? Path.GetFileNameWithoutExtension(fullPath)
+				: null);
+
+		var modulesReq = new DebuggerGetModulesRequest
+		{
+			NameFilter = moduleFilter,
+			MaxCount = 200
+		};
+		var modulesResp = await GetModulesAsync(modulesReq, cancellationToken);
+
+		// If inferred filter from .pdb stem matched nothing, return all modules
+		if (modulesResp.Modules.Count == 0 && string.IsNullOrWhiteSpace(request.ModuleName) && !string.IsNullOrWhiteSpace(moduleFilter))
+		{
+			modulesResp = await GetModulesAsync(new DebuggerGetModulesRequest { MaxCount = 200 }, cancellationToken);
+		}
+
+		var loadedCount = modulesResp.Modules.Count(m => m.SymbolsLoaded);
+
+		return new DebuggerLoadSymbolsResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			AddedSymbolPaths = addedPaths,
+			AllSymbolPaths = allPaths,
+			LoadedModulesCount = loadedCount,
+			Modules = modulesResp.Modules,
+			Warnings = warnings
+		};
+	}
+
+	private static string? GetActiveDumpFilePath(DTE2 dte, Debugger debugger)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		try
+		{
+			var procName = debugger.CurrentProcess?.Name;
+			if (MinidumpParser.IsMinidumpFile(procName))
+			{
+				return procName;
+			}
+		}
+		catch { }
+
+		try
+		{
+			var slnName = dte.Solution?.FullName;
+			if (MinidumpParser.IsMinidumpFile(slnName))
+			{
+				return slnName;
+			}
+		}
+		catch { }
+
+		return null;
+	}
+
+	private static ulong TryResolveAddressExpression(Debugger debugger, string rawAddress)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		if (string.IsNullOrWhiteSpace(rawAddress))
+		{
+			return 0;
+		}
+
+		var trimmed = rawAddress.Trim();
+		if (trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+		    ulong.TryParse(trimmed.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var directHex))
+		{
+			return directHex;
+		}
+
+		if (trimmed.Length >= 4 &&
+		    trimmed.All(Uri.IsHexDigit) &&
+		    !IsCpuRegisterName(trimmed) &&
+		    ulong.TryParse(trimmed, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var bareHex))
+		{
+			return bareHex;
+		}
+
+		try
+		{
+			var expr = debugger.GetExpression(trimmed, UseAutoExpandRules: false, Timeout: 2000);
+			if (expr != null && expr.IsValidValue && !string.IsNullOrWhiteSpace(expr.Value))
+			{
+				var val = expr.Value.Trim();
+				var match = Regex.Match(val, @"0x[0-9a-fA-F]+");
+				if (match.Success &&
+				    ulong.TryParse(match.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var evalHex))
+				{
+					return evalHex;
+				}
+				if (ulong.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var evalDec))
+				{
+					return evalDec;
+				}
+				if (val.All(Uri.IsHexDigit) &&
+				    ulong.TryParse(val, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rawEvalHex))
+				{
+					return rawEvalHex;
+				}
+			}
+		}
+		catch { }
+
+		return 0;
+	}
+
+	private static bool IsCpuRegisterName(string name) =>
+		string.Equals(name, "rip", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "eip", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rax", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rbx", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rcx", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rdx", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rsi", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rdi", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rbp", StringComparison.OrdinalIgnoreCase) ||
+		string.Equals(name, "rsp", StringComparison.OrdinalIgnoreCase);
+
+	private static bool TryReadMemoryViaExpressionEvaluator(
+		Debugger debugger,
+		ulong startAddr,
+		int byteCount,
+		out byte[] bytes)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		bytes = Array.Empty<byte>();
+		var maxBytes = Math.Min(byteCount, 512);
+		var result = new List<byte>(maxBytes);
+
+		for (int offset = 0; offset < maxBytes; offset += 8)
+		{
+			var addr = startAddr + (ulong)offset;
+			try
+			{
+				var expr = debugger.GetExpression($"*(unsigned __int64*)0x{addr:X16},x", UseAutoExpandRules: false, Timeout: 500);
+				if (expr == null || !expr.IsValidValue || string.IsNullOrWhiteSpace(expr.Value))
+				{
+					break;
+				}
+
+				var match = Regex.Match(expr.Value, @"0x([0-9a-fA-F]+)");
+				if (!match.Success ||
+				    !ulong.TryParse(match.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var qword))
+				{
+					break;
+				}
+
+				var chunkBytes = BitConverter.GetBytes(qword);
+				var needed = Math.Min(8, maxBytes - offset);
+				for (int i = 0; i < needed; i++)
+				{
+					result.Add(chunkBytes[i]);
+				}
+			}
+			catch
+			{
+				break;
+			}
+		}
+
+		if (result.Count == 0)
+		{
+			return false;
+		}
+
+		bytes = result.ToArray();
+		return true;
+	}
+
+	private static string EnrichCharPointerValue(
+		DTE2 dte,
+		Debugger debugger,
+		string expression,
+		string val,
+		string type,
+		int timeoutMs)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		if (string.IsNullOrWhiteSpace(val) || string.IsNullOrWhiteSpace(type))
+		{
+			return val;
+		}
+
+		// Only enrich if the expression doesn't already specify a format specifier and val is a bare hex pointer
+		if (expression.IndexOf(',') >= 0)
+		{
+			return val;
+		}
+
+		var trimmedVal = val.Trim();
+		if (!Regex.IsMatch(trimmedVal, @"^0x[0-9a-fA-F]{4,16}$"))
+		{
+			return val;
+		}
+
+		if (!ulong.TryParse(trimmedVal.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var ptrAddr) ||
+		    ptrAddr == 0)
+		{
+			return val;
+		}
+
+		bool isWide = type.IndexOf("wchar_t", StringComparison.OrdinalIgnoreCase) >= 0 ||
+		              type.IndexOf("char16_t", StringComparison.OrdinalIgnoreCase) >= 0 ||
+		              type.IndexOf("WCHAR", StringComparison.Ordinal) >= 0 ||
+		              type.IndexOf("LPWSTR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+		              type.IndexOf("LPCWSTR", StringComparison.OrdinalIgnoreCase) >= 0;
+
+		bool isNarrow = !isWide && (
+			type.IndexOf("char *", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			type.IndexOf("char*", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			type.IndexOf("LPSTR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+			type.IndexOf("LPCSTR", StringComparison.OrdinalIgnoreCase) >= 0);
+
+		if (!isWide && !isNarrow)
+		{
+			return val;
+		}
+
+		// 1. Try MSVC format specifier (,su or ,s)
+		var spec = isWide ? "su" : "s";
+		try
+		{
+			var formattedExpr = debugger.GetExpression($"({expression}),{spec}", UseAutoExpandRules: false, Timeout: Math.Min(timeoutMs, 1000));
+			if (formattedExpr != null && formattedExpr.IsValidValue && !string.IsNullOrWhiteSpace(formattedExpr.Value))
+			{
+				var fmtVal = formattedExpr.Value.Trim();
+				if (fmtVal.IndexOf('"') >= 0 && !string.Equals(fmtVal, trimmedVal, StringComparison.OrdinalIgnoreCase))
+				{
+					return fmtVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+						? fmtVal
+						: $"{trimmedVal} {fmtVal}";
+				}
+			}
+		}
+		catch { }
+
+		// 2. Fallback: If debugging a Minidump (.dmp), read string directly from Minidump memory stream
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
+		if (!string.IsNullOrEmpty(dumpPath) &&
+		    MinidumpParser.TryReadMemory(dumpPath!, ptrAddr, 256, out var dmpBytes) &&
+		    dmpBytes.Length > 0)
+		{
+			if (isWide)
+			{
+				var preview = MinidumpParser.ExtractUtf16Preview(dmpBytes, 120);
+				if (!string.IsNullOrEmpty(preview))
+				{
+					return $"{trimmedVal} L\"{preview}\"";
+				}
+			}
+			else
+			{
+				var sb = new StringBuilder();
+				for (int i = 0; i < dmpBytes.Length && i < 120; i++)
+				{
+					var b = dmpBytes[i];
+					if (b == 0) break;
+					if (b >= 32 && b <= 126) sb.Append((char)b);
+					else break;
+				}
+				if (sb.Length > 0)
+				{
+					return $"{trimmedVal} \"{sb}\"";
+				}
+			}
+		}
+
+		return val;
+	}
+
+	private string? ResolveLocalModuleBinaryPath(
+		DTE2 dte,
+		string? modulePath,
+		string? moduleName,
+		string? dumpPath)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		if (!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath))
+		{
+			return modulePath;
+		}
+
+		var fileName = !string.IsNullOrWhiteSpace(modulePath)
+			? Path.GetFileName(modulePath)
+			: (!string.IsNullOrWhiteSpace(moduleName) ? Path.GetFileName(moduleName) : null);
+
+		if (string.IsNullOrWhiteSpace(fileName))
+		{
+			return null;
+		}
+
+		// 1. Check directory of the active Minidump file
+		if (!string.IsNullOrWhiteSpace(dumpPath))
+		{
+			try
+			{
+				var dumpDir = Path.GetDirectoryName(dumpPath);
+				if (!string.IsNullOrWhiteSpace(dumpDir))
+				{
+					var candidate = Path.Combine(dumpDir, fileName);
+					if (File.Exists(candidate))
+					{
+						return candidate;
+					}
+				}
+			}
+			catch { }
+		}
+
+		// 2. Check Visual Studio Debugger Symbol Paths
+		try
+		{
+			var shellDebugger = Package.GetGlobalService(typeof(SVsShellDebugger));
+			if (shellDebugger is Microsoft.VisualStudio.Debugger.Interop.IVsDebuggerSymbolSettingsManager120A symMgr)
+			{
+				var settings = symMgr.GetCurrentSymbolSettings();
+				if (settings?.SymbolPaths != null)
+				{
+					for (int i = 0; i < settings.SymbolPaths.Count; i++)
+					{
+						var symDir = settings.SymbolPaths[i].Name;
+						if (!string.IsNullOrWhiteSpace(symDir) && Directory.Exists(symDir))
+						{
+							var candidate = Path.Combine(symDir, fileName);
+							if (File.Exists(candidate))
+							{
+								return candidate;
+							}
+						}
+					}
+				}
+			}
+		}
+		catch { }
+
+		// 3. Check open solution directory
+		try
+		{
+			var slnFull = dte.Solution?.FullName;
+			if (!string.IsNullOrWhiteSpace(slnFull))
+			{
+				var slnDir = Directory.Exists(slnFull) ? slnFull : Path.GetDirectoryName(slnFull);
+				if (!string.IsNullOrWhiteSpace(slnDir) && Directory.Exists(slnDir))
+				{
+					var found = Directory.GetFiles(slnDir, fileName, SearchOption.AllDirectories);
+					if (found.Length > 0)
+					{
+						return found[0];
+					}
+				}
+			}
+		}
+		catch { }
+
+		return null;
+	}
+
+	private static string? FindDumpbinExecutable()
+	{
+		try
+		{
+			var procPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+			if (!string.IsNullOrEmpty(procPath))
+			{
+				// devenv.exe is at <VsRoot>\Common7\IDE\devenv.exe
+				var ideDir = Path.GetDirectoryName(procPath);
+				if (!string.IsNullOrEmpty(ideDir))
+				{
+					var vsRoot = Path.GetFullPath(Path.Combine(ideDir, @"..\.."));
+					var msvcDir = Path.Combine(vsRoot, "VC", "Tools", "MSVC");
+					if (Directory.Exists(msvcDir))
+					{
+						var versions = Directory.GetDirectories(msvcDir);
+						Array.Sort(versions, StringComparer.OrdinalIgnoreCase);
+						for (int i = versions.Length - 1; i >= 0; i--)
+						{
+							var candidate = Path.Combine(versions[i], "bin", "Hostx64", "x64", "dumpbin.exe");
+							if (File.Exists(candidate))
+							{
+								return candidate;
+							}
+						}
+					}
+				}
+			}
+		}
+		catch { }
+
+		return null;
+	}
+
+	private static List<DisassemblyInstruction> RunDumpbinDisassembly(
+		string dumpbinExe,
+		string modulePath,
+		ulong preferredImageBase,
+		ulong runtimeLoadAddr,
+		ulong targetAddr,
+		int instructionCount,
+		int instructionsBefore)
+	{
+		var rva = targetAddr - runtimeLoadAddr;
+		var targetFileVa = preferredImageBase + rva;
+		var preBytes = (ulong)Math.Max(128, instructionsBefore * 16 + 64);
+		var postBytes = (ulong)Math.Max(128, (instructionCount - instructionsBefore) * 16 + 64);
+		var rangeStart = targetFileVa > preferredImageBase + preBytes ? targetFileVa - preBytes : preferredImageBase;
+		var rangeEnd = targetFileVa + postBytes;
+
+		// 1. Try fast /RANGE disassembly first (works when PDB or export symbols start within or before range)
+		try
+		{
+			var psiRange = new System.Diagnostics.ProcessStartInfo
+			{
+				FileName = dumpbinExe,
+				Arguments = $"/NOLOGO /DISASM:BYTES /RANGE:{rangeStart},{rangeEnd} \"{modulePath}\"",
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				CreateNoWindow = true
+			};
+
+			using var proc = System.Diagnostics.Process.Start(psiRange);
+			if (proc != null)
+			{
+				var output = proc.StandardOutput.ReadToEnd();
+				proc.WaitForExit(3000);
+				var rangedList = MinidumpParser.ParseAndRebaseDumpbinOutput(
+					output,
+					targetRuntimeAddress: targetAddr,
+					moduleLoadAddress: runtimeLoadAddr,
+					peImageBase: preferredImageBase,
+					instructionCount: instructionCount,
+					instructionsBefore: instructionsBefore);
+
+				if (rangedList.Count > 0)
+				{
+					return rangedList;
+				}
+			}
+		}
+		catch { }
+
+		// 2. Fallback for stripped DLLs where /RANGE outputs raw hex bytes if no symbol starts inside /RANGE:
+		// Stream full /DISASM:BYTES output and stop as soon as we pass targetFileVa + postBytes.
+		try
+		{
+			var psiFull = new System.Diagnostics.ProcessStartInfo
+			{
+				FileName = dumpbinExe,
+				Arguments = $"/NOLOGO /DISASM:BYTES \"{modulePath}\"",
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				CreateNoWindow = true
+			};
+
+			using var proc = System.Diagnostics.Process.Start(psiFull);
+			if (proc != null)
+			{
+				var maxRollingLines = Math.Max(100, instructionsBefore * 3 + 50);
+				var rollingLines = new Queue<string>(maxRollingLines);
+				var postLinesCollected = new List<string>();
+				bool reachedTarget = false;
+				var maxPostLines = Math.Max(100, (instructionCount - instructionsBefore) * 3 + 50);
+
+				string? line;
+				while ((line = proc.StandardOutput.ReadLine()) != null)
+				{
+					if (!reachedTarget)
+					{
+						var trimmed = line.TrimStart();
+						if (trimmed.Length >= 8)
+						{
+							int colonIdx = trimmed.IndexOf(':');
+							if (colonIdx >= 8 && colonIdx <= 16 &&
+							    ulong.TryParse(trimmed.Substring(0, colonIdx), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var lineVa))
+							{
+								if (lineVa >= targetFileVa)
+								{
+									reachedTarget = true;
+								}
+							}
+						}
+
+						if (!reachedTarget)
+						{
+							if (rollingLines.Count >= maxRollingLines)
+							{
+								rollingLines.Dequeue();
+							}
+							rollingLines.Enqueue(line);
+							continue;
+						}
+					}
+
+					postLinesCollected.Add(line);
+					if (postLinesCollected.Count >= maxPostLines)
+					{
+						try { proc.Kill(); } catch { }
+						break;
+					}
+				}
+
+				var combined = new StringBuilder();
+				foreach (var l in rollingLines)
+				{
+					combined.AppendLine(l);
+				}
+				foreach (var l in postLinesCollected)
+				{
+					combined.AppendLine(l);
+				}
+
+				return MinidumpParser.ParseAndRebaseDumpbinOutput(
+					combined.ToString(),
+					targetRuntimeAddress: targetAddr,
+					moduleLoadAddress: runtimeLoadAddr,
+					peImageBase: preferredImageBase,
+					instructionCount: instructionCount,
+					instructionsBefore: instructionsBefore);
+			}
+		}
+		catch { }
+
+		return new List<DisassemblyInstruction>();
 	}
 }
 

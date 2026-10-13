@@ -27,6 +27,9 @@ public sealed class BridgeServiceExceptionTests
     [InlineData(BridgeErrorCodes.NoSolutionProcessesFound, false)]
     [InlineData(BridgeErrorCodes.InvalidMemoryAddress, false)]
     [InlineData(BridgeErrorCodes.MemoryReadFailed, false)]
+    [InlineData(BridgeErrorCodes.ProjectNotFound, false)]
+    [InlineData(BridgeErrorCodes.DisassemblyUnavailable, false)]
+    [InlineData(BridgeErrorCodes.SymbolLoadFailed, false)]
     public void FromBridgeMapsTestExplorerErrorCodes(string code, bool expectedRetryable)
     {
         var rpcException = new BridgeRpcException(code, $"Error for {code}", expectedRetryable);

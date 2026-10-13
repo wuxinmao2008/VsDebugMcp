@@ -28,14 +28,18 @@ public interface IBridgeService
         string? configuration,
         string? platform,
         string? vsInstanceId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? projectName = null,
+        string? action = null);
 
     Task<BuildTaskResponse> RunBuildAndWaitAsync(
         string? configuration,
         string? platform,
         int timeoutSeconds,
         string? vsInstanceId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? projectName = null,
+        string? action = null);
 
     Task<BuildTaskResponse> GetBuildStatusAsync(
         string buildTaskId,
@@ -313,6 +317,20 @@ public interface IBridgeService
         int? column,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerGetDisassemblyResponse> DebuggerGetDisassemblyAsync(
+        string? address,
+        int? frameIndex,
+        int? instructionCount,
+        int? instructionsBefore,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerLoadSymbolsResponse> DebuggerLoadSymbolsAsync(
+        string symbolPath,
+        string? moduleName,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -401,14 +419,18 @@ public sealed class BridgeService : IBridgeService
         string? configuration,
         string? platform,
         string? vsInstanceId,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        string? projectName = null,
+        string? action = null) =>
         ExecuteAsync(
-            _registry.Resolve(vsInstanceId),
+            _registry.Resolve(vsInstanceId, projectName),
             client => client.RunBuildAsync(
                 new RunBuildRequest
                 {
                     Configuration = configuration,
-                    Platform = platform
+                    Platform = platform,
+                    ProjectName = projectName,
+                    Action = action
                 },
                 cancellationToken),
             cancellationToken);
@@ -418,9 +440,11 @@ public sealed class BridgeService : IBridgeService
         string? platform,
         int timeoutSeconds,
         string? vsInstanceId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? projectName = null,
+        string? action = null)
     {
-        var build = await RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken).ConfigureAwait(false);
+        var build = await RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken, projectName, action).ConfigureAwait(false);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 600));
 
@@ -1189,6 +1213,44 @@ public sealed class BridgeService : IBridgeService
                 cancellationToken),
             cancellationToken);
 
+    public Task<DebuggerGetDisassemblyResponse> DebuggerGetDisassemblyAsync(
+        string? address,
+        int? frameIndex,
+        int? instructionCount,
+        int? instructionsBefore,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetDisassemblyAsync(
+                new DebuggerGetDisassemblyRequest
+                {
+                    Address = address,
+                    FrameIndex = frameIndex,
+                    InstructionCount = instructionCount ?? 30,
+                    InstructionsBefore = instructionsBefore ?? 10,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerLoadSymbolsResponse> DebuggerLoadSymbolsAsync(
+        string symbolPath,
+        string? moduleName,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerLoadSymbolsAsync(
+                new DebuggerLoadSymbolsRequest
+                {
+                    SymbolPath = symbolPath,
+                    ModuleName = moduleName,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
     private async Task<T> ExecuteAsync<T>(
         VisualStudioInstanceDescriptor instance,
         Func<BridgeClient, Task<T>> action,
@@ -1288,6 +1350,11 @@ public sealed class BridgeServiceException : Exception
                 exception.Retryable,
                 exception),
             BridgeErrorCodes.SolutionNotOpen => BuildError(exception, "No Visual Studio solution is open."),
+            BridgeErrorCodes.ProjectNotFound => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
             BridgeErrorCodes.BuildInProgress => BuildError(exception, "A Visual Studio build is already in progress."),
             BridgeErrorCodes.InvalidBuildConfiguration => BuildError(
                 exception,
@@ -1442,6 +1509,16 @@ public sealed class BridgeServiceException : Exception
                 false,
                 exception),
             BridgeErrorCodes.MemoryReadFailed => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.DisassemblyUnavailable => new(
+                exception.Code,
+                exception.Message,
+                false,
+                exception),
+            BridgeErrorCodes.SymbolLoadFailed => new(
                 exception.Code,
                 exception.Message,
                 false,

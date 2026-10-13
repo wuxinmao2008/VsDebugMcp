@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using ModelContextProtocol.Server;
 using VsDebugMcp.Host;
 using VsDebugMcp.Protocol;
@@ -23,6 +23,16 @@ public sealed class DiagnosticSnapshotEnhancementTests
         Assert.NotNull(timeoutParam);
         Assert.True(timeoutParam.HasDefaultValue);
         Assert.Null(timeoutParam.DefaultValue);
+
+        var projectNameParam = method.GetParameters().SingleOrDefault(p => p.Name == "projectName");
+        Assert.NotNull(projectNameParam);
+        Assert.True(projectNameParam.HasDefaultValue);
+        Assert.Null(projectNameParam.DefaultValue);
+
+        var actionParam = method.GetParameters().SingleOrDefault(p => p.Name == "action");
+        Assert.NotNull(actionParam);
+        Assert.True(actionParam.HasDefaultValue);
+        Assert.Null(actionParam.DefaultValue);
     }
 
     [Fact]

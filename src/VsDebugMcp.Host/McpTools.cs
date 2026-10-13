@@ -95,17 +95,19 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Starts a build of the currently open Visual Studio solution. Supports optional synchronous wait (waitForCompletion) to directly return the terminal state, elapsed time, and error summary.")]
+    [Description("Starts a build, rebuild, or clean of the currently open Visual Studio solution or a specific project/target. Supports optional synchronous wait (waitForCompletion) to directly return the terminal state, elapsed time, and error summary.")]
     public Task<BuildTaskResponse> RunBuildAsync(
         [Description("Optional solution configuration name, such as Debug or Release.")] string? configuration = null,
         [Description("Optional solution platform name, such as Any CPU or x64.")] string? platform = null,
         [Description("Optional flag whether to wait synchronously until the build task reaches a terminal state (succeeded, failed, cancelled) before returning. Defaults to false.")] bool? waitForCompletion = null,
         [Description("Optional maximum duration in seconds to wait when waitForCompletion is true (1-600). Defaults to 60.")] int? timeoutSeconds = null,
+        [Description("Optional target project name, project ID, or CMake target name to build/rebuild/clean instead of the entire solution.")] string? projectName = null,
+        [Description("Optional build action: 'build' (default), 'rebuild', or 'clean'.")] string? action = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => (waitForCompletion ?? false)
-            ? _bridgeService.RunBuildAndWaitAsync(configuration, platform, timeoutSeconds ?? 60, vsInstanceId, cancellationToken)
-            : _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken));
+            ? _bridgeService.RunBuildAndWaitAsync(configuration, platform, timeoutSeconds ?? 60, vsInstanceId, cancellationToken, projectName, action)
+            : _bridgeService.RunBuildAsync(configuration, platform, vsInstanceId, cancellationToken, projectName, action));
 
     [McpServerTool(
         Name = "vs_get_build_status",
@@ -307,9 +309,9 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Evaluates an expression or variable in the context of the current or specified stack frame while the debugger is paused in break mode.")]
+    [Description("Evaluates an expression, variable, or CPU register (e.g. 'rax', 'rcx', 'rsp') in the context of the current or specified stack frame while paused in break mode. Supports MSVC debugger format specifiers such as ',s' (ASCII string), ',su' (UTF-16 string), ',s8' (UTF-8 string), ',x' (hex), and 'ptr,10' (array slice).")]
     public Task<DebuggerEvaluateExprResponse> DebuggerEvaluateExprAsync(
-        [Description("The variable or expression to evaluate.")] string expression,
+        [Description("The variable, expression, or register to evaluate (supports MSVC format specifiers like '(const wchar_t*)0x1234,su' or 'buf,16').")] string expression,
         [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional evaluation timeout in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
         [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
@@ -449,9 +451,9 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Evaluates multiple expressions or variables in batch within the context of the current or specified stack frame while paused in break mode.")]
+    [Description("Evaluates multiple expressions, variables, or CPU registers in batch within the context of the current or specified stack frame while paused in break mode. Supports MSVC debugger format specifiers such as ',s' (ASCII string), ',su' (UTF-16 string), ',s8' (UTF-8 string), ',x' (hex), and 'ptr,10' (array slice).")]
     public Task<DebuggerEvaluateExpressionsResponse> DebuggerEvaluateExpressionsAsync(
-        [Description("The list of expressions or variables to evaluate.")] List<string> expressions,
+        [Description("The list of expressions, variables, or registers to evaluate (supports MSVC format specifiers like '(const wchar_t*)0x1234,su').")] List<string> expressions,
         [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional evaluation timeout per expression in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
         [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
@@ -590,7 +592,7 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns details of the active exception (type, message, HResult, stack trace, inner exception) when the debugger is paused in break mode.")]
+    [Description("Returns details of the active exception (type, message, HResult, stack trace, inner exception) or Win32 Minidump (.dmp) crash exception record (exceptionCode, exceptionAddress, faultingThreadId, accessOperation, faultingAddress) when paused in break mode.")]
     public Task<DebuggerGetExceptionInfoResponse> DebuggerGetExceptionInfoAsync(
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
@@ -724,9 +726,9 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Reads raw virtual memory bytes from the active debugged process at a specified address or pointer expression, returning hex bytes, formatted hex dump, ASCII preview, and base64 data.")]
+    [Description("Reads raw virtual memory bytes from the active debugged process or post-mortem Minidump (.dmp) at a specified address, register, or pointer expression, returning hex bytes, formatted hex dump, ASCII preview, UTF-16 preview, and base64 data.")]
     public Task<DebuggerReadMemoryResponse> DebuggerReadMemoryAsync(
-        [Description("Target memory address in hexadecimal (e.g. '0x00007FFE12345678') or pointer expression/variable name (e.g. 'pBuffer', '&myStruct').")] string address,
+        [Description("Target memory address in hexadecimal (e.g. '0x00007FFE12345678') or pointer expression/variable/register name (e.g. 'pBuffer', '&myStruct', 'rcx').")] string address,
         [Description("Optional number of bytes to read (1-4096). Defaults to 64.")] int? byteCount = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
@@ -904,6 +906,46 @@ public sealed class McpTools
             filePath,
             line,
             column,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_disassembly",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves native assembly instructions around the current instruction pointer (RIP/EIP), a specified stack frame index, or a target memory address/expression while paused in break mode. Useful for post-mortem crash dump (.dmp) analysis and stripped modules without PDB symbols.")]
+    public Task<DebuggerGetDisassemblyResponse> DebuggerGetDisassemblyAsync(
+        [Description("Optional target address (e.g. '0x00007FF92350DE4E') or expression/register (e.g. 'rip'). If omitted, uses the instruction pointer of the specified frameIndex (default top frame 0).")] string? address = null,
+        [Description("Optional stack frame index (0 = top frame) to disassemble around when address is omitted. Defaults to 0.")] int? frameIndex = null,
+        [Description("Optional total number of assembly instructions to return (1-200). Defaults to 30.")] int? instructionCount = null,
+        [Description("Optional number of instructions before the target address to include for context (0-100). Defaults to 10.")] int? instructionsBefore = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetDisassemblyAsync(
+            address,
+            frameIndex,
+            instructionCount,
+            instructionsBefore,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_load_symbols",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Dynamically adds a PDB symbol file or directory path to Visual Studio's debugger symbol search paths and triggers symbol reloading for loaded modules during an active debugging or Minidump (.dmp) session.")]
+    public Task<DebuggerLoadSymbolsResponse> DebuggerLoadSymbolsAsync(
+        [Description("The absolute path to a .pdb file or a directory containing .pdb symbol files.")] string symbolPath,
+        [Description("Optional module name filter (e.g. 'PrintConfigDll.dll') to reload symbols for a specific module. If omitted, attempts to load symbols for all matching modules.")] string? moduleName = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerLoadSymbolsAsync(
+            symbolPath,
+            moduleName,
             vsInstanceId,
             cancellationToken));
 

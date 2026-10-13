@@ -405,6 +405,22 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetDisassemblyResponse> DebuggerGetDisassemblyAsync(
+        DebuggerGetDisassemblyRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetDisassemblyRequest, DebuggerGetDisassemblyResponse>(
+            BridgeMethods.DebuggerGetDisassembly,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerLoadSymbolsResponse> DebuggerLoadSymbolsAsync(
+        DebuggerLoadSymbolsRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerLoadSymbolsRequest, DebuggerLoadSymbolsResponse>(
+            BridgeMethods.DebuggerLoadSymbols,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

@@ -855,6 +855,42 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerGetDisassembly:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetDisassemblyRequest()
+                        : BridgeJson.Deserialize<DebuggerGetDisassemblyRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetDisassemblyAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get disassembly request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerLoadSymbols:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The load symbols request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerLoadSymbolsRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.LoadSymbolsAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The load symbols request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.GetActiveDocument:
                 try
                 {
@@ -966,7 +1002,7 @@ internal sealed class BridgeServer : IDisposable
         }
         catch (BuildProviderException exception)
         {
-            return (Failure(request.RequestId, exception.Code, GetBuildErrorMessage(exception.Code), exception.Retryable), false);
+            return (Failure(request.RequestId, exception.Code, exception.CustomMessage ?? GetBuildErrorMessage(exception.Code), exception.Retryable), false);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -995,7 +1031,7 @@ internal sealed class BridgeServer : IDisposable
         }
         catch (BuildProviderException exception)
         {
-            return (Failure(request.RequestId, exception.Code, GetBuildErrorMessage(exception.Code), exception.Retryable), false);
+            return (Failure(request.RequestId, exception.Code, exception.CustomMessage ?? GetBuildErrorMessage(exception.Code), exception.Retryable), false);
         }
         catch (OperationCanceledException)
         {
@@ -1016,6 +1052,7 @@ internal sealed class BridgeServer : IDisposable
     private static string GetBuildErrorMessage(string code) => code switch
     {
         BridgeErrorCodes.SolutionNotOpen => "No Visual Studio solution is open.",
+        BridgeErrorCodes.ProjectNotFound => "The requested project was not found in the Visual Studio solution.",
         BridgeErrorCodes.BuildInProgress => "A Visual Studio build is already in progress.",
         BridgeErrorCodes.InvalidBuildConfiguration => "The requested solution configuration or platform is invalid.",
         BridgeErrorCodes.BuildTaskNotFound => "The build task was not found.",
@@ -1397,6 +1434,18 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_read_memory",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_disassembly",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_load_symbols",
                 Version = "0.1",
                 IsStub = false
             }

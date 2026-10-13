@@ -5,6 +5,7 @@ add_executable(SampleCMakeApp
 target_link_libraries(SampleCMakeApp PRIVATE
     sample_calculator
     sample_core
+    dbghelp
 )
 
 target_compile_features(SampleCMakeApp PRIVATE cxx_std_17)

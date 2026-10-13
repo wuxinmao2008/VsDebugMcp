@@ -73,9 +73,11 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			}
 		}
 
+		var (normalizedAction, updateFlags) = ResolveBuildAction(request.Action);
+
 		if (CMakeWorkspaceState.TryGetCMakeWorkspaceRoot(dte, out var cmakeRoot))
 		{
-			return await RunCMakeBuildAsync(dte, cmakeRoot, request, cancellationToken);
+			return await RunCMakeBuildAsync(dte, cmakeRoot, request, normalizedAction, cancellationToken);
 		}
 
 		var buildManager = GetBuildManager();
@@ -83,6 +85,15 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		if (busy != 0)
 		{
 			throw new BuildProviderException(BridgeErrorCodes.BuildInProgress, true);
+		}
+
+		IVsHierarchy? targetHierarchy = null;
+		string? resolvedProjectName = null;
+		if (!string.IsNullOrWhiteSpace(request.ProjectName))
+		{
+			(targetHierarchy, resolvedProjectName) = await ResolveTargetProjectHierarchyAsync(
+				request.ProjectName!.Trim(),
+				cancellationToken);
 		}
 
 		var configuration = ResolveConfiguration(dte, request);
@@ -96,6 +107,8 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			State = BuildStates.Starting,
 			Configuration = configuration.Name,
 			Platform = configuration.PlatformName,
+			ProjectName = resolvedProjectName,
+			Action = normalizedAction,
 			RequestedAtUtc = UtcNow()
 		};
 
@@ -106,10 +119,25 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			_activeProcess = null;
 		}
 
-		var result = buildManager.StartSimpleUpdateSolutionConfiguration(
-			(uint)VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_BUILD,
-			(uint)VSSOLNBUILDQUERYRESULTS.VSSBQR_SAVEBEFOREBUILD_QUERY_YES,
-			1);
+		int result;
+		if (targetHierarchy is not null)
+		{
+			result = buildManager.StartSimpleUpdateProjectConfiguration(
+				targetHierarchy,
+				null,
+				null,
+				updateFlags,
+				(uint)VSSOLNBUILDQUERYRESULTS.VSSBQR_SAVEBEFOREBUILD_QUERY_YES,
+				1);
+		}
+		else
+		{
+			result = buildManager.StartSimpleUpdateSolutionConfiguration(
+				updateFlags,
+				(uint)VSSOLNBUILDQUERYRESULTS.VSSBQR_SAVEBEFOREBUILD_QUERY_YES,
+				1);
+		}
+
 		if (ErrorHandler.Failed(result))
 		{
 			lock (_sync)
@@ -130,6 +158,7 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		DTE2 dte,
 		string cmakeRoot,
 		RunBuildRequest request,
+		string normalizedAction,
 		CancellationToken cancellationToken)
 	{
 		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -158,6 +187,7 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		}
 
 		var targetPreset = presets.Find(p => string.Equals(p.Name, targetPresetName, StringComparison.OrdinalIgnoreCase)) ?? presets[0];
+		var targetProject = string.IsNullOrWhiteSpace(request.ProjectName) ? null : request.ProjectName!.Trim();
 
 		var build = new BuildTaskResponse
 		{
@@ -166,6 +196,8 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			State = BuildStates.Starting,
 			Configuration = targetPreset.Name,
 			Platform = targetPreset.Architecture,
+			ProjectName = targetProject,
+			Action = normalizedAction,
 			RequestedAtUtc = UtcNow()
 		};
 
@@ -247,8 +279,10 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			build.StartedAtUtc = UtcNow();
 		}
 
-		var projectName = Path.GetFileName(cmakeRoot.TrimEnd('\\', '/'));
-		WriteOutput($"------ 已启动生成: CMake 项目: {projectName}, 配置: {targetPreset.Name} ------");
+		var projectName = !string.IsNullOrWhiteSpace(build.ProjectName)
+			? build.ProjectName!
+			: Path.GetFileName(cmakeRoot.TrimEnd('\\', '/'));
+		WriteOutput($"------ 已启动生成 ({build.Action ?? "build"}): CMake 项目: {projectName}, 配置: {targetPreset.Name} ------");
 
 		string ideDir = string.Empty;
 		try
@@ -270,27 +304,45 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		bool isNinjaConfigured = !string.IsNullOrEmpty(targetPreset.BinaryDir) &&
 								 File.Exists(Path.Combine(targetPreset.BinaryDir, "build.ninja"));
 
+		var extraBuildArgs = new StringBuilder();
+		if (string.Equals(build.Action, "clean", StringComparison.OrdinalIgnoreCase))
+		{
+			extraBuildArgs.Append(" --target clean");
+		}
+		else
+		{
+			if (string.Equals(build.Action, "rebuild", StringComparison.OrdinalIgnoreCase))
+			{
+				extraBuildArgs.Append(" --clean-first");
+			}
+			if (!string.IsNullOrWhiteSpace(build.ProjectName) &&
+				!string.Equals(build.ProjectName, "cmake:root", StringComparison.OrdinalIgnoreCase))
+			{
+				extraBuildArgs.Append($" --target \"{build.ProjectName}\"");
+			}
+		}
+
 		string cmdLine;
 		if (File.Exists(vsDevCmd))
 		{
 			if (!isNinjaConfigured)
 			{
-				cmdLine = $"call \"{vsDevCmd}\" -arch={arch} && cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --preset \"{targetPreset.Name}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"";
+				cmdLine = $"call \"{vsDevCmd}\" -arch={arch} && cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --preset \"{targetPreset.Name}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"{extraBuildArgs}";
 			}
 			else
 			{
-				cmdLine = $"call \"{vsDevCmd}\" -arch={arch} && cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"";
+				cmdLine = $"call \"{vsDevCmd}\" -arch={arch} && cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"{extraBuildArgs}";
 			}
 		}
 		else
 		{
 			if (!isNinjaConfigured)
 			{
-				cmdLine = $"cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --preset \"{targetPreset.Name}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"";
+				cmdLine = $"cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --preset \"{targetPreset.Name}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"{extraBuildArgs}";
 			}
 			else
 			{
-				cmdLine = $"cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"";
+				cmdLine = $"cd /d \"{cmakeRoot}\" && \"{cmakeExe}\" --build --preset \"{targetPreset.Name}\"{extraBuildArgs}";
 			}
 		}
 
@@ -644,10 +696,121 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 	private static void ValidateBuildRequest(RunBuildRequest request)
 	{
 		if ((request.Configuration?.Length ?? 0) > MaxConfigurationValueLength ||
-			(request.Platform?.Length ?? 0) > MaxConfigurationValueLength)
+			(request.Platform?.Length ?? 0) > MaxConfigurationValueLength ||
+			(request.ProjectName?.Length ?? 0) > MaxConfigurationValueLength ||
+			(request.Action?.Length ?? 0) > 64)
 		{
 			throw new BuildProviderException(BridgeErrorCodes.InvalidRequest, false);
 		}
+	}
+
+	private static (string NormalizedAction, uint UpdateFlags) ResolveBuildAction(string? action)
+	{
+		if (string.IsNullOrWhiteSpace(action))
+		{
+			return ("build", (uint)VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_BUILD);
+		}
+
+		var normalized = action!.Trim().ToLowerInvariant();
+		return normalized switch
+		{
+			"build" => ("build", (uint)VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_BUILD),
+			"rebuild" => ("rebuild", (uint)(VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_FORCE_UPDATE | VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_BUILD)),
+			"clean" => ("clean", (uint)VSSOLNBUILDUPDATEFLAGS.SBF_OPERATION_CLEAN),
+			_ => throw new BuildProviderException(
+				BridgeErrorCodes.InvalidRequest,
+				false,
+				$"Unsupported build action '{action}'. Supported values are 'build', 'rebuild', and 'clean'.")
+		};
+	}
+
+	private async Task<(IVsHierarchy Hierarchy, string ProjectName)> ResolveTargetProjectHierarchyAsync(
+		string requestedProject,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var solution = await _package.GetServiceAsync(typeof(SVsSolution)) as IVsSolution
+			?? throw new BuildProviderException(BridgeErrorCodes.BuildStateUnavailable, true);
+
+		var onlyThisType = Guid.Empty;
+		var hr = solution.GetProjectEnum(
+			(uint)__VSENUMPROJFLAGS.EPF_LOADEDINSOLUTION,
+			ref onlyThisType,
+			out var hierarchies);
+		if (ErrorHandler.Failed(hr) || hierarchies is null)
+		{
+			throw new BuildProviderException(BridgeErrorCodes.BuildStateUnavailable, true);
+		}
+
+		var solutionFolderGuid = new Guid("66A26720-8FB5-11D2-AA7E-00C04F688DDE");
+		var items = new IVsHierarchy[1];
+		IVsHierarchy? substringMatch = null;
+		string? substringMatchName = null;
+
+		while (hierarchies.Next(1, items, out var fetched) == VSConstants.S_OK && fetched == 1)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var hierarchy = items[0];
+			if (hierarchy is null)
+			{
+				continue;
+			}
+
+			if (ErrorHandler.Succeeded(hierarchy.GetGuidProperty(
+				VSConstants.VSITEMID_ROOT,
+				(int)__VSHPROPID.VSHPROPID_TypeGuid,
+				out var typeGuid)) && typeGuid == solutionFolderGuid)
+			{
+				continue;
+			}
+
+			var name = ErrorHandler.Succeeded(hierarchy.GetProperty(
+				VSConstants.VSITEMID_ROOT,
+				(int)__VSHPROPID.VSHPROPID_Name,
+				out var nameObj))
+				? nameObj as string ?? string.Empty
+				: string.Empty;
+
+			var projectGuid = ErrorHandler.Succeeded(solution.GetGuidOfProject(hierarchy, out var guid)) && guid != Guid.Empty
+				? guid.ToString("D")
+				: string.Empty;
+
+			var projectPath = hierarchy is IVsProject vsProject &&
+				ErrorHandler.Succeeded(vsProject.GetMkDocument(VSConstants.VSITEMID_ROOT, out var mkDoc)) &&
+				!string.IsNullOrWhiteSpace(mkDoc)
+				? mkDoc
+				: string.Empty;
+
+			var fileName = !string.IsNullOrWhiteSpace(projectPath) ? Path.GetFileName(projectPath) : string.Empty;
+			var fileStem = !string.IsNullOrWhiteSpace(projectPath) ? Path.GetFileNameWithoutExtension(projectPath) : string.Empty;
+
+			if (string.Equals(name, requestedProject, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(projectGuid, requestedProject, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(projectPath, requestedProject, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(fileName, requestedProject, StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(fileStem, requestedProject, StringComparison.OrdinalIgnoreCase))
+			{
+				return (hierarchy, !string.IsNullOrWhiteSpace(name) ? name : requestedProject);
+			}
+
+			if (substringMatch is null &&
+				!string.IsNullOrWhiteSpace(name) &&
+				name.IndexOf(requestedProject, StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				substringMatch = hierarchy;
+				substringMatchName = name;
+			}
+		}
+
+		if (substringMatch is not null)
+		{
+			return (substringMatch, substringMatchName ?? requestedProject);
+		}
+
+		throw new BuildProviderException(
+			BridgeErrorCodes.ProjectNotFound,
+			false,
+			$"Project '{requestedProject}' was not found in the open Visual Studio solution.");
 	}
 
 	private IVsSolutionBuildManager2 GetBuildManager() =>
@@ -681,6 +844,8 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		State = build.State,
 		Configuration = build.Configuration,
 		Platform = build.Platform,
+		ProjectName = build.ProjectName,
+		Action = build.Action,
 		RequestedAtUtc = build.RequestedAtUtc,
 		StartedAtUtc = build.StartedAtUtc,
 		CompletedAtUtc = build.CompletedAtUtc,
@@ -693,14 +858,17 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 
 internal sealed class BuildProviderException : Exception
 {
-	public BuildProviderException(string code, bool retryable)
-		: base(code)
+	public BuildProviderException(string code, bool retryable, string? customMessage = null)
+		: base(customMessage ?? code)
 	{
 		Code = code;
 		Retryable = retryable;
+		CustomMessage = customMessage;
 	}
 
 	public string Code { get; }
 
 	public bool Retryable { get; }
+
+	public string? CustomMessage { get; }
 }

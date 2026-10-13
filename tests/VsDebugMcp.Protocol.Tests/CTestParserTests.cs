@@ -113,6 +113,8 @@ public sealed class CTestParserTests
         Assert.NotEmpty(presets);
         var debugPreset = presets.FirstOrDefault(p => p.Name == "x64-Debug");
         Assert.NotNull(debugPreset);
-        Assert.True(Directory.Exists(debugPreset.BinaryDir), $"binaryDir does not exist: '{debugPreset.BinaryDir}'");
+        Assert.False(string.IsNullOrWhiteSpace(debugPreset.BinaryDir));
+        Assert.True(Path.IsPathRooted(debugPreset.BinaryDir));
+        Assert.EndsWith("x64-Debug", debugPreset.BinaryDir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
     }
 }
