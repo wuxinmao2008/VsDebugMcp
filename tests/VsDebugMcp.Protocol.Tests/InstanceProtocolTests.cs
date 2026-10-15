@@ -1435,4 +1435,43 @@ public sealed class InstanceProtocolTests
         Assert.Equal(3, filesCopy.Projects[0].Files.Count);
         Assert.Equal(@"src\core\include\core\logger.h", filesCopy.Projects[0].Files[1].RelativePath);
     }
+
+    [Fact]
+    public void ChineseTextSerializationRoundTrip()
+    {
+        var response = new GetOutputPanesResponse
+        {
+            VsInstanceId = "vs-42",
+            TotalCount = 2,
+            Panes = new List<OutputPaneInfo>
+            {
+                new() { Name = "生成", Guid = "{1BD8A850-02D1-11D1-BEE7-00A0C913D1F8}", IsBuiltIn = true },
+                new() { Name = "源代码管理 - Team Foundation", Guid = "{0EE13505-C0BC-40C3-8F1D-0F65A9F71616}", IsBuiltIn = false }
+            }
+        };
+
+        var bridgeResp = BridgeResponse.Success("req-1", response);
+        var bridgeJson = BridgeJson.Serialize(bridgeResp);
+        var copyBridgeResp = BridgeJson.Deserialize<BridgeResponse>(bridgeJson);
+        Assert.NotNull(copyBridgeResp.PayloadJson);
+
+        var copy = BridgeJson.Deserialize<GetOutputPanesResponse>(copyBridgeResp.PayloadJson);
+        Assert.Equal(2, copy.Panes.Count);
+        Assert.Equal("生成", copy.Panes[0].Name);
+        Assert.Equal("源代码管理 - Team Foundation", copy.Panes[1].Name);
+    }
+
+    [Fact]
+    public void GetBuildStatusRequestRoundTripsWithoutBuildTaskId()
+    {
+        var request = new GetBuildStatusRequest();
+        var json = BridgeJson.Serialize(request);
+        var copy = BridgeJson.Deserialize<GetBuildStatusRequest>(json);
+        Assert.Null(copy.BuildTaskId);
+
+        var requestWithId = new GetBuildStatusRequest { BuildTaskId = "task-123" };
+        var jsonWithId = BridgeJson.Serialize(requestWithId);
+        var copyWithId = BridgeJson.Deserialize<GetBuildStatusRequest>(jsonWithId);
+        Assert.Equal("task-123", copyWithId.BuildTaskId);
+    }
 }

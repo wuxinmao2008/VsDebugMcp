@@ -11,6 +11,7 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.RunBuildAsync), "waitForCompletion")]
     [InlineData(nameof(McpTools.RunBuildAsync), "timeoutSeconds")]
     [InlineData(nameof(McpTools.RunBuildAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.GetBuildStatusAsync), "buildTaskId")]
     [InlineData(nameof(McpTools.GetBuildStatusAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.CancelBuildAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.GetFilesInProjectAsync), "projectId")]

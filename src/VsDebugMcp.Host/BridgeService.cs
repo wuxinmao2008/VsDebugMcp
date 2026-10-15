@@ -42,7 +42,7 @@ public interface IBridgeService
         string? action = null);
 
     Task<BuildTaskResponse> GetBuildStatusAsync(
-        string buildTaskId,
+        string? buildTaskId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -491,7 +491,7 @@ public sealed class BridgeService : IBridgeService
     }
 
     public Task<BuildTaskResponse> GetBuildStatusAsync(
-        string buildTaskId,
+        string? buildTaskId,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(

@@ -355,8 +355,8 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 			CreateNoWindow = true,
-			StandardOutputEncoding = Encoding.UTF8,
-			StandardErrorEncoding = Encoding.UTF8
+			StandardOutputEncoding = GetConsoleEncoding(),
+			StandardErrorEncoding = GetConsoleEncoding()
 		};
 
 		System.Diagnostics.Process process;
@@ -437,16 +437,21 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 			: "========== 生成: 成功 0 个，失败 1 个，最新 0 个，跳过 0 个 ==========");
 	}
 
-	public BuildTaskResponse GetBuildStatus(string buildTaskId)
+	public BuildTaskResponse GetBuildStatus(string? buildTaskId)
 	{
 		ThrowIfDisposed();
-		if (string.IsNullOrWhiteSpace(buildTaskId))
-		{
-			throw new BuildProviderException(BridgeErrorCodes.InvalidRequest, false);
-		}
 
 		lock (_sync)
 		{
+			if (string.IsNullOrWhiteSpace(buildTaskId))
+			{
+				if (_build is not null)
+				{
+					return Snapshot(_build);
+				}
+				throw new BuildProviderException(BridgeErrorCodes.BuildTaskNotFound, false);
+			}
+
 			if (_build is null || !string.Equals(_build.BuildTaskId, buildTaskId, StringComparison.Ordinal))
 			{
 				throw new BuildProviderException(BridgeErrorCodes.BuildTaskNotFound, false);
@@ -852,6 +857,20 @@ internal sealed class SolutionBuildProvider : IVsUpdateSolutionEvents, IDisposab
 		Succeeded = build.Succeeded,
 		CancelRequested = build.CancelRequested
 	};
+
+	private static Encoding GetConsoleEncoding()
+	{
+		try
+		{
+			var oemCodePage = CultureInfo.CurrentCulture.TextInfo.OEMCodePage;
+			if (oemCodePage > 0)
+			{
+				return Encoding.GetEncoding(oemCodePage);
+			}
+		}
+		catch { }
+		return Encoding.Default;
+	}
 
 	private static string UtcNow() => DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 }

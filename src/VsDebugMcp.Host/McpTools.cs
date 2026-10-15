@@ -115,9 +115,9 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the current state of the most recently retained Visual Studio build task.")]
+    [Description("Returns the current state of the most recently retained Visual Studio build task, or a specific task if buildTaskId is provided.")]
     public Task<BuildTaskResponse> GetBuildStatusAsync(
-        [Description("The build task ID returned by vs_run_build.")] string buildTaskId,
+        [Description("Optional build task ID returned by vs_run_build. If omitted, returns the status of the active or most recent build task.")] string? buildTaskId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.GetBuildStatusAsync(buildTaskId, vsInstanceId, cancellationToken));
@@ -165,9 +165,9 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the tail of the current Visual Studio Output window pane. Supports \"build\" (default), \"debug\" (for qDebug, OutputDebugString, CLR logs), or custom pane names such as \"UILOG\".")]
+    [Description("Returns the tail of the current Visual Studio Output window pane. Supports \"build\" (default), \"debug\" (for qDebug, OutputDebugString, CLR logs), \"tests\" (for test discovery and execution logs), or custom pane names such as \"UILOG\".")]
     public Task<GetOutputWindowLogsResponse> GetOutputWindowLogsAsync(
-        [Description("Optional output source pane name or type. Defaults to \"build\". Supports \"build\", \"debug\", or a custom pane name.")] string? source = null,
+        [Description("Optional output source pane name or type. Defaults to \"build\". Supports \"build\", \"debug\", \"tests\", or a custom pane name.")] string? source = null,
         [Description("Optional maximum number of trailing characters from 1 through 500000. Defaults to 20000.")] int? maxChars = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>

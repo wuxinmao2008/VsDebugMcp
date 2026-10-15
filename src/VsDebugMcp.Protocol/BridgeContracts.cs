@@ -657,8 +657,8 @@ public sealed class RunBuildRequest
 [DataContract]
 public sealed class GetBuildStatusRequest
 {
-    [DataMember(Name = "buildTaskId", Order = 1)]
-    public string BuildTaskId { get; set; } = string.Empty;
+    [DataMember(Name = "buildTaskId", Order = 1, EmitDefaultValue = false)]
+    public string? BuildTaskId { get; set; }
 }
 
 [DataContract]

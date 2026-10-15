@@ -67,7 +67,7 @@ public sealed class BridgeClient : IAsyncDisposable
         CallAsync<RunBuildRequest, BuildTaskResponse>(BridgeMethods.RunBuild, request, cancellationToken);
 
     public Task<BuildTaskResponse> GetBuildStatusAsync(
-        string buildTaskId,
+        string? buildTaskId,
         CancellationToken cancellationToken) =>
         CallAsync<GetBuildStatusRequest, BuildTaskResponse>(
             BridgeMethods.GetBuildStatus,

@@ -56,6 +56,18 @@ builder.Services
 	.WithTools<McpTools>(tools);
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+	var accept = context.Request.Headers.Accept.ToString();
+	if (string.IsNullOrWhiteSpace(accept) || accept == "*/*" || accept == "application/json")
+	{
+		context.Request.Headers.Accept = "application/json, text/event-stream";
+	}
+
+	await next();
+});
+
 app.MapMcp();
 
 Task? controlTask = null;

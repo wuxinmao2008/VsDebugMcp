@@ -356,7 +356,7 @@ internal sealed class TestExplorerProvider : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8
+                StandardOutputEncoding = GetConsoleEncoding()
             };
 
             string jsonOutput;
@@ -701,8 +701,8 @@ internal sealed class TestExplorerProvider : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
+            StandardOutputEncoding = GetConsoleEncoding(),
+            StandardErrorEncoding = GetConsoleEncoding()
         };
 
         _ = Task.Run(async () =>
@@ -1599,6 +1599,18 @@ internal sealed class TestExplorerProvider : IDisposable
             if (val is TimeSpan ts) return ts.TotalMilliseconds;
             return 0;
         }
+    private static Encoding GetConsoleEncoding()
+    {
+        try
+        {
+            var oemCodePage = CultureInfo.CurrentCulture.TextInfo.OEMCodePage;
+            if (oemCodePage > 0)
+            {
+                return Encoding.GetEncoding(oemCodePage);
+            }
+        }
+        catch { }
+        return Encoding.Default;
     }
 }
 

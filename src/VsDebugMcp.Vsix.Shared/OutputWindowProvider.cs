@@ -14,6 +14,8 @@ internal sealed class OutputWindowProvider
 {
     private const int DefaultMaxChars = 20000;
     private const int MaximumMaxChars = 500000;
+    private static readonly Guid TestOutputPaneGuid1 = new("B85579AA-8BE0-4C4F-A850-90902B317581");
+    private static readonly Guid TestOutputPaneGuid2 = new("E8365304-9908-466D-9B5D-4C1F671C401B");
     private readonly AsyncPackage _package;
     private readonly string _vsInstanceId;
 
@@ -93,7 +95,9 @@ internal sealed class OutputWindowProvider
                     if (paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid ||
                         paneGuid == VSConstants.OutputWindowPaneGuid.DebugPane_guid ||
                         paneGuid == VSConstants.OutputWindowPaneGuid.GeneralPane_guid ||
-                        paneGuid == VSConstants.OutputWindowPaneGuid.SortedBuildOutputPane_guid)
+                        paneGuid == VSConstants.OutputWindowPaneGuid.SortedBuildOutputPane_guid ||
+                        paneGuid == TestOutputPaneGuid1 ||
+                        paneGuid == TestOutputPaneGuid2)
                     {
                         isBuiltIn = true;
                     }
@@ -128,29 +132,63 @@ internal sealed class OutputWindowProvider
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         OutputWindowPane? matchedPane = null;
+        var trimmedSource = (source ?? string.Empty).Trim();
+
         foreach (OutputWindowPane pane in dte.ToolWindows.OutputWindow.OutputWindowPanes)
         {
-            if (string.Equals(source, "build", StringComparison.OrdinalIgnoreCase))
+            var paneName = pane.Name ?? string.Empty;
+            var hasGuid = Guid.TryParse(pane.Guid, out var paneGuid);
+
+            if (string.Equals(trimmedSource, "build", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmedSource, "生成", StringComparison.OrdinalIgnoreCase))
             {
-                if (Guid.TryParse(pane.Guid, out var paneGuid) &&
-                    paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid)
+                if (hasGuid && (paneGuid == VSConstants.OutputWindowPaneGuid.BuildOutputPane_guid ||
+                                paneGuid == VSConstants.OutputWindowPaneGuid.SortedBuildOutputPane_guid))
+                {
+                    matchedPane = pane;
+                    break;
+                }
+                if (paneName.IndexOf("build", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    paneName.IndexOf("生成", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     matchedPane = pane;
                     break;
                 }
             }
-            else if (string.Equals(source, "debug", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(trimmedSource, "debug", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(trimmedSource, "调试", StringComparison.OrdinalIgnoreCase))
             {
-                if (Guid.TryParse(pane.Guid, out var paneGuid) &&
-                    paneGuid == VSConstants.OutputWindowPaneGuid.DebugPane_guid)
+                if (hasGuid && paneGuid == VSConstants.OutputWindowPaneGuid.DebugPane_guid)
+                {
+                    matchedPane = pane;
+                    break;
+                }
+                if (paneName.IndexOf("debug", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    paneName.IndexOf("调试", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    matchedPane = pane;
+                    break;
+                }
+            }
+            else if (string.Equals(trimmedSource, "tests", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(trimmedSource, "test", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(trimmedSource, "测试", StringComparison.OrdinalIgnoreCase))
+            {
+                if (hasGuid && (paneGuid == TestOutputPaneGuid1 || paneGuid == TestOutputPaneGuid2))
+                {
+                    matchedPane = pane;
+                    break;
+                }
+                if (paneName.IndexOf("test", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    paneName.IndexOf("测试", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     matchedPane = pane;
                     break;
                 }
             }
 
-            if (pane.Name.Equals(source, StringComparison.OrdinalIgnoreCase) ||
-                pane.Name.IndexOf(source, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (paneName.Equals(trimmedSource, StringComparison.OrdinalIgnoreCase) ||
+                paneName.IndexOf(trimmedSource, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 matchedPane = pane;
                 break;
