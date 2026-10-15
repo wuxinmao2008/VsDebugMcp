@@ -12,7 +12,24 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-10-13 更新）
+## 实施进度（2026-10-15 更新）
+
+### Phase 8C：自动化测试闭环、测试输出透传与通信/编码韧性加固已完成开发 (v0.1.26.0)
+
+- **HTTP 请求头宽容中间件 (彻底解决 406 Not Acceptable)**：
+  - 针对自动化脚本/Python urllib 默认请求（未显式携带 `Accept`、携带 `*/*` 或仅带 `application/json`）被官方 C# MCP SDK 严格中间件 406 拦截的痛点（Issue #5），前置标准化中间件自动补齐为 `application/json, text/event-stream`。
+- **构建状态查询参数自适应 (`vs_get_build_status`)**：
+  - 将 `buildTaskId` 参数变更为可选（`string? buildTaskId = null`）。当调用方缺省参数时，直接返回当前正在执行或最近一次完成的构建任务快照，避免外部智能体在轮询时因缺参报错。
+- **Windows 中文编码与子进程输出自适应 (解决 GBK vs UTF-8 乱码)**：
+  - 针对 `SolutionBuildProvider` (CMake) 与 `TestExplorerProvider` (CTest) 中硬编码 `StandardOutputEncoding = Encoding.UTF8` 导致中文 Windows 下 MSVC/CTest 输出被破坏的根因，引入 `GetConsoleEncoding()` 动态采用系统 OEM 代码页 (CP936/GBK) 自适应解码。
+- **输出窗口 Tests 窗格原生支持与多语种容错 (`vs_get_output_window_logs`)**：
+  - 原生支持 `source: "tests"`（涵盖 TestWindow GUID `B85579AA-8BE0-4C4F-A850-90902B317581` 与 `E8365304-9908-466D-9B5D-4C1F671C401B` 以及本地化名称 `"测试"`/`"tests"`）。
+  - 对 `"build"` / `"生成"` 与 `"debug"` / `"调试"` 增加多语种名称和 GUID 兜底映射，防止中文 VS 下无法通过英文关键词定位窗格。
+- **测试执行结果附带原始 Console Output 透传与非标准测试适配 (`vs_run_tests` / `vs_get_test_run_status`)**：
+  - 在 `RunTestsResponse` 与 `TestRunStatusResponse` 中增加 `consoleOutput` 字段，并在同步等待模式（`waitForCompletion: true`）中自动回填。
+  - 测试启动前记录 Tests 窗格初始偏移，测试运行中与结束时自动捕获增量控制台输出（CTest 捕获标准输出/错误流，MEF 捕获 Tests 窗格增量文本）。
+  - 针对 QtTest、Catch2、GoogleTest 等测试适配器未向 VS TestStore 回填用例通过/失败数但输出中包含 `FAIL!` / `[  FAILED  ]` / `Totals: ... failed` 时，引入启发式探测，自动纠正运行状态为 `Failed` 并标记失败，避免误判为全部通过。
+- **组件版本统一升级至 `0.1.26.0`**。
 
 ### Phase 8B：Minidump 事后调试、反汇编透视、动态符号加载与单项目构建已完成开发 (v0.1.25.0)
 
