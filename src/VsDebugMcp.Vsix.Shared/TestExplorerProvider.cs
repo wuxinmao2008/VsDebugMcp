@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -461,6 +462,15 @@ internal sealed class TestExplorerProvider : IDisposable
         var now = DateTimeOffset.UtcNow;
 
         var runContext = new ActiveTestRunContext(runId, targetGuids, now);
+        try
+        {
+            if (dte != null)
+            {
+                var existingOutput = OutputWindowProvider.ReadPaneOutput(dte, "tests");
+                runContext.InitialOutputLength = existingOutput?.Length ?? 0;
+            }
+        }
+        catch { }
 
         lock (_sync)
         {
@@ -713,11 +723,19 @@ internal sealed class TestExplorerProvider : IDisposable
                 proc = new System.Diagnostics.Process { StartInfo = psi };
                 proc.OutputDataReceived += (s, e) =>
                 {
-                    if (e.Data != null) WriteOutput(e.Data);
+                    if (e.Data != null)
+                    {
+                        WriteOutput(e.Data);
+                        runContext.AppendConsoleOutput(e.Data);
+                    }
                 };
                 proc.ErrorDataReceived += (s, e) =>
                 {
-                    if (e.Data != null) WriteOutput(e.Data);
+                    if (e.Data != null)
+                    {
+                        WriteOutput(e.Data);
+                        runContext.AppendConsoleOutput(e.Data);
+                    }
                 };
 
                 lock (_sync)
@@ -735,6 +753,7 @@ internal sealed class TestExplorerProvider : IDisposable
                 }
 
                 WriteOutput($"------ CTest 已完成，退出代码: {proc.ExitCode} ------");
+                runContext.AppendConsoleOutput($"------ CTest 已完成，退出代码: {proc.ExitCode} ------");
 
                 CTestRunResult? parsedResult = null;
                 if (File.Exists(junitPath))
@@ -947,6 +966,16 @@ internal sealed class TestExplorerProvider : IDisposable
         var runIdMef = "testrun-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var nowMef = DateTimeOffset.UtcNow;
         var runContextMef = new ActiveTestRunContext(runIdMef, new List<Guid> { testGuid }, nowMef);
+        try
+        {
+            var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
+            if (dte != null)
+            {
+                var existingOutput = OutputWindowProvider.ReadPaneOutput(dte, "tests");
+                runContextMef.InitialOutputLength = existingOutput?.Length ?? 0;
+            }
+        }
+        catch { }
 
         lock (_sync)
         {
@@ -1127,6 +1156,17 @@ internal sealed class TestExplorerProvider : IDisposable
             }
         }
 
+        if (!run.IsCTest && (run.State == TestRunStates.Running || string.IsNullOrEmpty(run.ConsoleOutput)))
+        {
+            try
+            {
+                await CaptureOutputPaneAsync(run);
+            }
+            catch
+            {
+            }
+        }
+
         var durationMs = ((run.CompletedAt ?? DateTimeOffset.UtcNow) - run.StartedAt).TotalMilliseconds;
         if (durationMs < 0) durationMs = 0;
 
@@ -1140,7 +1180,8 @@ internal sealed class TestExplorerProvider : IDisposable
             FailedCount = run.FailedCount,
             SkippedCount = run.SkippedCount,
             DurationMs = durationMs,
-            Results = run.GetResultsSnapshot()
+            Results = run.GetResultsSnapshot(),
+            ConsoleOutput = run.ConsoleOutput
         };
     }
 
@@ -1226,17 +1267,68 @@ internal sealed class TestExplorerProvider : IDisposable
     private async Task FinalizeRunAsync(ActiveTestRunContext run)
     {
         await RefreshRunResultsAsync(run, CancellationToken.None);
+        await CaptureOutputPaneAsync(run);
         lock (_sync)
         {
             if (run.State == TestRunStates.Running)
             {
-                run.State = run.FailedCount > 0 ? TestRunStates.Failed : TestRunStates.Completed;
+                bool hasFailureInOutput = false;
+                var consoleOut = run.ConsoleOutput;
+                if (run.FailedCount == 0 && run.PassedCount == 0 && !string.IsNullOrWhiteSpace(consoleOut))
+                {
+                    if (consoleOut!.Contains("FAIL!") ||
+                        consoleOut.Contains("[  FAILED  ]") ||
+                        Regex.IsMatch(consoleOut, @"Totals:.*\b[1-9]\d*\s+failed", RegexOptions.IgnoreCase))
+                    {
+                        hasFailureInOutput = true;
+                        run.MarkHeuristicFailure(1);
+                    }
+                }
+
+                run.State = (run.FailedCount > 0 || hasFailureInOutput) ? TestRunStates.Failed : TestRunStates.Completed;
                 run.CompletedAt = DateTimeOffset.UtcNow;
                 if (_activeRun == run)
                 {
                     _activeRun = null;
                 }
             }
+        }
+    }
+
+    private async Task CaptureOutputPaneAsync(ActiveTestRunContext run)
+    {
+        if (run.IsCTest) return;
+        try
+        {
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync();
+            var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
+            if (dte != null)
+            {
+                var fullOutput = OutputWindowProvider.ReadPaneOutput(dte, "tests");
+                if (!string.IsNullOrEmpty(fullOutput))
+                {
+                    string textToSave;
+                    if (run.InitialOutputLength > 0 && run.InitialOutputLength < fullOutput.Length)
+                    {
+                        textToSave = fullOutput.Substring(run.InitialOutputLength);
+                    }
+                    else
+                    {
+                        textToSave = fullOutput;
+                    }
+
+                    if (textToSave.Length > 100000)
+                    {
+                        textToSave = textToSave.Substring(textToSave.Length - 100000);
+                    }
+
+                    run.ConsoleOutput = textToSave;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _diagnostics?.LogWarning($"[TestExplorer] Could not capture test output pane: {ex.Message}");
         }
     }
 
@@ -1352,7 +1444,34 @@ internal sealed class TestExplorerProvider : IDisposable
         public int FailedCount { get; private set; }
         public int SkippedCount { get; private set; }
 
+        public int InitialOutputLength { get; set; }
+        public string? ConsoleOutput { get; set; }
+
+        private readonly StringBuilder _consoleOutputBuilder = new();
         private List<VsTestResult> _results = new();
+
+        public void AppendConsoleOutput(string line)
+        {
+            lock (_lock)
+            {
+                if (_consoleOutputBuilder.Length < 100000)
+                {
+                    _consoleOutputBuilder.AppendLine(line);
+                    ConsoleOutput = _consoleOutputBuilder.ToString();
+                }
+            }
+        }
+
+        public void MarkHeuristicFailure(int failedCount = 1)
+        {
+            lock (_lock)
+            {
+                if (FailedCount == 0)
+                {
+                    FailedCount = failedCount;
+                }
+            }
+        }
 
         public void UpdateResults(List<VsTestResult> results, int passed, int failed, int skipped)
         {
@@ -1599,6 +1718,8 @@ internal sealed class TestExplorerProvider : IDisposable
             if (val is TimeSpan ts) return ts.TotalMilliseconds;
             return 0;
         }
+    }
+
     private static Encoding GetConsoleEncoding()
     {
         try

@@ -312,6 +312,7 @@ public sealed class InstanceProtocolTests
             FailedCount = 0,
             SkippedCount = 0,
             DurationMs = 25.0,
+            ConsoleOutput = "Totals: 1 passed, 0 failed, 0 skipped",
             Results = new List<VsTestResult>
             {
                 new()
@@ -327,6 +328,7 @@ public sealed class InstanceProtocolTests
         Assert.Equal(TestRunStates.Completed, statusRespCopy.State);
         Assert.Equal(1, statusRespCopy.PassedCount);
         Assert.Equal("Passed", statusRespCopy.Results[0].Outcome);
+        Assert.Equal("Totals: 1 passed, 0 failed, 0 skipped", statusRespCopy.ConsoleOutput);
 
         var cancelReq = new CancelTestRunRequest { TestRunId = "testrun-12345678" };
         var cancelReqCopy = BridgeJson.Deserialize<CancelTestRunRequest>(BridgeJson.Serialize(cancelReq));
@@ -1301,13 +1303,15 @@ public sealed class InstanceProtocolTests
             FailedCount = 2,
             SkippedCount = 0,
             DurationSeconds = 5.67,
-            FailedTestNames = new List<string> { "TestA", "TestB" }
+            FailedTestNames = new List<string> { "TestA", "TestB" },
+            ConsoleOutput = "FAIL!: MyTest::test() returned FALSE."
         };
         var testRespCopy = BridgeJson.Deserialize<RunTestsResponse>(BridgeJson.Serialize(testResp));
         Assert.Equal(8, testRespCopy.PassedCount);
         Assert.Equal(2, testRespCopy.FailedCount);
         Assert.Equal(5.67, testRespCopy.DurationSeconds);
         Assert.Equal(2, testRespCopy.FailedTestNames?.Count);
+        Assert.Equal("FAIL!: MyTest::test() returned FALSE.", testRespCopy.ConsoleOutput);
 
         // 4. DebuggerGetExceptionInfoResponse with assertion fields
         var excResp = new DebuggerGetExceptionInfoResponse

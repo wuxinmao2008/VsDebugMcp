@@ -1028,6 +1028,9 @@ public sealed class RunTestsResponse
 
     [DataMember(Name = "failedTestNames", Order = 11, EmitDefaultValue = false)]
     public List<string>? FailedTestNames { get; set; }
+
+    [DataMember(Name = "consoleOutput", Order = 12, EmitDefaultValue = false)]
+    public string? ConsoleOutput { get; set; }
 }
 
 [DataContract]
@@ -1097,6 +1100,9 @@ public sealed class TestRunStatusResponse
 
     [DataMember(Name = "results", Order = 9)]
     public List<VsTestResult> Results { get; set; } = new();
+
+    [DataMember(Name = "consoleOutput", Order = 10, EmitDefaultValue = false)]
+    public string? ConsoleOutput { get; set; }
 }
 
 [DataContract]

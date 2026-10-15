@@ -852,6 +852,7 @@ public sealed class BridgeService : IBridgeService
             runResp.PassedCount = status.PassedCount;
             runResp.FailedCount = status.FailedCount;
             runResp.SkippedCount = status.SkippedCount;
+            runResp.ConsoleOutput = status.ConsoleOutput;
             runResp.CompletedAt = DateTime.UtcNow.ToString("O");
 
             if (status.Results != null)

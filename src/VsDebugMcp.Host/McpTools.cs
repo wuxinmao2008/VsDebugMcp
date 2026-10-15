@@ -509,7 +509,7 @@ public sealed class McpTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Triggers unit test execution for specified test IDs or all discovered tests in the solution. Supports optional synchronous wait (waitForCompletion) to directly return final pass/fail counts.")]
+    [Description("Triggers unit test execution for specified test IDs or all discovered tests in the solution. Supports optional synchronous wait (waitForCompletion) to directly return final pass/fail counts and captured console output.")]
     public Task<RunTestsResponse> RunTestsAsync(
         [Description("Optional list of specific test IDs (GUIDs) to execute. If omitted or empty, all discovered tests in the solution will be run.")] IReadOnlyList<string>? testIds = null,
         [Description("Optional flag whether to wait synchronously until test execution reaches a terminal state (completed, failed, cancelled) before returning. Defaults to false.")] bool? waitForCompletion = null,
@@ -526,7 +526,7 @@ public sealed class McpTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Gets the current execution progress, state, and detailed outcomes of a test run.")]
+    [Description("Gets the current execution progress, state, captured console output, and detailed outcomes of a test run.")]
     public Task<TestRunStatusResponse> GetTestRunStatusAsync(
         [Description("Optional test run ID. If omitted, the active or most recent test run will be queried.")] string? testRunId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,

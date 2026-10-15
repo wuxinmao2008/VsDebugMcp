@@ -32,4 +32,12 @@ public class CalculatorTests
         var result = Calculator.Divide(10, 0);
         Assert.Equal(0, result);
     }
+
+    [Fact]
+    public void Test_ConsoleOutput_And_Encoding()
+    {
+        System.Console.WriteLine("[测试日志] 单元测试控制台输出测试，验证中文编码与透传正常。");
+        var result = Calculator.Add(1, 1);
+        Assert.Equal(2, result);
+    }
 }

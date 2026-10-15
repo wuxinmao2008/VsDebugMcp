@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **自动化测试闭环与通信/编码韧性加固 (Phase 8C / Issue #5 改进与修复)**:
+  - **HTTP 请求头宽容中间件 (彻底解决 406 Not Acceptable)**:
+    - 在 `VsDebugMcp.Host` 服务管道前置中间件，对未携带 `Accept`、携带 `*/*` 或仅带 `application/json` 的通用 HTTP 客户端请求，自动标准化补充为 `application/json, text/event-stream`，解决自动化脚本/Python urllib 默认请求被 406 拦截的问题。
+  - **构建状态查询参数自适应 (`vs_get_build_status`)**:
+    - 将 `buildTaskId` 参数变更为可选（`string? buildTaskId = null`）。当调用方缺省参数时，直接返回当前正在执行或最近一次完成的构建任务快照，避免外部客户端在轮询时因缺参报错。
+  - **Windows 中文编码与子进程输出自适应 (解决 GBK vs UTF-8 乱码)**:
+    - 针对 `SolutionBuildProvider` (CMake) 与 `TestExplorerProvider` (CTest) 中硬编码 `StandardOutputEncoding = Encoding.UTF8` 导致中文 Windows 下 MSVC/CTest 输出被破坏（如 `δõβ`、`\ufffd` 替换符）的根因，引入 `GetConsoleEncoding()` 动态采用系统 OEM 代码页 (CP936/GBK) 自适应解码。
+  - **输出窗口 Tests 窗格原生支持与多语种容错 (`vs_get_output_window_logs`)**:
+    - 原生支持 `source: "tests"`（同时涵盖 TestWindow GUID `B85579AA-8BE0-4C4F-A850-90902B317581` 与 `E8365304-9908-466D-9B5D-4C1F671C401B` 以及本地化名称 `"测试"`/`"tests"`）。
+    - 对 `"build"` / `"生成"` 与 `"debug"` / `"调试"` 增加多语种名称和 GUID 兜底映射，防止中文 VS 下无法通过英文关键词定位窗格。
+  - **测试执行结果附带原始 Console Output 透传与非标准测试适配 (`vs_run_tests` / `vs_get_test_run_status`)**:
+    - 针对 QtTest、Catch2、GoogleTest 等在 VS Test Explorer 中可能不回填顶级结构化结果导致测试结果全归零的问题，在 `RunTestsResponse` 与 `TestRunStatusResponse` 中增加 `consoleOutput` 字段。
+    - 在测试启动前自动记录 Tests 输出窗格初始偏移，测试运行中与结束时自动捕获增量控制台输出（CTest 捕获进程标准输出与错误流，MEF 捕获 Tests 窗格增量文本）。
+    - 在同步等待模式（`waitForCompletion: true`）及轮询状态接口中自动携带完整的 `consoleOutput`。
+    - 针对测试适配器未回填用例通过/失败数但输出中包含明显的 `FAIL!` (QtTest) / `[  FAILED  ]` (GoogleTest) / `Totals: ... failed` 时，引入状态启发式探测，自动纠正运行状态为 `Failed` 并标记失败，避免误判为全部通过。
+  - **自动化测试**:
+    - 新增 `HttpAcceptHeaderMiddlewareTests.cs`，更新 `McpToolSchemaTests.cs` 与 `InstanceProtocolTests.cs`，全量测试用例（Host: 196, Protocol: 48）全部通过。
+
 ## [0.1.25.0] - 2026-10-13
 
 ### Added
