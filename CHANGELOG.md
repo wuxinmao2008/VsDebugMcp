@@ -5,6 +5,30 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.27.0] - 2026-10-19
+
+### Added
+- **无符号与缺失 PDB 崩溃转储深度调试与底层逆向透视 (Phase 8D / Issue #6 改进与闭环)**:
+  - **解耦式纯托管原生反汇编引擎 (`vs_debugger_get_disassembly`)**:
+    - 引入纯托管 `Iced.Intel` x86/x64 高性能反汇编引擎，彻底解耦对本地目标 PE 二进制文件和外部 `dumpbin.exe` 工具链的依赖。
+    - 当本地模块文件不可用或缺少调试信息时，直接从 Minidump 内存流或运行态目标进程的指令流中解码机器码字节，保障反汇编在任意脱机/跨机环境下的 100% 成功率。
+  - **CPU 寄存器与上下文快照 (`vs_debugger_get_registers`, 工具 #54)**:
+    - 原生暴露专用寄存器快照工具，支持结构化获取通用寄存器（RIP/EIP, RAX/EAX, RBX, RCX, RDX, RSI, RDI, RBP, RSP）、段寄存器（CS, DS, ES, FS, GS, SS）与标志位（RFLAGS/EFLAGS）。
+    - 运行态优先走 Win32 原生线程上下文获取，Minidump 离线转储下自动解析 `MINIDUMP_EXCEPTION_STREAM` 的 `ThreadContext` 异常上下文或线程流上下文。
+  - **崩溃转储一键总结与异常全景透视 (`vs_debugger_get_crash_summary`, 工具 #55)**:
+    - 类似于 WinDbg `!analyze -v`，零依赖直接解析 Minidump，一次性输出崩溃原因、异常代码（如 `0xC0000005` 内存访问违规）、故障模块与加载基址、崩溃线程与异常指令地址、崩溃瞬间完整寄存器状态、以及崩溃点前后的精准原生汇编指令流。
+  - **崩溃转储一键加载与调试挂载 (`vs_debugger_open_dump`, 工具 #56)**:
+    - 支持通过 MCP 直接下发 DMP 文件路径，自动在 Visual Studio 中打开并启动事后转储调试会话，无需用户手动拖拽或通过文件菜单打开。
+  - **指针链与符号反查格式化 (`vs_debugger_dump_pointers`, 工具 #57)**:
+    - 提供类似 WinDbg `dps` / `dds` (Display Pointer with Symbol) 的内存指针扫描能力。
+    - 自动以 4/8 字节为步长解析指定内存或栈地址区域中的数值，自动反查是否落在已知模块的代码段或数据段中并附带偏移计算（`Module+0xOffset`），辅助逆向分析虚函数表（vtable）或未知对象结构。
+  - **内存属性与保护状态查询 (`vs_debugger_query_memory`, 工具 #58)**:
+    - 提供类似 WinDbg `!address` / `VirtualQueryEx` 的内存区域属性探测。
+    - 运行态基于 Win32 API 查询内存块的 BaseAddress、RegionSize、State (MEM_COMMIT/RESERVE)、Protect (PAGE_READWRITE/EXECUTE) 与 Type；Minidump 转储下自动在 Memory64List/MemoryList 内存流中定位对应范围。
+  - **自动化测试**:
+    - 新增 `MinidumpParserTests.cs` (Phase 8D 纯托管反汇编、Context 解析、CrashSummary、MemoryQuery 单元测试，net8.0 与 net472 双平台 106 个测试全部通过)。
+    - 更新 `McpToolSchemaTests.cs`，验证全部 **58 个标准 MCP 工具**注册及参数契约无误。
+
 ## [0.1.26.0] - 2026-10-15
 
 ### Added

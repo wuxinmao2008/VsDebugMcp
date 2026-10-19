@@ -3,16 +3,35 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 全系列（VS 2017 ~ VS 2026 / VS 15.x ~ 18.x）提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0 ~ Phase 8B 全部完成开发，53 个 MCP 工具全量就绪并原生扩展支持现代 CMake、CTest 及 Minidump 事后崩溃分析与反汇编体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
+- 阶段：Phase 0 ~ Phase 8D 全部完成开发，58 个 MCP 工具全量就绪并原生扩展支持现代 CMake、CTest 及 Minidump 事后崩溃分析与纯托管反汇编体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
 - 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 工程架构演进：核心业务逻辑 100% 聚合于显式 C# 共享项目 `VsDebugMcp.Vsix.Shared.shproj`，以源码级直接注入编译，零额外运行时 DLL。分别由 `VsDebugMcp.Vsix` (VS 2022~2026 64-bit) 和 `VsDebugMcp.Vsix.2019` (VS 2017~2019 32-bit) 独立打包。
-- 能力范围：构建/编译（整包或单项目 Build/Rebuild/Clean）、断点设置、调试状态/调用栈/表达式求值诊断、Minidump 异常流与内存流解析、无符号反汇编透视、动态 PDB 符号加载、输出窗口、项目工程与文件树、单元测试联动、进程虚拟内存透视。
+- 能力范围：构建/编译（整包或单项目 Build/Rebuild/Clean）、断点设置、调试状态/调用栈/表达式求值诊断、Minidump 异常流与内存流解析、CPU 寄存器提取、纯托管无符号反汇编透视、Dump 一键诊断与快捷载入、指针格式化转储、内存属性探测、动态 PDB 符号加载、输出窗口、项目工程与文件树、单元测试联动、进程虚拟内存透视。
 - 运行边界：仅本机使用；VS Code 到共享 Host 使用固定 `http://127.0.0.1:43260` Streamable HTTP，Host 到 VSIX Bridge 使用当前用户 ACL 保护的实例级 Named Pipe RPC，不开放外部网卡或远程访问。
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-10-15 更新）
+## 实施进度（2026-10-19 更新）
+
+### Phase 8D：底层逆向与 Dump 事后分析深度加固已完成开发 (v0.1.27.0)
+
+- **P0-1. 原生内存流反汇编 (`vs_debugger_disassemble`)**：
+  - 引入成熟轻量的纯托管反汇编库（`Iced`），彻底摆脱对本地磁盘 PE 二进制路径与外部 `dumpbin.exe` 的强耦合；
+  * 支持从 Minidump 内部的 `Memory64ListStream` / `MemoryListStream` 或实时进程内存直接读取机器码字节流进行反汇编；
+  * 输出结构化指令列表（地址、机器码 Hex、助记符、操作数、`=>` 当前指令指针标记）。
+- **P0-2. 寄存器快照提取 (`vs_debugger_get_registers`)**：
+  * 新增一等公民寄存器查询工具，告别脆弱的 `@rax` 表达式嗅探；
+  * 离线 Dump 下从 `MINIDUMP_THREAD_LIST` 的 `ThreadContext` 解析 Windows x64/x86 `CONTEXT` 结构体，实时进程下通过 `GetThreadContext` 提取；
+  * 批量返回全量通用寄存器（RAX~R15, RIP, RSP, RBP, RFLAGS）及标志位。
+- **P1-1. Dump 一键诊断与快捷载入 (`vs_debugger_get_crash_summary` / `vs_debugger_open_dump`)**：
+  * `vs_debugger_get_crash_summary`：相当于轻量版 `!analyze -v`，提取 ExceptionCode、FaultAddress、违规类型（读/写/执行）、崩溃线程与第一现场反汇编指令；
+  * `vs_debugger_open_dump`：支持 Agent 直接传路径通过 DTE 打开 `.dmp` 进入调试会话，无需人工在 VS 点击。
+- **P1-2. 指针格式化转储与内存属性探测 (`vs_debugger_dump_pointers` / `vs_debugger_query_memory`)**：
+  * `vs_debugger_dump_pointers`：类似 WinDbg `dds` / `dps`，按机器字长转储并逆向映射模块、导出符号或标记栈空间；
+  * `vs_debugger_query_memory`：类似 WinDbg `!address`，实时进程调用 `VirtualQueryEx` 探测页面保护/提交状态，离线 Dump 快速定位内存区间归属。
+- **客户端 Schema 自动同步加固**：
+  * 解决客户端本地缓存 schema 未同步新工具的落差，工具总数扩充至 58 项。
 
 ### Phase 8C：自动化测试闭环、测试输出透传与通信/编码韧性加固已完成开发 (v0.1.26.0)
 
