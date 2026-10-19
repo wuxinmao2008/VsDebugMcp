@@ -252,6 +252,185 @@ public sealed class MinidumpParserTests
         Assert.True(roundTripped.Instructions[0].IsCurrentInstruction);
     }
 
+    [Fact]
+    public void DisassembleMemoryBytes_IcedEngine_DisassemblesX64BytesCorrectly()
+    {
+        // 0F B7 04 41 : movzx eax, word ptr [rcx + rax*2]
+        // 48 83 C4 10 : add rsp, 10h
+        // C3          : ret
+        var codeBytes = new byte[] { 0x0F, 0xB7, 0x04, 0x41, 0x48, 0x83, 0xC4, 0x10, 0xC3 };
+        const ulong baseAddress = 0x00007FF6FB8B1DBD;
+
+        var instructions = MinidumpParser.DisassembleMemoryBytes(
+            codeBytes,
+            baseAddress,
+            bitness: 64,
+            currentInstructionAddress: baseAddress,
+            maxInstructions: 5);
+
+        Assert.Equal(3, instructions.Count);
+        Assert.Equal("0x00007FF6FB8B1DBD", instructions[0].Address);
+        Assert.True(instructions[0].IsCurrentInstruction);
+        Assert.Contains("movzx", instructions[0].Instruction);
+        Assert.Contains("0F B7 04 41", instructions[0].Bytes);
+
+        Assert.Equal("0x00007FF6FB8B1DC1", instructions[1].Address);
+        Assert.False(instructions[1].IsCurrentInstruction);
+        Assert.Contains("add", instructions[1].Instruction);
+
+        Assert.Equal("0x00007FF6FB8B1DC5", instructions[2].Address);
+        Assert.Contains("ret", instructions[2].Instruction);
+    }
+
+    [Fact]
+    public void SampleCMakeCrashDump_WhenPresent_ExtractsRegistersContext()
+    {
+        var sampleDmp = Path.GetFullPath(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            @"..\..\..\..\..\sample\SampleCMake\out\build\x64-Debug\src\app\crash_sample.dmp"));
+        if (!File.Exists(sampleDmp))
+        {
+            return;
+        }
+
+        var ok = MinidumpParser.TryReadThreadContext(sampleDmp, targetThreadId: null, out var ctx);
+        Assert.True(ok);
+        Assert.NotNull(ctx);
+        Assert.Equal(6428, ctx!.ThreadId);
+        Assert.Equal("x64", ctx.Architecture);
+        Assert.Equal("0xFFFFFFFFFFFFFFFF", ctx.Registers["RAX"]);
+        Assert.Equal("0x00000000DEAD0000", ctx.Registers["RCX"]);
+        Assert.Equal("0x00007FF6FB8B1DBD", ctx.InstructionPointer);
+        Assert.NotEmpty(ctx.DetailedRegisters);
+        Assert.True(ctx.DetailedRegisters.Count >= 17);
+    }
+
+    [Fact]
+    public void SampleCMakeCrashDump_WhenPresent_ExtractsCrashSummaryWithDisassembly()
+    {
+        var sampleDmp = Path.GetFullPath(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            @"..\..\..\..\..\sample\SampleCMake\out\build\x64-Debug\src\app\crash_sample.dmp"));
+        if (!File.Exists(sampleDmp))
+        {
+            return;
+        }
+
+        var ok = MinidumpParser.TryReadCrashSummary(sampleDmp, out var summary);
+        Assert.True(ok);
+        Assert.NotNull(summary);
+        Assert.Equal(6428, summary!.ThreadId);
+        Assert.Equal("0xC0000005", summary.ExceptionCodeHex);
+        Assert.Equal("0x00007FF6FB8B1DBD", summary.ExceptionAddressHex);
+        Assert.Equal("read", summary.AccessOperation);
+        Assert.Equal("0x00000000DEACFFFE", summary.FaultingAddressHex);
+        Assert.NotNull(summary.FaultingInstructionDisassembly);
+        Assert.Contains("movzx", summary.FaultingInstructionDisassembly!);
+        Assert.Contains("=== Minidump Crash Summary ===", summary.FormattedSummary);
+        Assert.Contains("0xFFFFFFFFFFFFFFFF", summary.Registers["RAX"]);
+    }
+
+    [Fact]
+    public void SampleCMakeCrashDump_WhenPresent_QueriesMemoryInDump()
+    {
+        var sampleDmp = Path.GetFullPath(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            @"..\..\..\..\..\sample\SampleCMake\out\build\x64-Debug\src\app\crash_sample.dmp"));
+        if (!File.Exists(sampleDmp))
+        {
+            return;
+        }
+
+        var okTarget = MinidumpParser.TryQueryMemoryInDump(sampleDmp, 0x00007FF6FB8B1DBD, out var memInfo);
+        Assert.True(okTarget);
+        Assert.NotNull(memInfo);
+        Assert.True(memInfo!.IsPresentInDump);
+        Assert.Equal("Memory64ListStream", memInfo.StreamSource);
+
+        var okMissing = MinidumpParser.TryQueryMemoryInDump(sampleDmp, 0x0000000000001000, out var missingInfo);
+        Assert.True(okMissing);
+        Assert.NotNull(missingInfo);
+        Assert.False(missingInfo!.IsPresentInDump);
+    }
+
+    [Fact]
+    public void Phase8DContracts_RoundTripJsonSerialization()
+    {
+        var regResponse = new DebuggerGetRegistersResponse
+        {
+            VsInstanceId = "vs-1",
+            ThreadId = 1234,
+            Architecture = "x64",
+            Registers = new Dictionary<string, string> { ["RAX"] = "0x1", ["RIP"] = "0x7FFE" },
+            InstructionPointer = "0x7FFE",
+            StackPointer = "0x1000",
+            FlagsHex = "0x202",
+            FlagBits = new Dictionary<string, bool> { ["ZF"] = false, ["CF"] = true }
+        };
+        var regJson = JsonConvert.SerializeObject(regResponse);
+        var regRt = JsonConvert.DeserializeObject<DebuggerGetRegistersResponse>(regJson);
+        Assert.NotNull(regRt);
+        Assert.Equal(1234, regRt!.ThreadId);
+        Assert.Equal("0x7FFE", regRt.InstructionPointer);
+
+        var summaryResponse = new DebuggerGetCrashSummaryResponse
+        {
+            VsInstanceId = "vs-1",
+            DumpPath = @"C:\crashes\demo.dmp",
+            FaultingThreadId = 1234,
+            ExceptionCodeHex = "0xC0000005",
+            ExceptionName = "EXCEPTION_ACCESS_VIOLATION",
+            FormattedSummary = "Sample crash",
+            FaultingInstructionDisassembly = ">>> 0x7FFE: mov rax, [rcx]"
+        };
+        var sumJson = JsonConvert.SerializeObject(summaryResponse);
+        var sumRt = JsonConvert.DeserializeObject<DebuggerGetCrashSummaryResponse>(sumJson);
+        Assert.NotNull(sumRt);
+        Assert.Equal("0xC0000005", sumRt!.ExceptionCodeHex);
+
+        var openResponse = new DebuggerOpenDumpResponse
+        {
+            VsInstanceId = "vs-1",
+            DumpPath = @"C:\crashes\demo.dmp",
+            Success = true,
+            Message = "Opened dump successfully"
+        };
+        var openJson = JsonConvert.SerializeObject(openResponse);
+        var openRt = JsonConvert.DeserializeObject<DebuggerOpenDumpResponse>(openJson);
+        Assert.NotNull(openRt);
+        Assert.True(openRt!.Success);
+
+        var ptrResponse = new DebuggerDumpPointersResponse
+        {
+            VsInstanceId = "vs-1",
+            BaseAddress = "0x1000",
+            Count = 2,
+            PointerSize = 8,
+            Pointers = new List<PointerDumpEntry>
+            {
+                new() { Address = "0x1000", PointerValue = "0x7FFE", PointerValue64 = 0x7FFE, ModuleName = "app.exe" }
+            }
+        };
+        var ptrJson = JsonConvert.SerializeObject(ptrResponse);
+        var ptrRt = JsonConvert.DeserializeObject<DebuggerDumpPointersResponse>(ptrJson);
+        Assert.NotNull(ptrRt);
+        Assert.Single(ptrRt!.Pointers);
+
+        var queryResponse = new DebuggerQueryMemoryResponse
+        {
+            VsInstanceId = "vs-1",
+            Address = "0x1000",
+            IsValid = true,
+            State = "MEM_COMMIT",
+            Protect = "PAGE_READWRITE",
+            Type = "MEM_PRIVATE"
+        };
+        var qJson = JsonConvert.SerializeObject(queryResponse);
+        var qRt = JsonConvert.DeserializeObject<DebuggerQueryMemoryResponse>(qJson);
+        Assert.NotNull(qRt);
+        Assert.Equal("MEM_COMMIT", qRt!.State);
+    }
+
     private static void WriteSyntheticMinidumpWithException(
         string path,
         uint threadId,

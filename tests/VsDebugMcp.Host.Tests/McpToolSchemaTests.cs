@@ -134,6 +134,15 @@ public sealed class McpToolSchemaTests
     [InlineData(nameof(McpTools.DebuggerGetSnapshotAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.DebuggerReadMemoryAsync), "byteCount")]
     [InlineData(nameof(McpTools.DebuggerReadMemoryAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetRegistersAsync), "threadId")]
+    [InlineData(nameof(McpTools.DebuggerGetRegistersAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerGetCrashSummaryAsync), "dumpPath")]
+    [InlineData(nameof(McpTools.DebuggerGetCrashSummaryAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerOpenDumpAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerDumpPointersAsync), "count")]
+    [InlineData(nameof(McpTools.DebuggerDumpPointersAsync), "pointerSize")]
+    [InlineData(nameof(McpTools.DebuggerDumpPointersAsync), "vsInstanceId")]
+    [InlineData(nameof(McpTools.DebuggerQueryMemoryAsync), "vsInstanceId")]
     [InlineData(nameof(McpTools.ReportMcpIssueAsync), "suggestedImprovement")]
     [InlineData(nameof(McpTools.ReportMcpIssueAsync), "vsInstanceId")]
     public void OptionalToolParametersHaveDefaultValues(string methodName, string parameterName)
@@ -269,14 +278,32 @@ public sealed class McpToolSchemaTests
         Assert.True(attr.UseStructuredContent);
     }
 
+    [Theory]
+    [InlineData("vs_debugger_get_registers", nameof(McpTools.DebuggerGetRegistersAsync), true)]
+    [InlineData("vs_debugger_get_crash_summary", nameof(McpTools.DebuggerGetCrashSummaryAsync), true)]
+    [InlineData("vs_debugger_open_dump", nameof(McpTools.DebuggerOpenDumpAsync), false)]
+    [InlineData("vs_debugger_dump_pointers", nameof(McpTools.DebuggerDumpPointersAsync), true)]
+    [InlineData("vs_debugger_query_memory", nameof(McpTools.DebuggerQueryMemoryAsync), true)]
+    public void AllPhase8DToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
     [Fact]
-    public void Exactly53ToolsAreRegisteredOnMcpTools()
+    public void Exactly58ToolsAreRegisteredOnMcpTools()
     {
         var toolMethods = typeof(McpTools)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public)
             .Where(m => m.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>() != null)
             .ToList();
 
-        Assert.Equal(53, toolMethods.Count);
+        Assert.Equal(58, toolMethods.Count);
     }
 }

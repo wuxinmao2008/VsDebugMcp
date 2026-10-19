@@ -2283,3 +2283,273 @@ public sealed class DebuggerLoadSymbolsResponse
     [DataMember(Name = "warnings", Order = 6)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }
+
+[DataContract]
+public sealed class DebuggerGetRegistersRequest
+{
+    [DataMember(Name = "threadId", Order = 1, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class RegisterValueInfo
+{
+    [DataMember(Name = "name", Order = 1)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "valueHex", Order = 2)]
+    public string ValueHex { get; set; } = string.Empty;
+
+    [DataMember(Name = "value64", Order = 3)]
+    public ulong Value64 { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetRegistersResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "threadId", Order = 2)]
+    public int ThreadId { get; set; }
+
+    [DataMember(Name = "architecture", Order = 3)]
+    public string Architecture { get; set; } = "x64";
+
+    [DataMember(Name = "registers", Order = 4)]
+    public Dictionary<string, string> Registers { get; set; } = new();
+
+    [DataMember(Name = "detailedRegisters", Order = 5)]
+    public List<RegisterValueInfo> DetailedRegisters { get; set; } = new();
+
+    [DataMember(Name = "instructionPointer", Order = 6)]
+    public string InstructionPointer { get; set; } = string.Empty;
+
+    [DataMember(Name = "stackPointer", Order = 7)]
+    public string StackPointer { get; set; } = string.Empty;
+
+    [DataMember(Name = "framePointer", Order = 8, EmitDefaultValue = false)]
+    public string? FramePointer { get; set; }
+
+    [DataMember(Name = "flagsHex", Order = 9)]
+    public string FlagsHex { get; set; } = string.Empty;
+
+    [DataMember(Name = "flagBits", Order = 10, EmitDefaultValue = false)]
+    public Dictionary<string, bool> FlagBits { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 11)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetCrashSummaryRequest
+{
+    [DataMember(Name = "dumpPath", Order = 1, EmitDefaultValue = false)]
+    public string? DumpPath { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerGetCrashSummaryResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "dumpPath", Order = 2)]
+    public string DumpPath { get; set; } = string.Empty;
+
+    [DataMember(Name = "processName", Order = 3, EmitDefaultValue = false)]
+    public string? ProcessName { get; set; }
+
+    [DataMember(Name = "faultingThreadId", Order = 4)]
+    public int FaultingThreadId { get; set; }
+
+    [DataMember(Name = "exceptionCodeHex", Order = 5)]
+    public string ExceptionCodeHex { get; set; } = string.Empty;
+
+    [DataMember(Name = "exceptionName", Order = 6)]
+    public string ExceptionName { get; set; } = string.Empty;
+
+    [DataMember(Name = "exceptionAddressHex", Order = 7)]
+    public string ExceptionAddressHex { get; set; } = string.Empty;
+
+    [DataMember(Name = "accessOperation", Order = 8, EmitDefaultValue = false)]
+    public string? AccessOperation { get; set; }
+
+    [DataMember(Name = "faultingAddressHex", Order = 9, EmitDefaultValue = false)]
+    public string? FaultingAddressHex { get; set; }
+
+    [DataMember(Name = "faultingModule", Order = 10, EmitDefaultValue = false)]
+    public string? FaultingModule { get; set; }
+
+    [DataMember(Name = "faultingModuleOffsetHex", Order = 11, EmitDefaultValue = false)]
+    public string? FaultingModuleOffsetHex { get; set; }
+
+    [DataMember(Name = "formattedSummary", Order = 12)]
+    public string FormattedSummary { get; set; } = string.Empty;
+
+    [DataMember(Name = "faultingInstructionDisassembly", Order = 13, EmitDefaultValue = false)]
+    public string? FaultingInstructionDisassembly { get; set; }
+
+    [DataMember(Name = "registers", Order = 14, EmitDefaultValue = false)]
+    public Dictionary<string, string> Registers { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 15)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerOpenDumpRequest
+{
+    [DataMember(Name = "dumpPath", Order = 1)]
+    public string DumpPath { get; set; } = string.Empty;
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerOpenDumpResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "dumpPath", Order = 2)]
+    public string DumpPath { get; set; } = string.Empty;
+
+    [DataMember(Name = "success", Order = 3)]
+    public bool Success { get; set; }
+
+    [DataMember(Name = "message", Order = 4)]
+    public string Message { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 5)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class PointerDumpEntry
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "pointerValue", Order = 2)]
+    public string PointerValue { get; set; } = string.Empty;
+
+    [DataMember(Name = "pointerValue64", Order = 3)]
+    public ulong PointerValue64 { get; set; }
+
+    [DataMember(Name = "resolvedSymbol", Order = 4, EmitDefaultValue = false)]
+    public string? ResolvedSymbol { get; set; }
+
+    [DataMember(Name = "moduleName", Order = 5, EmitDefaultValue = false)]
+    public string? ModuleName { get; set; }
+
+    [DataMember(Name = "regionTag", Order = 6, EmitDefaultValue = false)]
+    public string? RegionTag { get; set; }
+
+    [DataMember(Name = "asciiPreview", Order = 7, EmitDefaultValue = false)]
+    public string? AsciiPreview { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerDumpPointersRequest
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "count", Order = 2, EmitDefaultValue = false)]
+    public int? Count { get; set; }
+
+    [DataMember(Name = "pointerSize", Order = 3, EmitDefaultValue = false)]
+    public int? PointerSize { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 4, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerDumpPointersResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "baseAddress", Order = 2)]
+    public string BaseAddress { get; set; } = string.Empty;
+
+    [DataMember(Name = "count", Order = 3)]
+    public int Count { get; set; }
+
+    [DataMember(Name = "pointerSize", Order = 4)]
+    public int PointerSize { get; set; } = 8;
+
+    [DataMember(Name = "pointers", Order = 5)]
+    public List<PointerDumpEntry> Pointers { get; set; } = new();
+
+    [DataMember(Name = "formattedText", Order = 6)]
+    public string FormattedText { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 7)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerQueryMemoryRequest
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerQueryMemoryResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "address", Order = 2)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "isValid", Order = 3)]
+    public bool IsValid { get; set; }
+
+    [DataMember(Name = "state", Order = 4, EmitDefaultValue = false)]
+    public string? State { get; set; }
+
+    [DataMember(Name = "protect", Order = 5, EmitDefaultValue = false)]
+    public string? Protect { get; set; }
+
+    [DataMember(Name = "type", Order = 6, EmitDefaultValue = false)]
+    public string? Type { get; set; }
+
+    [DataMember(Name = "baseAddress", Order = 7, EmitDefaultValue = false)]
+    public string? BaseAddress { get; set; }
+
+    [DataMember(Name = "regionSizeHex", Order = 8, EmitDefaultValue = false)]
+    public string? RegionSizeHex { get; set; }
+
+    [DataMember(Name = "regionSizeBytes", Order = 9, EmitDefaultValue = false)]
+    public ulong? RegionSizeBytes { get; set; }
+
+    [DataMember(Name = "containingModule", Order = 10, EmitDefaultValue = false)]
+    public string? ContainingModule { get; set; }
+
+    [DataMember(Name = "moduleOffsetHex", Order = 11, EmitDefaultValue = false)]
+    public string? ModuleOffsetHex { get; set; }
+
+    [DataMember(Name = "isStack", Order = 12)]
+    public bool IsStack { get; set; }
+
+    [DataMember(Name = "description", Order = 13)]
+    public string Description { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 14)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}

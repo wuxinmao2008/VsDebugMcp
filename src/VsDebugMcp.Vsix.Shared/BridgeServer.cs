@@ -891,6 +891,97 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerGetRegisters:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetRegistersRequest()
+                        : BridgeJson.Deserialize<DebuggerGetRegistersRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetRegistersAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get registers request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerGetCrashSummary:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetCrashSummaryRequest()
+                        : BridgeJson.Deserialize<DebuggerGetCrashSummaryRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetCrashSummaryAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get crash summary request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerOpenDump:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The open dump request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerOpenDumpRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.OpenDumpAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The open dump request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerDumpPointers:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The dump pointers request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerDumpPointersRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.DumpPointersAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The dump pointers request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerQueryMemory:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The query memory request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerQueryMemoryRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.QueryMemoryAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The query memory request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.GetActiveDocument:
                 try
                 {
@@ -1446,6 +1537,36 @@ internal sealed class BridgeServer : IDisposable
             new()
             {
                 Name = "vs_debugger_load_symbols",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_registers",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_get_crash_summary",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_open_dump",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_dump_pointers",
+                Version = "0.1",
+                IsStub = false
+            },
+            new()
+            {
+                Name = "vs_debugger_query_memory",
                 Version = "0.1",
                 IsStub = false
             }

@@ -65,6 +65,11 @@ public static class BridgeMethods
 	public const string DebuggerReadMemory = "debuggerReadMemory";
 	public const string DebuggerGetDisassembly = "debuggerGetDisassembly";
 	public const string DebuggerLoadSymbols = "debuggerLoadSymbols";
+	public const string DebuggerGetRegisters = "debuggerGetRegisters";
+	public const string DebuggerGetCrashSummary = "debuggerGetCrashSummary";
+	public const string DebuggerOpenDump = "debuggerOpenDump";
+	public const string DebuggerDumpPointers = "debuggerDumpPointers";
+	public const string DebuggerQueryMemory = "debuggerQueryMemory";
 	public const string Shutdown = "shutdown";
 }
 

@@ -42,6 +42,21 @@ internal sealed class DebuggerProvider
 		int dwSize,
 		out IntPtr lpNumberOfBytesRead);
 
+	[StructLayout(LayoutKind.Sequential)]
+	private struct MEMORY_BASIC_INFORMATION
+	{
+		public IntPtr BaseAddress;
+		public IntPtr AllocationBase;
+		public uint AllocationProtect;
+		public IntPtr RegionSize;
+		public uint State;
+		public uint Protect;
+		public uint Type;
+	}
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	private static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
+
 	private readonly AsyncPackage _package;
 	private readonly string _vsInstanceId;
 	private readonly OutputWindowProvider? _outputWindowProvider;
@@ -1912,6 +1927,65 @@ internal sealed class DebuggerProvider
 			Base64Data = base64Data,
 			Warnings = warnings
 		};
+	}
+
+	private static byte[]? ReadRawMemoryBytesInternal(DTE2 dte, Debugger debugger, ulong address, int byteCount, out string? readSource)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		readSource = null;
+		if (byteCount <= 0 || address == 0) return null;
+
+		var currentProcess = debugger.CurrentProcess;
+		var pid = 0;
+		try { pid = currentProcess?.ProcessID ?? 0; } catch { }
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
+
+		// Tier 1: Live OS Process ReadProcessMemory (when PID > 0 and not a Minidump file)
+		if (pid > 0 && string.IsNullOrEmpty(dumpPath))
+		{
+			var hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, pid);
+			if (hProcess != IntPtr.Zero)
+			{
+				try
+				{
+					var tempBuf = new byte[byteCount];
+					var success = ReadProcessMemory(hProcess, (IntPtr)(long)address, tempBuf, byteCount, out var bytesReadPtr);
+					var bytesRead = (int)bytesReadPtr;
+					if (success || bytesRead > 0)
+					{
+						if (bytesRead < byteCount) Array.Resize(ref tempBuf, bytesRead);
+						readSource = "win32_read_process_memory";
+						return tempBuf;
+					}
+				}
+				finally
+				{
+					CloseHandle(hProcess);
+				}
+			}
+		}
+
+		// Tier 2: Direct Minidump (.dmp) Memory Stream read
+		if (!string.IsNullOrEmpty(dumpPath))
+		{
+			if (MinidumpParser.TryReadMemory(dumpPath!, address, byteCount, out var dmpBytes) && dmpBytes.Length > 0)
+			{
+				readSource = "minidump_stream";
+				return dmpBytes;
+			}
+		}
+
+		// Tier 3: Debugger Expression Evaluator fallback
+		if (debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
+		{
+			if (TryReadMemoryViaExpressionEvaluator(debugger, address, byteCount, out var evalBytes) && evalBytes.Length > 0)
+			{
+				readSource = "debugger_eval";
+				return evalBytes;
+			}
+		}
+
+		return null;
 	}
 
 	public async Task<DebuggerGetThreadsResponse> GetThreadsAsync(
@@ -3978,9 +4052,31 @@ internal sealed class DebuggerProvider
 				}
 			}
 
+			// Tier 2 Fallback: Direct memory disassembly via Iced engine (works for both Minidumps and live processes)
+			var memBytes = ReadRawMemoryBytesInternal(dte, debugger, targetAddr, instructionCount * 10, out _);
+			if (memBytes != null && memBytes.Length > 0)
+			{
+				var icedInstructions = MinidumpParser.DisassembleMemoryBytes(memBytes, targetAddr, 64, targetAddr, instructionCount);
+				if (icedInstructions.Count > 0)
+				{
+					return new DebuggerGetDisassemblyResponse
+					{
+						VsInstanceId = _vsInstanceId,
+						TargetAddress = $"0x{targetAddr:X16}",
+						FrameIndex = targetFrameIndex,
+						ModuleName = !string.IsNullOrWhiteSpace(moduleName) ? Path.GetFileName(moduleName) : Path.GetFileName(localPePath ?? frameModuleName),
+						ModulePath = localPePath ?? modulePath,
+						FunctionName = frameFunctionName,
+						FormattedText = MinidumpParser.FormatDisassemblyText(icedInstructions),
+						Instructions = icedInstructions,
+						Warnings = warnings
+					};
+				}
+			}
+
 			throw new DebuggerProviderException(
 				BridgeErrorCodes.DisassemblyUnavailable,
-				$"Disassembly is unavailable at address 0x{targetAddr:X16} (module: {moduleName ?? frameModuleName ?? "unknown"}). Ensure the module binary is accessible locally.");
+				$"Disassembly is unavailable at address 0x{targetAddr:X16} (module: {moduleName ?? frameModuleName ?? "unknown"}). Ensure the module binary or memory is accessible.");
 		}
 		finally
 		{
@@ -4631,6 +4727,444 @@ internal sealed class DebuggerProvider
 		catch { }
 
 		return new List<DisassemblyInstruction>();
+	}
+
+	public async Task<DebuggerGetRegistersResponse> GetRegistersAsync(
+		DebuggerGetRegistersRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"Cannot retrieve registers when debugger is in design mode.");
+		}
+
+		var warnings = new List<BridgeWarning>();
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
+
+		// If dump is available, use MinidumpParser.TryReadThreadContext
+		if (!string.IsNullOrEmpty(dumpPath))
+		{
+			if (MinidumpParser.TryReadThreadContext(dumpPath, request.ThreadId, out var ctx) && ctx != null)
+			{
+				return new DebuggerGetRegistersResponse
+				{
+					VsInstanceId = _vsInstanceId,
+					ThreadId = ctx.ThreadId,
+					Architecture = ctx.Architecture,
+					Registers = ctx.Registers,
+					DetailedRegisters = ctx.DetailedRegisters,
+					InstructionPointer = ctx.InstructionPointer,
+					StackPointer = ctx.StackPointer,
+					FramePointer = ctx.FramePointer,
+					FlagsHex = ctx.FlagsHex,
+					FlagBits = ctx.FlagBits,
+					Warnings = warnings
+				};
+			}
+		}
+
+		// Fallback for live debugger session: evaluate registers
+		var currentThread = debugger.CurrentThread;
+		var threadId = currentThread?.ID ?? 0;
+		if (request.ThreadId.HasValue && request.ThreadId.Value > 0 && debugger.CurrentProgram?.Threads != null)
+		{
+			foreach (EnvDTE.Thread th in debugger.CurrentProgram.Threads)
+			{
+				if (th.ID == request.ThreadId.Value)
+				{
+					debugger.CurrentThread = th;
+					currentThread = th;
+					threadId = th.ID;
+					break;
+				}
+			}
+		}
+
+		var regDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		var detailed = new List<RegisterValueInfo>();
+		var x64Names = new[] { "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rip", "eflags" };
+
+		string ip = string.Empty;
+		string sp = string.Empty;
+		string? bp = null;
+		string flagsHex = "0x0";
+
+		foreach (var reg in x64Names)
+		{
+			var val = TryResolveAddressExpression(debugger, "@" + reg);
+			if (val == 0) val = TryResolveAddressExpression(debugger, reg);
+			var hexStr = $"0x{val:X16}";
+			var upperName = reg.ToUpperInvariant();
+			regDict[upperName] = hexStr;
+			detailed.Add(new RegisterValueInfo { Name = upperName, ValueHex = hexStr, Value64 = val });
+
+			if (reg == "rip") ip = hexStr;
+			else if (reg == "rsp") sp = hexStr;
+			else if (reg == "rbp") bp = hexStr;
+			else if (reg == "eflags") flagsHex = $"0x{val:X8}";
+		}
+
+		return new DebuggerGetRegistersResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			ThreadId = threadId,
+			Architecture = "x64",
+			Registers = regDict,
+			DetailedRegisters = detailed,
+			InstructionPointer = ip,
+			StackPointer = sp,
+			FramePointer = bp,
+			FlagsHex = flagsHex,
+			FlagBits = new Dictionary<string, bool>(),
+			Warnings = warnings
+		};
+	}
+
+	public async Task<DebuggerGetCrashSummaryResponse> GetCrashSummaryAsync(
+		DebuggerGetCrashSummaryRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		var dumpPath = !string.IsNullOrWhiteSpace(request.DumpPath)
+			? request.DumpPath!.Trim()
+			: GetActiveDumpFilePath(dte, debugger);
+
+		if (string.IsNullOrEmpty(dumpPath) || !File.Exists(dumpPath))
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.FileNotFound,
+				"No crash dump file is currently open or specified.");
+		}
+
+		if (!MinidumpParser.TryReadCrashSummary(dumpPath, out var summary) || summary == null)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DiagnosticsUnavailable,
+				$"Unable to extract crash summary from '{dumpPath}'. Ensure it is a valid Minidump with an exception stream.");
+		}
+
+		string? faultingModule = null;
+		string? faultingOffset = null;
+
+		if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+		{
+			foreach (EnvDTE90.Module mod in proc3.Modules)
+			{
+				try
+				{
+					if (mod.LoadAddress > 0 && summary.ExceptionAddress >= mod.LoadAddress && summary.ExceptionAddress < mod.EndAddress)
+					{
+						faultingModule = mod.Name;
+						faultingOffset = $"0x{summary.ExceptionAddress - mod.LoadAddress:X}";
+						break;
+					}
+				}
+				catch { }
+			}
+		}
+
+		return new DebuggerGetCrashSummaryResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			DumpPath = dumpPath!,
+			ProcessName = Path.GetFileName(dumpPath),
+			FaultingThreadId = summary.ThreadId,
+			ExceptionCodeHex = summary.ExceptionCodeHex,
+			ExceptionName = summary.ExceptionName,
+			ExceptionAddressHex = summary.ExceptionAddressHex,
+			AccessOperation = summary.AccessOperation,
+			FaultingAddressHex = summary.FaultingAddressHex,
+			FaultingModule = faultingModule,
+			FaultingModuleOffsetHex = faultingOffset,
+			FormattedSummary = summary.FormattedSummary,
+			FaultingInstructionDisassembly = summary.FaultingInstructionDisassembly,
+			Registers = summary.Registers,
+			Warnings = new List<BridgeWarning>()
+		};
+	}
+
+	public async Task<DebuggerOpenDumpResponse> OpenDumpAsync(
+		DebuggerOpenDumpRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.DumpPath))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "DumpPath is required.");
+		}
+
+		var path = Path.GetFullPath(request.DumpPath.Trim());
+		if (!File.Exists(path))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.FileNotFound, $"The dump file '{path}' does not exist on disk.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, _) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		try
+		{
+			dte.ItemOperations.OpenFile(path);
+			return new DebuggerOpenDumpResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				DumpPath = path,
+				Success = true,
+				Message = $"Opened dump file '{Path.GetFileName(path)}' successfully in Visual Studio.",
+				Warnings = new List<BridgeWarning>()
+			};
+		}
+		catch (Exception ex)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerUnavailable,
+				$"Failed to open dump file in Visual Studio: {ex.Message}",
+				ex);
+		}
+	}
+
+	public async Task<DebuggerDumpPointersResponse> DumpPointersAsync(
+		DebuggerDumpPointersRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.Address))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "Address is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		var resolvedAddr = TryResolveAddressExpression(debugger, request.Address.Trim());
+		if (resolvedAddr == 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidMemoryAddress, $"Unable to resolve address '{request.Address}'.");
+		}
+
+		var count = Clamp(request.Count ?? 16, 1, 128);
+		var ptrSize = request.PointerSize == 4 ? 4 : 8;
+		var totalBytes = count * ptrSize;
+
+		var rawBytes = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, totalBytes, out _);
+		if (rawBytes == null || rawBytes.Length < ptrSize)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read memory at address 0x{resolvedAddr:X16}.");
+		}
+
+		var pointers = new List<PointerDumpEntry>();
+		var sb = new StringBuilder();
+		var availableCount = rawBytes.Length / ptrSize;
+
+		for (int i = 0; i < availableCount; i++)
+		{
+			var curAddr = resolvedAddr + (ulong)(i * ptrSize);
+			ulong ptrVal = 0;
+			if (ptrSize == 8)
+			{
+				ptrVal = BitConverter.ToUInt64(rawBytes, i * 8);
+			}
+			else
+			{
+				ptrVal = BitConverter.ToUInt32(rawBytes, i * 4);
+			}
+
+			string? module = null;
+			string? resolvedSymbol = null;
+
+			if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+			{
+				foreach (EnvDTE90.Module mod in proc3.Modules)
+				{
+					try
+					{
+						if (mod.LoadAddress > 0 && ptrVal >= mod.LoadAddress && ptrVal < mod.EndAddress)
+						{
+							module = mod.Name;
+							resolvedSymbol = $"{Path.GetFileName(mod.Name)}+0x{ptrVal - mod.LoadAddress:X}";
+							break;
+						}
+					}
+					catch { }
+				}
+			}
+
+			var entry = new PointerDumpEntry
+			{
+				Address = ptrSize == 8 ? $"0x{curAddr:X16}" : $"0x{curAddr:X8}",
+				PointerValue = ptrSize == 8 ? $"0x{ptrVal:X16}" : $"0x{ptrVal:X8}",
+				PointerValue64 = ptrVal,
+				ModuleName = module,
+				ResolvedSymbol = resolvedSymbol
+			};
+			pointers.Add(entry);
+
+			var symbolCol = !string.IsNullOrEmpty(resolvedSymbol) ? $" ({resolvedSymbol})" : string.Empty;
+			sb.AppendLine($"{entry.Address}:  {entry.PointerValue}{symbolCol}");
+		}
+
+		return new DebuggerDumpPointersResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			BaseAddress = ptrSize == 8 ? $"0x{resolvedAddr:X16}" : $"0x{resolvedAddr:X8}",
+			Count = pointers.Count,
+			PointerSize = ptrSize,
+			Pointers = pointers,
+			FormattedText = sb.ToString(),
+			Warnings = new List<BridgeWarning>()
+		};
+	}
+
+	public async Task<DebuggerQueryMemoryResponse> QueryMemoryAsync(
+		DebuggerQueryMemoryRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.Address))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "Address is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		var resolvedAddr = TryResolveAddressExpression(debugger, request.Address.Trim());
+		if (resolvedAddr == 0)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidMemoryAddress, $"Unable to resolve address '{request.Address}'.");
+		}
+
+		var dumpPath = GetActiveDumpFilePath(dte, debugger);
+
+		// If dump: use MinidumpParser.TryQueryMemoryInDump
+		if (!string.IsNullOrEmpty(dumpPath))
+		{
+			if (MinidumpParser.TryQueryMemoryInDump(dumpPath, resolvedAddr, out var memInfo) && memInfo != null)
+			{
+				string? containingMod = null;
+				string? modOffset = null;
+				if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+				{
+					foreach (EnvDTE90.Module mod in proc3.Modules)
+					{
+						try
+						{
+							if (mod.LoadAddress > 0 && resolvedAddr >= mod.LoadAddress && resolvedAddr < mod.EndAddress)
+							{
+								containingMod = mod.Name;
+								modOffset = $"0x{resolvedAddr - mod.LoadAddress:X}";
+								break;
+							}
+						}
+						catch { }
+					}
+				}
+
+				return new DebuggerQueryMemoryResponse
+				{
+					VsInstanceId = _vsInstanceId,
+					Address = $"0x{resolvedAddr:X16}",
+					IsValid = memInfo.IsPresentInDump,
+					State = memInfo.IsPresentInDump ? "MEM_COMMIT" : "NOT_IN_DUMP",
+					Protect = memInfo.IsPresentInDump ? "PAGE_READONLY_OR_READWRITE" : "NONE",
+					Type = memInfo.StreamSource,
+					BaseAddress = memInfo.BaseAddressHex,
+					RegionSizeHex = memInfo.RegionSizeHex,
+					RegionSizeBytes = memInfo.RegionSize,
+					ContainingModule = containingMod,
+					ModuleOffsetHex = modOffset,
+					Description = memInfo.IsPresentInDump
+						? $"Address 0x{resolvedAddr:X16} is captured in Minidump {memInfo.StreamSource} (Range: {memInfo.BaseAddressHex}, Size: {memInfo.RegionSizeHex})."
+						: $"Address 0x{resolvedAddr:X16} is NOT present in any memory stream of Minidump '{Path.GetFileName(dumpPath)}'."
+				};
+			}
+		}
+
+		// Live process VirtualQueryEx
+		var pid = 0;
+		try { pid = debugger.CurrentProcess?.ProcessID ?? 0; } catch { }
+		if (pid > 0)
+		{
+			var hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid);
+			if (hProcess != IntPtr.Zero)
+			{
+				try
+				{
+					if (VirtualQueryEx(hProcess, (IntPtr)(long)resolvedAddr, out var mbi, (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))) > 0)
+					{
+						var stateStr = mbi.State switch
+						{
+							0x1000 => "MEM_COMMIT",
+							0x2000 => "MEM_RESERVE",
+							0x10000 => "MEM_FREE",
+							_ => $"0x{mbi.State:X}"
+						};
+						var protStr = mbi.Protect switch
+						{
+							0x01 => "PAGE_NOACCESS",
+							0x02 => "PAGE_READONLY",
+							0x04 => "PAGE_READWRITE",
+							0x10 => "PAGE_EXECUTE",
+							0x20 => "PAGE_EXECUTE_READ",
+							0x40 => "PAGE_EXECUTE_READWRITE",
+							_ => $"0x{mbi.Protect:X}"
+						};
+						var typeStr = mbi.Type switch
+						{
+							0x1000000 => "MEM_IMAGE",
+							0x40000 => "MEM_MAPPED",
+							0x20000 => "MEM_PRIVATE",
+							_ => $"0x{mbi.Type:X}"
+						};
+
+						string? containingMod = null;
+						string? modOffset = null;
+						if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+						{
+							foreach (EnvDTE90.Module mod in proc3.Modules)
+							{
+								try
+								{
+									if (mod.LoadAddress > 0 && resolvedAddr >= mod.LoadAddress && resolvedAddr < mod.EndAddress)
+									{
+										containingMod = mod.Name;
+										modOffset = $"0x{resolvedAddr - mod.LoadAddress:X}";
+										break;
+									}
+								}
+								catch { }
+							}
+						}
+
+						return new DebuggerQueryMemoryResponse
+						{
+							VsInstanceId = _vsInstanceId,
+							Address = $"0x{resolvedAddr:X16}",
+							IsValid = mbi.State == 0x1000,
+							State = stateStr,
+							Protect = protStr,
+							Type = typeStr,
+							BaseAddress = $"0x{(ulong)(long)mbi.BaseAddress:X16}",
+							RegionSizeHex = $"0x{(ulong)(long)mbi.RegionSize:X}",
+							RegionSizeBytes = (ulong)(long)mbi.RegionSize,
+							ContainingModule = containingMod,
+							ModuleOffsetHex = modOffset,
+							Description = $"VirtualQueryEx: {stateStr}, {protStr}, {typeStr}, Base: 0x{(ulong)(long)mbi.BaseAddress:X16}, Size: 0x{(ulong)(long)mbi.RegionSize:X}."
+						};
+					}
+				}
+				finally
+				{
+					CloseHandle(hProcess);
+				}
+			}
+		}
+
+		throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to query memory at address 0x{resolvedAddr:X16}.");
 	}
 }
 

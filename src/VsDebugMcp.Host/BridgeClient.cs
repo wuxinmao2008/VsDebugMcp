@@ -421,6 +421,46 @@ public sealed class BridgeClient : IAsyncDisposable
             request,
             cancellationToken);
 
+    public Task<DebuggerGetRegistersResponse> DebuggerGetRegistersAsync(
+        DebuggerGetRegistersRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetRegistersRequest, DebuggerGetRegistersResponse>(
+            BridgeMethods.DebuggerGetRegisters,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerGetCrashSummaryResponse> DebuggerGetCrashSummaryAsync(
+        DebuggerGetCrashSummaryRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerGetCrashSummaryRequest, DebuggerGetCrashSummaryResponse>(
+            BridgeMethods.DebuggerGetCrashSummary,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerOpenDumpResponse> DebuggerOpenDumpAsync(
+        DebuggerOpenDumpRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerOpenDumpRequest, DebuggerOpenDumpResponse>(
+            BridgeMethods.DebuggerOpenDump,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerDumpPointersResponse> DebuggerDumpPointersAsync(
+        DebuggerDumpPointersRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerDumpPointersRequest, DebuggerDumpPointersResponse>(
+            BridgeMethods.DebuggerDumpPointers,
+            request,
+            cancellationToken);
+
+    public Task<DebuggerQueryMemoryResponse> DebuggerQueryMemoryAsync(
+        DebuggerQueryMemoryRequest request,
+        CancellationToken cancellationToken) =>
+        CallAsync<DebuggerQueryMemoryRequest, DebuggerQueryMemoryResponse>(
+            BridgeMethods.DebuggerQueryMemory,
+            request,
+            cancellationToken);
+
     public Task<ShutdownResponse> ShutdownAsync(CancellationToken cancellationToken) =>
         CallAsync<object, ShutdownResponse>(BridgeMethods.Shutdown, new object(), cancellationToken);
 

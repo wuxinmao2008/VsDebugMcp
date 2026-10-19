@@ -950,6 +950,90 @@ public sealed class McpTools
             cancellationToken));
 
     [McpServerTool(
+        Name = "vs_debugger_get_registers",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves the full CPU register snapshot (RAX-R15, RIP, RSP, RBP, RFLAGS, and flag bits) of the current or specified thread during break mode or Minidump (.dmp) post-mortem debugging.")]
+    public Task<DebuggerGetRegistersResponse> DebuggerGetRegistersAsync(
+        [Description("Optional thread ID to query registers for. If omitted, uses the current thread or the crashing thread in Minidump.")] int? threadId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetRegistersAsync(
+            threadId,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_crash_summary",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Provides a one-shot crash analysis summary (comparable to WinDbg !analyze -v) for an active or specified Minidump (.dmp) file, including ExceptionCode, FaultingAddress, access violation operation, faulting thread, faulting instruction disassembly, and register snapshot.")]
+    public Task<DebuggerGetCrashSummaryResponse> DebuggerGetCrashSummaryAsync(
+        [Description("Optional absolute path to the .dmp crash dump file. If omitted, uses the currently active dump session in Visual Studio.")] string? dumpPath = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetCrashSummaryAsync(
+            dumpPath,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_open_dump",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Opens a Minidump (.dmp) crash dump file in Visual Studio to initialize post-mortem debugging directly via file path without manual IDE interaction.")]
+    public Task<DebuggerOpenDumpResponse> DebuggerOpenDumpAsync(
+        [Description("The absolute path to the .dmp crash dump file to open.")] string dumpPath,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerOpenDumpAsync(
+            dumpPath,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_dump_pointers",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Dumps contiguous memory words formatted as pointers (similar to WinDbg dds / dps) and reverse-maps each pointer value against loaded modules and export symbols to discover vftables, function pointers, and stack structures.")]
+    public Task<DebuggerDumpPointersResponse> DebuggerDumpPointersAsync(
+        [Description("Target memory address expression or hex string (e.g. '0x7FFA1234' or 'rsp').")] string address,
+        [Description("Number of pointers to dump (default 16, range 1..128).")] int? count = null,
+        [Description("Pointer word size in bytes (4 or 8, default 8 on 64-bit).")] int? pointerSize = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerDumpPointersAsync(
+            address,
+            count,
+            pointerSize,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_query_memory",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Queries virtual memory page attributes (similar to WinDbg !address / VirtualQueryEx) or Minidump stream bounds for a target virtual address to determine whether it is committed, reserved, or invalid, its memory protection (PAGE_READWRITE, PAGE_EXECUTE_READ), and its containing module.")]
+    public Task<DebuggerQueryMemoryResponse> DebuggerQueryMemoryAsync(
+        [Description("Target memory address expression or hex string (e.g. '0x7FFA1234' or 'rax').")] string address,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerQueryMemoryAsync(
+            address,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
         Name = "vs_report_mcp_issue",
         ReadOnly = false,
         Idempotent = false,

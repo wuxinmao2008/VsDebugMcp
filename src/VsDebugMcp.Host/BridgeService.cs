@@ -331,6 +331,33 @@ public interface IBridgeService
         string? moduleName,
         string? vsInstanceId,
         CancellationToken cancellationToken);
+
+    Task<DebuggerGetRegistersResponse> DebuggerGetRegistersAsync(
+        int? threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetCrashSummaryResponse> DebuggerGetCrashSummaryAsync(
+        string? dumpPath,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerOpenDumpResponse> DebuggerOpenDumpAsync(
+        string dumpPath,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerDumpPointersResponse> DebuggerDumpPointersAsync(
+        string address,
+        int? count,
+        int? pointerSize,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerQueryMemoryResponse> DebuggerQueryMemoryAsync(
+        string address,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class BridgeService : IBridgeService
@@ -1247,6 +1274,85 @@ public sealed class BridgeService : IBridgeService
                 {
                     SymbolPath = symbolPath,
                     ModuleName = moduleName,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetRegistersResponse> DebuggerGetRegistersAsync(
+        int? threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetRegistersAsync(
+                new DebuggerGetRegistersRequest
+                {
+                    ThreadId = threadId,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetCrashSummaryResponse> DebuggerGetCrashSummaryAsync(
+        string? dumpPath,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetCrashSummaryAsync(
+                new DebuggerGetCrashSummaryRequest
+                {
+                    DumpPath = dumpPath,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerOpenDumpResponse> DebuggerOpenDumpAsync(
+        string dumpPath,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerOpenDumpAsync(
+                new DebuggerOpenDumpRequest
+                {
+                    DumpPath = dumpPath,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerDumpPointersResponse> DebuggerDumpPointersAsync(
+        string address,
+        int? count,
+        int? pointerSize,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerDumpPointersAsync(
+                new DebuggerDumpPointersRequest
+                {
+                    Address = address,
+                    Count = count,
+                    PointerSize = pointerSize,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerQueryMemoryResponse> DebuggerQueryMemoryAsync(
+        string address,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerQueryMemoryAsync(
+                new DebuggerQueryMemoryRequest
+                {
+                    Address = address,
                     VsInstanceId = vsInstanceId
                 },
                 cancellationToken),
