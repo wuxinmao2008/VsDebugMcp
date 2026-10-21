@@ -982,6 +982,61 @@ internal sealed class BridgeServer : IDisposable
                 {
                     return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
                 }
+            case BridgeMethods.DebuggerSwitchThread:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The switch thread request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerSwitchThreadRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.SwitchThreadAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The switch thread request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerGetAllThreadsCallStacks:
+                try
+                {
+                    var payload = string.IsNullOrWhiteSpace(request.PayloadJson)
+                        ? new DebuggerGetAllThreadsCallStacksRequest()
+                        : BridgeJson.Deserialize<DebuggerGetAllThreadsCallStacksRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.GetAllThreadsCallStacksAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The get all threads call stacks request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
+            case BridgeMethods.DebuggerReadMemoryTyped:
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(request.PayloadJson))
+                    {
+                        return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The read memory typed request payload is required.", false), false);
+                    }
+                    var payload = BridgeJson.Deserialize<DebuggerReadMemoryTypedRequest>(request.PayloadJson!);
+                    var result = await _debuggerProvider.ReadMemoryTypedAsync(payload, cancellationToken);
+                    return (BridgeResponse.Success(request.RequestId, result), false);
+                }
+                catch (SerializationException)
+                {
+                    return (Failure(request.RequestId, BridgeErrorCodes.InvalidRequest, "The read memory typed request payload is invalid.", false), false);
+                }
+                catch (DebuggerProviderException ex)
+                {
+                    return (Failure(request.RequestId, ex.Code, ex.Message, false), false);
+                }
             case BridgeMethods.GetActiveDocument:
                 try
                 {

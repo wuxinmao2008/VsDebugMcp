@@ -1125,6 +1125,19 @@ internal sealed class DebuggerProvider
 		var targetFrameIndex = request.FrameIndex ?? 0;
 		var timeoutMs = Clamp(request.TimeoutMs ?? DefaultTimeoutMs, 100, MaxAllowedTimeoutMs);
 
+		EnvDTE.Thread? originalThread = null;
+		var switchedThread = false;
+		if (request.ThreadId.HasValue)
+		{
+			var targetTh = FindThread(debugger, request.ThreadId.Value);
+			if (targetTh != null && targetTh.ID != debugger.CurrentThread?.ID)
+			{
+				originalThread = debugger.CurrentThread;
+				debugger.CurrentThread = targetTh;
+				switchedThread = true;
+			}
+		}
+
 		StackFrame? originalFrame = null;
 		var switchedFrame = false;
 
@@ -1200,6 +1213,17 @@ internal sealed class DebuggerProvider
 		}
 		finally
 		{
+			if (switchedThread && originalThread != null)
+			{
+				try
+				{
+					debugger.CurrentThread = originalThread;
+				}
+				catch
+				{
+				}
+			}
+
 			if (switchedFrame && originalFrame != null)
 			{
 				try
@@ -1509,6 +1533,19 @@ internal sealed class DebuggerProvider
 		var targetFrameIndex = request.FrameIndex ?? 0;
 		var timeoutMs = Clamp(request.TimeoutMs ?? DefaultTimeoutMs, 100, MaxAllowedTimeoutMs);
 
+		EnvDTE.Thread? originalThread = null;
+		var switchedThread = false;
+		if (request.ThreadId.HasValue)
+		{
+			var targetTh = FindThread(debugger, request.ThreadId.Value);
+			if (targetTh != null && targetTh.ID != debugger.CurrentThread?.ID)
+			{
+				originalThread = debugger.CurrentThread;
+				debugger.CurrentThread = targetTh;
+				switchedThread = true;
+			}
+		}
+
 		StackFrame? originalFrame = null;
 		var switchedFrame = false;
 
@@ -1605,6 +1642,17 @@ internal sealed class DebuggerProvider
 		}
 		finally
 		{
+			if (switchedThread && originalThread != null)
+			{
+				try
+				{
+					debugger.CurrentThread = originalThread;
+				}
+				catch
+				{
+				}
+			}
+
 			if (switchedFrame && originalFrame != null)
 			{
 				try
@@ -1635,11 +1683,17 @@ internal sealed class DebuggerProvider
 		var targetFrameIndex = request.FrameIndex ?? 0;
 		var maxCount = Clamp(request.MaxCount ?? 50, 1, 200);
 
+		var targetThread = FindThread(debugger, request.ThreadId);
+		if (targetThread == null)
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.DebuggerUnavailable, "No active debug thread available.");
+		}
+
 		StackFrame? targetFrame = null;
-		if (debugger.CurrentThread?.StackFrames != null)
+		if (targetThread.StackFrames != null)
 		{
 			var currentIndex = 0;
-			foreach (StackFrame frame in debugger.CurrentThread.StackFrames)
+			foreach (StackFrame frame in targetThread.StackFrames)
 			{
 				if (currentIndex == targetFrameIndex)
 				{
@@ -3880,6 +3934,19 @@ internal sealed class DebuggerProvider
 		var instructionsBefore = Clamp(request.InstructionsBefore ?? 8, 0, Math.Min(100, instructionCount - 1));
 		var targetFrameIndex = request.FrameIndex ?? 0;
 
+		EnvDTE.Thread? originalThread = null;
+		var switchedThread = false;
+		if (request.ThreadId.HasValue)
+		{
+			var targetTh = FindThread(debugger, request.ThreadId.Value);
+			if (targetTh != null && targetTh.ID != debugger.CurrentThread?.ID)
+			{
+				originalThread = debugger.CurrentThread;
+				debugger.CurrentThread = targetTh;
+				switchedThread = true;
+			}
+		}
+
 		StackFrame? originalFrame = null;
 		var switchedFrame = false;
 
@@ -4080,6 +4147,15 @@ internal sealed class DebuggerProvider
 		}
 		finally
 		{
+			if (switchedThread && originalThread != null)
+			{
+				try
+				{
+					debugger.CurrentThread = originalThread;
+				}
+				catch { }
+			}
+
 			if (switchedFrame && originalFrame != null)
 			{
 				try
@@ -4258,6 +4334,112 @@ internal sealed class DebuggerProvider
 		return null;
 	}
 
+	private static ulong TryResolveModuleOffsetOrSymbol(Debugger debugger, string expr)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		if (string.IsNullOrWhiteSpace(expr)) return 0;
+		var trimmed = expr.Trim();
+
+		// Match: module!func+offset OR module!func OR module!+offset
+		// Match: module+offset
+		var bangMatch = Regex.Match(trimmed, @"^([a-zA-Z0-9_\.-]+)!(?:([a-zA-Z0-9_:]+))?(?:\+(0x[0-9a-fA-F]+|[0-9a-fA-F]+))?$");
+		var plusMatch = !bangMatch.Success ? Regex.Match(trimmed, @"^([a-zA-Z0-9_\.-]+)\+(0x[0-9a-fA-F]+|[0-9a-fA-F]+)$") : null;
+
+		if (!bangMatch.Success && (plusMatch == null || !plusMatch.Success))
+		{
+			return 0;
+		}
+
+		string targetMod;
+		string? targetSymbol = null;
+		string? targetOffsetStr;
+
+		if (bangMatch.Success)
+		{
+			targetMod = bangMatch.Groups[1].Value;
+			if (bangMatch.Groups[2].Success && !string.IsNullOrEmpty(bangMatch.Groups[2].Value))
+			{
+				targetSymbol = bangMatch.Groups[2].Value;
+			}
+			targetOffsetStr = bangMatch.Groups[3].Success ? bangMatch.Groups[3].Value : null;
+		}
+		else
+		{
+			targetMod = plusMatch!.Groups[1].Value;
+			targetOffsetStr = plusMatch.Groups[2].Value;
+		}
+
+		ulong offsetVal = 0;
+		if (!string.IsNullOrEmpty(targetOffsetStr))
+		{
+			if (targetOffsetStr!.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+			{
+				ulong.TryParse(targetOffsetStr.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offsetVal);
+			}
+			else
+			{
+				if (!ulong.TryParse(targetOffsetStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offsetVal))
+				{
+					ulong.TryParse(targetOffsetStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out offsetVal);
+				}
+			}
+		}
+
+		// Find module in debugger.CurrentProcess
+		EnvDTE90.Module? matchedMod = null;
+		if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+		{
+			var modBase = Path.GetFileNameWithoutExtension(targetMod);
+			var modFull = Path.GetFileName(targetMod);
+			foreach (EnvDTE90.Module mod in proc3.Modules)
+			{
+				try
+				{
+					var mName = mod.Name ?? string.Empty;
+					if (string.Equals(mName, targetMod, StringComparison.OrdinalIgnoreCase) ||
+					    string.Equals(Path.GetFileName(mName), modFull, StringComparison.OrdinalIgnoreCase) ||
+					    string.Equals(Path.GetFileNameWithoutExtension(mName), modBase, StringComparison.OrdinalIgnoreCase))
+					{
+						matchedMod = mod;
+						break;
+					}
+				}
+				catch { }
+			}
+		}
+
+		if (matchedMod != null && matchedMod.LoadAddress > 0)
+		{
+			// If symbol is specified, try evaluating {,,mod}symbol in VS EE
+			if (!string.IsNullOrEmpty(targetSymbol))
+			{
+				try
+				{
+					var modNameForEE = Path.GetFileName(matchedMod.Name);
+					var eeExpr = $"{{,,{modNameForEE}}}{targetSymbol}";
+					var res = debugger.GetExpression(eeExpr, UseAutoExpandRules: false, Timeout: 1000);
+					if (res != null && res.IsValidValue && !string.IsNullOrWhiteSpace(res.Value))
+					{
+						var match = Regex.Match(res.Value.Trim(), @"0x[0-9a-fA-F]+");
+						if (match.Success && ulong.TryParse(match.Value.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var symAddr))
+						{
+							return symAddr + offsetVal;
+						}
+					}
+				}
+				catch { }
+			}
+
+			// If no symbol or EE failed to resolve symbol (e.g. no PDB), use module base + offset!
+			if (offsetVal > 0 || string.IsNullOrEmpty(targetSymbol))
+			{
+				return matchedMod.LoadAddress + offsetVal;
+			}
+		}
+
+		return 0;
+	}
+
 	private static ulong TryResolveAddressExpression(Debugger debugger, string rawAddress)
 	{
 		ThreadHelper.ThrowIfNotOnUIThread();
@@ -4279,6 +4461,13 @@ internal sealed class DebuggerProvider
 		    ulong.TryParse(trimmed, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var bareHex))
 		{
 			return bareHex;
+		}
+
+		// Try WinDbg / module offset syntax first (e.g. "PrintConfigDll!print+0x4aa2a", "PrintConfigDll+0x4aa2a")
+		var modAddr = TryResolveModuleOffsetOrSymbol(debugger, trimmed);
+		if (modAddr > 0)
+		{
+			return modAddr;
 		}
 
 		try
@@ -5165,6 +5354,547 @@ internal sealed class DebuggerProvider
 		}
 
 		throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to query memory at address 0x{resolvedAddr:X16}.");
+	}
+
+	public async Task<DebuggerSwitchThreadResponse> SwitchThreadAsync(
+		DebuggerSwitchThreadRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). Switching threads is only available when paused.");
+		}
+
+		var targetThread = FindThread(debugger, request.ThreadId);
+		if (targetThread == null)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.ThreadNotFound,
+				$"Debug thread with ID {request.ThreadId} not found in the current process.");
+		}
+
+		var prevThreadId = debugger.CurrentThread?.ID ?? 0;
+		debugger.CurrentThread = targetThread;
+
+		var threadName = targetThread.Name ?? string.Empty;
+		var isAlive = false;
+		try { isAlive = targetThread.IsAlive; } catch { }
+		var suspendCount = 0;
+		try { suspendCount = targetThread.SuspendCount; } catch { }
+
+		string? topFrame = null;
+		try
+		{
+			if (targetThread.StackFrames != null && targetThread.StackFrames.Count > 0)
+			{
+				var firstFrame = targetThread.StackFrames.Item(1);
+				if (firstFrame != null)
+				{
+					topFrame = FormatFrameSummary(firstFrame);
+				}
+			}
+		}
+		catch { }
+
+		return new DebuggerSwitchThreadResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			PreviousThreadId = prevThreadId,
+			CurrentThreadId = targetThread.ID,
+			ThreadName = threadName,
+			IsAlive = isAlive,
+			SuspendCount = suspendCount,
+			TopFrame = topFrame,
+			Warnings = new List<BridgeWarning>()
+		};
+	}
+
+	public async Task<DebuggerGetAllThreadsCallStacksResponse> GetAllThreadsCallStacksAsync(
+		DebuggerGetAllThreadsCallStacksRequest request,
+		CancellationToken cancellationToken)
+	{
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var debugger = await GetDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotPaused,
+				$"The debugger is not currently in break mode (current mode: {GetModeString(debugger.CurrentMode)}). All-thread call stacks are only available when paused.");
+		}
+
+		var maxFramesPerThread = Clamp(request.MaxFramesPerThread ?? 5, 1, 50);
+		var userCodeOnly = request.UserCodeOnly ?? false;
+
+		var summaries = new List<ThreadCallStackSummary>();
+		var deadlockWarnings = new List<string>();
+		var currentThreadId = debugger.CurrentThread?.ID ?? 0;
+
+		var lockContentionThreads = new List<int>();
+		var nestedEventLoopThreads = new List<int>();
+		var kernelWaitThreads = new List<int>();
+
+		if (debugger.CurrentProgram?.Threads != null)
+		{
+			foreach (EnvDTE.Thread th in debugger.CurrentProgram.Threads)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				var thId = th.ID;
+				var thName = th.Name ?? string.Empty;
+				var isAlive = false;
+				try { isAlive = th.IsAlive; } catch { }
+				var isFrozen = false;
+				if (th is EnvDTE90.Thread2 th2)
+				{
+					try { isFrozen = th2.IsFrozen; } catch { }
+				}
+				var priority = string.Empty;
+				try { priority = th.Priority ?? string.Empty; } catch { }
+				var suspendCount = 0;
+				try { suspendCount = th.SuspendCount; } catch { }
+
+				string? topFrameName = null;
+				string? firstUserFrameName = null;
+				string? waitingHeuristic = null;
+				var frameList = new List<StackFrameInfo>();
+
+				try
+				{
+					if (th.StackFrames != null)
+					{
+						int frameIdx = 0;
+						foreach (StackFrame sf in th.StackFrames)
+						{
+							if (frameIdx >= maxFramesPerThread) break;
+							var frameInfo = ReadStackFrame(sf, frameIdx);
+							if (topFrameName == null)
+							{
+								topFrameName = frameInfo.FunctionName;
+							}
+							if (firstUserFrameName == null && !IsExternalFrame(frameInfo))
+							{
+								firstUserFrameName = frameInfo.FunctionName;
+							}
+
+							if (!userCodeOnly || !IsExternalFrame(frameInfo))
+							{
+								frameList.Add(frameInfo);
+							}
+							frameIdx++;
+						}
+					}
+				}
+				catch { }
+
+				if (!string.IsNullOrEmpty(topFrameName))
+				{
+					var topStr = topFrameName!;
+					if (topStr.IndexOf("WaitForMultipleObjects", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					    topStr.IndexOf("WaitForSingleObject", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					    topStr.IndexOf("NtWaitFor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					    topStr.IndexOf("ZwWaitFor", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						waitingHeuristic = "Kernel Synchronization Wait (Event / Semaphore / Mutex)";
+						kernelWaitThreads.Add(thId);
+					}
+					else if (topStr.IndexOf("EnterCriticalSection", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("RtlpWaitOnCriticalSection", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("AcquireSRWLock", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						waitingHeuristic = "Lock Contention (CriticalSection / SRWLock)";
+						lockContentionThreads.Add(thId);
+					}
+					else if (topStr.IndexOf("QEventLoop::exec", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("QDialog::exec", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("QCoreApplication::exec", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						waitingHeuristic = "Nested Qt Modal / Event Loop (Hang / Modal Deadlock Risk)";
+						nestedEventLoopThreads.Add(thId);
+					}
+					else if (topStr.IndexOf("GetMessage", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("PeekMessage", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						waitingHeuristic = "UI Message Pump Idle / Wait";
+					}
+					else if (topStr.IndexOf("clr!CallDescr", StringComparison.OrdinalIgnoreCase) >= 0 ||
+					         topStr.IndexOf("coreclr!", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						waitingHeuristic = "Managed CLR Interop Boundary";
+					}
+				}
+
+				summaries.Add(new ThreadCallStackSummary
+				{
+					ThreadId = thId,
+					Name = thName,
+					IsAlive = isAlive,
+					IsFrozen = isFrozen,
+					Priority = string.IsNullOrEmpty(priority) ? null : priority,
+					SuspendCount = suspendCount,
+					TopFrame = topFrameName,
+					FirstUserFrame = firstUserFrameName,
+					WaitingHeuristic = waitingHeuristic,
+					Frames = frameList
+				});
+			}
+		}
+
+		if (nestedEventLoopThreads.Count > 0 && (kernelWaitThreads.Count > 0 || lockContentionThreads.Count > 0))
+		{
+			deadlockWarnings.Add($"Potential cross-framework modal event loop hang detected: Thread(s) [{string.Join(", ", nestedEventLoopThreads)}] running nested Qt exec() loop while {kernelWaitThreads.Count + lockContentionThreads.Count} thread(s) wait on synchronization primitives.");
+		}
+		if (lockContentionThreads.Count > 1)
+		{
+			deadlockWarnings.Add($"Lock contention detected across multiple threads [{string.Join(", ", lockContentionThreads)}]. Check for potential circular mutex/CriticalSection locking.");
+		}
+
+		return new DebuggerGetAllThreadsCallStacksResponse
+		{
+			VsInstanceId = _vsInstanceId,
+			CurrentThreadId = currentThreadId,
+			TotalThreads = summaries.Count,
+			Threads = summaries,
+			DeadlockWarnings = deadlockWarnings,
+			Warnings = new List<BridgeWarning>()
+		};
+	}
+
+	public async Task<DebuggerReadMemoryTypedResponse> ReadMemoryTypedAsync(
+		DebuggerReadMemoryTypedRequest request,
+		CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrWhiteSpace(request.Address))
+		{
+			throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, "Address is required.");
+		}
+
+		await _package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		var (dte, debugger) = await GetDteAndDebuggerAsync(cancellationToken);
+
+		if (debugger.CurrentMode == dbgDebugMode.dbgDesignMode)
+		{
+			throw new DebuggerProviderException(
+				BridgeErrorCodes.DebuggerNotDebugging,
+				"Cannot read process memory when not debugging (debugger is in design mode).");
+		}
+
+		EnvDTE.Thread? originalThread = null;
+		var switchedThread = false;
+		if (request.ThreadId.HasValue)
+		{
+			var targetTh = FindThread(debugger, request.ThreadId.Value);
+			if (targetTh != null && targetTh.ID != debugger.CurrentThread?.ID)
+			{
+				originalThread = debugger.CurrentThread;
+				debugger.CurrentThread = targetTh;
+				switchedThread = true;
+			}
+		}
+
+		try
+		{
+			var requestedType = (request.Type ?? "ascii_string").Trim().ToLowerInvariant();
+			var ptrSize = request.PointerSize == 4 ? 4 : 8;
+			var warnings = new List<BridgeWarning>();
+			var pointerChainValues = new List<string>();
+
+			ulong resolvedAddr = 0;
+			string? readSource = null;
+			int bytesRead = 0;
+			string? stringVal = null;
+			string? numericVal = null;
+			List<PointerDumpEntry>? pointersList = null;
+
+			// Handle Pointer Chain syntax: e.g. "0x7ffb1234->+0x18->+0x8" or "PrintConfigDll!g_ptr->+0x20"
+			if (request.Address.Contains("->"))
+			{
+				var steps = request.Address.Split(new[] { "->" }, StringSplitOptions.RemoveEmptyEntries);
+				if (steps.Length > 0)
+				{
+					var baseStep = steps[0].Trim();
+					resolvedAddr = TryResolveAddressExpression(debugger, baseStep);
+					if (resolvedAddr == 0)
+					{
+						throw new DebuggerProviderException(
+							BridgeErrorCodes.InvalidMemoryAddress,
+							$"Unable to resolve base address from pointer chain step '{baseStep}'.");
+					}
+					pointerChainValues.Add($"[Base: {baseStep}] = 0x{resolvedAddr:X16}");
+
+					for (int i = 1; i < steps.Length; i++)
+					{
+						var offsetStep = steps[i].Trim();
+						long offset = 0;
+						if (offsetStep.StartsWith("+")) offsetStep = offsetStep.Substring(1).Trim();
+						if (offsetStep.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+						{
+							long.TryParse(offsetStep.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offset);
+						}
+						else
+						{
+							if (!long.TryParse(offsetStep, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offset))
+							{
+								long.TryParse(offsetStep, NumberStyles.Integer, CultureInfo.InvariantCulture, out offset);
+							}
+						}
+
+						var ptrBytes = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, ptrSize, out readSource);
+						if (ptrBytes == null || ptrBytes.Length < ptrSize)
+						{
+							throw new DebuggerProviderException(
+								BridgeErrorCodes.MemoryReadFailed,
+								$"Failed to read pointer at chain step {i} (address 0x{resolvedAddr:X16}).");
+						}
+
+						ulong nextPtr = ptrSize == 4 ? BitConverter.ToUInt32(ptrBytes, 0) : BitConverter.ToUInt64(ptrBytes, 0);
+						if (nextPtr == 0)
+						{
+							pointerChainValues.Add($"-> [Null Pointer at 0x{resolvedAddr:X16}]");
+							throw new DebuggerProviderException(
+								BridgeErrorCodes.MemoryReadFailed,
+								$"Encountered null pointer at chain step {i} (address 0x{resolvedAddr:X16}).");
+						}
+
+						var nextTarget = (ulong)((long)nextPtr + offset);
+						pointerChainValues.Add($"-> *0x{resolvedAddr:X16} = 0x{nextPtr:X16} (+0x{offset:X}) => 0x{nextTarget:X16}");
+						resolvedAddr = nextTarget;
+					}
+				}
+			}
+			else
+			{
+				resolvedAddr = TryResolveAddressExpression(debugger, request.Address.Trim());
+				if (resolvedAddr == 0)
+				{
+					throw new DebuggerProviderException(
+						BridgeErrorCodes.InvalidMemoryAddress,
+						$"Unable to resolve memory address from '{request.Address}'.");
+				}
+			}
+
+			// Format by requested type
+			if (requestedType == "ascii_string" || requestedType == "da" || requestedType == "string")
+			{
+				var maxLen = Clamp(request.Length ?? 256, 1, 4096);
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, maxLen, out readSource);
+				if (raw != null && raw.Length > 0)
+				{
+					bytesRead = raw.Length;
+					var nullIdx = Array.IndexOf(raw, (byte)0);
+					var len = nullIdx >= 0 ? nullIdx : raw.Length;
+					try
+					{
+						stringVal = Encoding.Default.GetString(raw, 0, len);
+					}
+					catch
+					{
+						stringVal = Encoding.ASCII.GetString(raw, 0, len);
+					}
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read string memory at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "unicode_string" || requestedType == "du" || requestedType == "wstring" || requestedType == "utf16")
+			{
+				var maxChars = Clamp(request.Length ?? 256, 1, 2048);
+				var maxBytes = maxChars * 2;
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, maxBytes, out readSource);
+				if (raw != null && raw.Length >= 2)
+				{
+					bytesRead = raw.Length;
+					var charCount = raw.Length / 2;
+					var nullCharIdx = -1;
+					for (int i = 0; i < charCount; i++)
+					{
+						if (raw[i * 2] == 0 && raw[i * 2 + 1] == 0)
+						{
+							nullCharIdx = i;
+							break;
+						}
+					}
+					var len = nullCharIdx >= 0 ? nullCharIdx * 2 : (charCount * 2);
+					stringVal = Encoding.Unicode.GetString(raw, 0, len);
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read unicode string memory at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "utf8_string" || requestedType == "utf8")
+			{
+				var maxLen = Clamp(request.Length ?? 256, 1, 4096);
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, maxLen, out readSource);
+				if (raw != null && raw.Length > 0)
+				{
+					bytesRead = raw.Length;
+					var nullIdx = Array.IndexOf(raw, (byte)0);
+					var len = nullIdx >= 0 ? nullIdx : raw.Length;
+					stringVal = Encoding.UTF8.GetString(raw, 0, len);
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read UTF-8 memory at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "dword" || requestedType == "uint32" || requestedType == "int32")
+			{
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, 4, out readSource);
+				if (raw != null && raw.Length >= 4)
+				{
+					bytesRead = 4;
+					uint u = BitConverter.ToUInt32(raw, 0);
+					int s = BitConverter.ToInt32(raw, 0);
+					numericVal = $"0x{u:X8} ({s})";
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read DWORD at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "qword" || requestedType == "uint64" || requestedType == "int64" || requestedType == "pointer")
+			{
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, 8, out readSource);
+				if (raw != null && raw.Length >= 8)
+				{
+					bytesRead = 8;
+					ulong u = BitConverter.ToUInt64(raw, 0);
+					long s = BitConverter.ToInt64(raw, 0);
+					numericVal = $"0x{u:X16} ({s})";
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read QWORD at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "float")
+			{
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, 4, out readSource);
+				if (raw != null && raw.Length >= 4)
+				{
+					bytesRead = 4;
+					float f = BitConverter.ToSingle(raw, 0);
+					numericVal = f.ToString(CultureInfo.InvariantCulture);
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read float at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "double")
+			{
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, 8, out readSource);
+				if (raw != null && raw.Length >= 8)
+				{
+					bytesRead = 8;
+					double d = BitConverter.ToDouble(raw, 0);
+					numericVal = d.ToString(CultureInfo.InvariantCulture);
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read double at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else if (requestedType == "pointers" || requestedType == "dps")
+			{
+				var count = Clamp(request.Length ?? 16, 1, 128);
+				var totalBytes = count * ptrSize;
+				var raw = ReadRawMemoryBytesInternal(dte, debugger, resolvedAddr, totalBytes, out readSource);
+				if (raw != null && raw.Length >= ptrSize)
+				{
+					bytesRead = raw.Length;
+					pointersList = new List<PointerDumpEntry>();
+					var avail = raw.Length / ptrSize;
+					for (int i = 0; i < avail; i++)
+					{
+						var curAddr = resolvedAddr + (ulong)(i * ptrSize);
+						ulong ptrVal = ptrSize == 8 ? BitConverter.ToUInt64(raw, i * 8) : BitConverter.ToUInt32(raw, i * 4);
+						string? modName = null;
+						string? sym = null;
+						if (debugger.CurrentProcess is Process3 proc3 && proc3.Modules != null)
+						{
+							foreach (EnvDTE90.Module mod in proc3.Modules)
+							{
+								try
+								{
+									if (mod.LoadAddress > 0 && ptrVal >= mod.LoadAddress && ptrVal < mod.EndAddress)
+									{
+										modName = mod.Name;
+										sym = $"{Path.GetFileName(mod.Name)}+0x{ptrVal - mod.LoadAddress:X}";
+										break;
+									}
+								}
+								catch { }
+							}
+						}
+						pointersList.Add(new PointerDumpEntry
+						{
+							Address = $"0x{curAddr:X16}",
+							PointerValue = $"0x{ptrVal:X16}",
+							PointerValue64 = ptrVal,
+							ModuleName = modName,
+							ResolvedSymbol = sym
+						});
+					}
+				}
+				else
+				{
+					throw new DebuggerProviderException(BridgeErrorCodes.MemoryReadFailed, $"Failed to read pointers at 0x{resolvedAddr:X16}.");
+				}
+			}
+			else
+			{
+				throw new DebuggerProviderException(BridgeErrorCodes.InvalidRequest, $"Unsupported memory type '{request.Type}'. Supported types: ascii_string, unicode_string, utf8_string, dword, qword, int32, int64, float, double, pointers, pointer_chain.");
+			}
+
+			return new DebuggerReadMemoryTypedResponse
+			{
+				VsInstanceId = _vsInstanceId,
+				Address = request.Address,
+				ResolvedAddress = $"0x{resolvedAddr:X16}",
+				Type = requestedType,
+				StringValue = stringVal,
+				NumericValue = numericVal,
+				PointerChainValues = pointerChainValues.Count > 0 ? pointerChainValues : null,
+				Pointers = pointersList,
+				BytesRead = bytesRead,
+				ReadSource = readSource ?? "unknown",
+				Warnings = warnings
+			};
+		}
+		finally
+		{
+			if (switchedThread && originalThread != null)
+			{
+				try { debugger.CurrentThread = originalThread; } catch { }
+			}
+		}
+	}
+
+	private static string FormatFrameSummary(StackFrame frame)
+	{
+		ThreadHelper.ThrowIfNotOnUIThread();
+		try
+		{
+			var fn = frame.FunctionName ?? "unknown";
+			var mod = string.Empty;
+			try { mod = frame.Module ?? string.Empty; } catch { }
+			if (!string.IsNullOrEmpty(mod))
+			{
+				return $"{Path.GetFileName(mod)}!{fn}";
+			}
+			return fn;
+		}
+		catch
+		{
+			return "unknown";
+		}
 	}
 }
 

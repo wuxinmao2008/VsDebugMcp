@@ -3,7 +3,7 @@
 ## 当前共识
 
 - 目标：参考 Qt Creator MCP 插件，为 Visual Studio 全系列（VS 2017 ~ VS 2026 / VS 15.x ~ 18.x）提供类似能力，将 IDE 的构建、调试、测试、输出、项目/文件和代码搜索能力通过 MCP 暴露给外部 agent。
-- 阶段：Phase 0 ~ Phase 8D 全部完成开发，58 个 MCP 工具全量就绪并原生扩展支持现代 CMake、CTest 及 Minidump 事后崩溃分析与纯托管反汇编体系。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
+- 阶段：Phase 0 ~ Phase 8E 全部完成开发，61 个 MCP 工具全量就绪并原生扩展支持现代 CMake、CTest、Minidump 事后崩溃分析、多线程死锁透视(~*k)、活动线程切换、WinDbg语法自适应与类型化指针链内存探测。已完成向 VS 2017 ~ VS 2026 的全版本架构扩展。
 - 核心设计原则：**不重复提供 Agent 宿主已有的通用能力**（通用全盘搜索、通用读盘、修改文件行等交由 Agent 原生处理），集中提供 Visual Studio 独有的 IDE 上下文（项目工程树、构建生命周期、构建日志输出、调试器状态诊断）。
 - 推荐主线：`Hybrid：OOP MCP Host + VSIX/VSSDK Bridge`。
 - 工程架构演进：核心业务逻辑 100% 聚合于显式 C# 共享项目 `VsDebugMcp.Vsix.Shared.shproj`，以源码级直接注入编译，零额外运行时 DLL。分别由 `VsDebugMcp.Vsix` (VS 2022~2026 64-bit) 和 `VsDebugMcp.Vsix.2019` (VS 2017~2019 32-bit) 独立打包。
@@ -12,7 +12,36 @@
 - 部署形态：发布 win-x64 框架依赖（Framework-Dependent）Host，VS 2022/2026 优先复用 Visual Studio 内置的 .NET 8 运行时；VS 2017/2019 借用系统全局 .NET 8 运行时（带深度版本识别与零等待 InfoBar 提示），整包体积严格控制在 ~8 MB。
 - 多实例：同一 Windows 用户共享一个 Host；每个 Visual Studio 实例拥有独立 Bridge pipe，通过显式 `vsInstanceId` 路由。
 
-## 实施进度（2026-10-19 更新）
+## 实施进度（2026-10-21 更新）
+
+### Phase 8E：死锁全景透视、多线程上下文切换与 WinDbg 语法自适应已完成开发 (v0.1.28.0)
+
+- **P0-1. 活动线程显式切换 (`vs_debugger_switch_thread`, 工具 #59)**：
+  - 原生暴露活动线程切换接口，支持在中断模式下将当前调试焦点显式切换到指定线程（`debugger.CurrentThread = targetThread`）；
+  - 切换后后续所有未带显式线程参数的局部变量、表达式求值与反汇编自动面向目标线程，彻底打通非主线程上下文；
+  - 结构化返回 `previousThreadId`、`currentThreadId`、`threadName`、`isAlive`、`suspendCount` 与顶层栈帧摘要。
+- **P0-2. 全线程死锁一键透视扫描 (`vs_debugger_get_all_threads_call_stacks`, 工具 #60，等效 WinDbg `~*k`)**：
+  - 单次调用批量遍历并返回目标进程中全部线程的调用栈骨架，支持 `maxFramesPerThread` 与 `userCodeOnly` 智能过滤；
+  - 自动化内置等待启发式诊断（Waiting Heuristics）：精准标识内核同步等待（`NtWaitForMultipleObjects` / `WaitForSingleObject`）、互斥锁竞争（`EnterCriticalSection` / `AcquireSRWLock`）、嵌套 Qt/模态事件循环（`QEventLoop::exec` / `QDialog::exec`）、UI 消息泵等待（`GetMessage`）及托管边界（`clr!CallDescr`）；
+  - 智能输出 `deadlockWarnings`：当检测到某线程处于模态事件循环（如 `QDialog::exec`）而其他线程处于同步锁等待时，自动提示跨框架死锁风险，解决 `OnePassSdkNew` 混合宿主（LabVIEW/CLR + Qt Native）死锁定位痛点。
+- **P1-1. WinDbg 风格与模块相对偏移地址自适应解析 (`TryResolveAddressExpression`)**：
+  - 在地址解析引擎中全面支持 WinDbg 语法 `Module!Func+0xOffset`、`Module+0xOffset` 与 `Module!Func`（如 `PrintConfigDll!print+0x4aa2a`、`PrintConfigDll.dll+0x4aa2a`）；
+  - 自动从目标进程模块表（`proc.Modules`）或 Minidump 模块流检索模块加载基址，动态换算为进程绝对虚拟地址，并在存在 PDB 时尝试自动转译为 VS C++ 上下文修饰语法 `{,,module.dll}symbol + offset`；
+  - 彻底解除无符号/缺失 PDB 边界跳转时反汇编与内存读取的地址解析障碍。
+- **P1-2. 类型化与指针链内存透视 (`vs_debugger_read_memory_typed`, 工具 #61)**：
+  - 在基础十六进制内存读取之上，扩展原生类型直接解析能力：
+    - `ascii_string` / `da` (ANSI/GBK 字符串，自动根据 `\0` 截断)
+    - `unicode_string` / `du` (UTF-16 宽文本)
+    - `utf8_string`
+    - `dword` / `qword` / `int32` / `int64` / `float` / `double`
+    - `pointers` / `dps` (指针数组反查导出符号)
+  - 原生支持指针链解引用语法（如 `0x7ffb1234->+0x18->+0x8` 或 `PrintConfigDll!g_ptr->+0x20`），多级跟踪指针偏移，极速探查 Qt 内部复杂对象与全局单例。
+- **P0-3. 核心单次检查工具的 `threadId` 瞬态上下文穿透**：
+  - `vs_debugger_get_locals`、`vs_debugger_evaluate_expr`、`vs_debugger_evaluate_expressions` 与 `vs_debugger_get_disassembly` 全部扩展可选 `threadId` 入参；
+  - 支持智能体直接指定目标线程进行单次变量提取、表达式求值或指令反汇编，执行完毕后安全自愈并恢复原线程上下文，免去重复全局切换的繁琐操作。
+- **自动化测试验证**：
+  - 新增 `Phase8eProtocolTests.cs`，涵盖线程切换、死锁全线程摘要、指针链解引用、WinDbg 正则偏移换算等用例；
+  - 全量单元测试（Host: 213 项，Protocol: 126 项）共 **339 项单元测试 100% PASS**。
 
 ### Phase 8D：底层逆向与 Dump 事后分析深度加固已完成开发 (v0.1.27.0)
 

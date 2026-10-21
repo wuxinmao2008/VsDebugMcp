@@ -296,14 +296,30 @@ public sealed class McpToolSchemaTests
         Assert.True(attr.UseStructuredContent);
     }
 
+    [Theory]
+    [InlineData("vs_debugger_switch_thread", nameof(McpTools.DebuggerSwitchThreadAsync), false)]
+    [InlineData("vs_debugger_get_all_threads_call_stacks", nameof(McpTools.DebuggerGetAllThreadsCallStacksAsync), true)]
+    [InlineData("vs_debugger_read_memory_typed", nameof(McpTools.DebuggerReadMemoryTypedAsync), true)]
+    public void AllPhase8EToolsAreRegisteredWithCorrectMetadata(string expectedToolName, string methodName, bool expectedReadOnly)
+    {
+        var method = typeof(McpTools).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(method);
+
+        var attr = method.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>();
+        Assert.NotNull(attr);
+        Assert.Equal(expectedToolName, attr.Name);
+        Assert.Equal(expectedReadOnly, attr.ReadOnly);
+        Assert.True(attr.UseStructuredContent);
+    }
+
     [Fact]
-    public void Exactly58ToolsAreRegisteredOnMcpTools()
+    public void Exactly61ToolsAreRegisteredOnMcpTools()
     {
         var toolMethods = typeof(McpTools)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public)
             .Where(m => m.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>() != null)
             .ToList();
 
-        Assert.Equal(58, toolMethods.Count);
+        Assert.Equal(61, toolMethods.Count);
     }
 }

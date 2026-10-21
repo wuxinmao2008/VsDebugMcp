@@ -431,6 +431,9 @@ public sealed class DebuggerEvaluateExprRequest
 
     [DataMember(Name = "allowSideEffects", Order = 4)]
     public bool AllowSideEffects { get; set; }
+
+    [DataMember(Name = "threadId", Order = 5, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
 }
 
 [DataContract]
@@ -553,6 +556,9 @@ public sealed class DebuggerEvaluateExpressionsRequest
 
     [DataMember(Name = "allowSideEffects", Order = 4)]
     public bool AllowSideEffects { get; set; }
+
+    [DataMember(Name = "threadId", Order = 5, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
 }
 
 [DataContract]
@@ -598,6 +604,9 @@ public sealed class DebuggerGetLocalsRequest
 
     [DataMember(Name = "maxCount", Order = 2, EmitDefaultValue = false)]
     public int? MaxCount { get; set; }
+
+    [DataMember(Name = "threadId", Order = 3, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
 }
 
 [DataContract]
@@ -2191,6 +2200,9 @@ public sealed class DebuggerGetDisassemblyRequest
 
     [DataMember(Name = "vsInstanceId", Order = 5, EmitDefaultValue = false)]
     public string? VsInstanceId { get; set; }
+
+    [DataMember(Name = "threadId", Order = 6, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
 }
 
 [DataContract]
@@ -2551,5 +2563,171 @@ public sealed class DebuggerQueryMemoryResponse
     public string Description { get; set; } = string.Empty;
 
     [DataMember(Name = "warnings", Order = 14)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerSwitchThreadRequest
+{
+    [DataMember(Name = "threadId", Order = 1)]
+    public int ThreadId { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 2, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerSwitchThreadResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "previousThreadId", Order = 2)]
+    public int PreviousThreadId { get; set; }
+
+    [DataMember(Name = "currentThreadId", Order = 3)]
+    public int CurrentThreadId { get; set; }
+
+    [DataMember(Name = "threadName", Order = 4)]
+    public string ThreadName { get; set; } = string.Empty;
+
+    [DataMember(Name = "isAlive", Order = 5)]
+    public bool IsAlive { get; set; }
+
+    [DataMember(Name = "suspendCount", Order = 6)]
+    public int SuspendCount { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 7, EmitDefaultValue = false)]
+    public string? TopFrame { get; set; }
+
+    [DataMember(Name = "warnings", Order = 8)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetAllThreadsCallStacksRequest
+{
+    [DataMember(Name = "maxFramesPerThread", Order = 1, EmitDefaultValue = false)]
+    public int? MaxFramesPerThread { get; set; }
+
+    [DataMember(Name = "userCodeOnly", Order = 2, EmitDefaultValue = false)]
+    public bool? UserCodeOnly { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 3, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class ThreadCallStackSummary
+{
+    [DataMember(Name = "threadId", Order = 1)]
+    public int ThreadId { get; set; }
+
+    [DataMember(Name = "name", Order = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [DataMember(Name = "isAlive", Order = 3)]
+    public bool IsAlive { get; set; }
+
+    [DataMember(Name = "isFrozen", Order = 4)]
+    public bool IsFrozen { get; set; }
+
+    [DataMember(Name = "priority", Order = 5, EmitDefaultValue = false)]
+    public string? Priority { get; set; }
+
+    [DataMember(Name = "suspendCount", Order = 6)]
+    public int SuspendCount { get; set; }
+
+    [DataMember(Name = "topFrame", Order = 7, EmitDefaultValue = false)]
+    public string? TopFrame { get; set; }
+
+    [DataMember(Name = "firstUserFrame", Order = 8, EmitDefaultValue = false)]
+    public string? FirstUserFrame { get; set; }
+
+    [DataMember(Name = "waitingHeuristic", Order = 9, EmitDefaultValue = false)]
+    public string? WaitingHeuristic { get; set; }
+
+    [DataMember(Name = "frames", Order = 10)]
+    public List<StackFrameInfo> Frames { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerGetAllThreadsCallStacksResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "currentThreadId", Order = 2)]
+    public int CurrentThreadId { get; set; }
+
+    [DataMember(Name = "totalThreads", Order = 3)]
+    public int TotalThreads { get; set; }
+
+    [DataMember(Name = "threads", Order = 4)]
+    public List<ThreadCallStackSummary> Threads { get; set; } = new();
+
+    [DataMember(Name = "deadlockWarnings", Order = 5)]
+    public List<string> DeadlockWarnings { get; set; } = new();
+
+    [DataMember(Name = "warnings", Order = 6)]
+    public List<BridgeWarning> Warnings { get; set; } = new();
+}
+
+[DataContract]
+public sealed class DebuggerReadMemoryTypedRequest
+{
+    [DataMember(Name = "address", Order = 1)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "type", Order = 2)]
+    public string Type { get; set; } = "ascii_string";
+
+    [DataMember(Name = "length", Order = 3, EmitDefaultValue = false)]
+    public int? Length { get; set; }
+
+    [DataMember(Name = "pointerSize", Order = 4, EmitDefaultValue = false)]
+    public int? PointerSize { get; set; }
+
+    [DataMember(Name = "threadId", Order = 5, EmitDefaultValue = false)]
+    public int? ThreadId { get; set; }
+
+    [DataMember(Name = "vsInstanceId", Order = 6, EmitDefaultValue = false)]
+    public string? VsInstanceId { get; set; }
+}
+
+[DataContract]
+public sealed class DebuggerReadMemoryTypedResponse
+{
+    [DataMember(Name = "vsInstanceId", Order = 1)]
+    public string VsInstanceId { get; set; } = string.Empty;
+
+    [DataMember(Name = "address", Order = 2)]
+    public string Address { get; set; } = string.Empty;
+
+    [DataMember(Name = "resolvedAddress", Order = 3)]
+    public string ResolvedAddress { get; set; } = string.Empty;
+
+    [DataMember(Name = "type", Order = 4)]
+    public string Type { get; set; } = string.Empty;
+
+    [DataMember(Name = "stringValue", Order = 5, EmitDefaultValue = false)]
+    public string? StringValue { get; set; }
+
+    [DataMember(Name = "numericValue", Order = 6, EmitDefaultValue = false)]
+    public string? NumericValue { get; set; }
+
+    [DataMember(Name = "pointerChainValues", Order = 7, EmitDefaultValue = false)]
+    public List<string>? PointerChainValues { get; set; }
+
+    [DataMember(Name = "pointers", Order = 8, EmitDefaultValue = false)]
+    public List<PointerDumpEntry>? Pointers { get; set; }
+
+    [DataMember(Name = "bytesRead", Order = 9)]
+    public int BytesRead { get; set; }
+
+    [DataMember(Name = "readSource", Order = 10)]
+    public string ReadSource { get; set; } = string.Empty;
+
+    [DataMember(Name = "warnings", Order = 11)]
     public List<BridgeWarning> Warnings { get; set; } = new();
 }

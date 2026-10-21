@@ -113,6 +113,7 @@ public interface IBridgeService
         int? frameIndex,
         int? timeoutMs,
         bool allowSideEffects,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -160,12 +161,14 @@ public interface IBridgeService
         int? frameIndex,
         int? timeoutMs,
         bool allowSideEffects,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
     Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
         int? frameIndex,
         int? maxCount,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -323,6 +326,7 @@ public interface IBridgeService
         int? frameIndex,
         int? instructionCount,
         int? instructionsBefore,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 
@@ -356,6 +360,26 @@ public interface IBridgeService
 
     Task<DebuggerQueryMemoryResponse> DebuggerQueryMemoryAsync(
         string address,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerSwitchThreadResponse> DebuggerSwitchThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerGetAllThreadsCallStacksResponse> DebuggerGetAllThreadsCallStacksAsync(
+        int? maxFramesPerThread,
+        bool? userCodeOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken);
+
+    Task<DebuggerReadMemoryTypedResponse> DebuggerReadMemoryTypedAsync(
+        string address,
+        string? type,
+        int? length,
+        int? pointerSize,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken);
 }
@@ -685,6 +709,7 @@ public sealed class BridgeService : IBridgeService
         int? frameIndex,
         int? timeoutMs,
         bool allowSideEffects,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -695,7 +720,8 @@ public sealed class BridgeService : IBridgeService
                     Expression = expression,
                     FrameIndex = frameIndex,
                     TimeoutMs = timeoutMs,
-                    AllowSideEffects = allowSideEffects
+                    AllowSideEffects = allowSideEffects,
+                    ThreadId = threadId
                 },
                 cancellationToken),
             cancellationToken);
@@ -793,6 +819,7 @@ public sealed class BridgeService : IBridgeService
         int? frameIndex,
         int? timeoutMs,
         bool allowSideEffects,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -803,7 +830,8 @@ public sealed class BridgeService : IBridgeService
                     Expressions = expressions,
                     FrameIndex = frameIndex,
                     TimeoutMs = timeoutMs,
-                    AllowSideEffects = allowSideEffects
+                    AllowSideEffects = allowSideEffects,
+                    ThreadId = threadId
                 },
                 cancellationToken),
             cancellationToken);
@@ -811,6 +839,7 @@ public sealed class BridgeService : IBridgeService
     public Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
         int? frameIndex,
         int? maxCount,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -819,7 +848,8 @@ public sealed class BridgeService : IBridgeService
                 new DebuggerGetLocalsRequest
                 {
                     FrameIndex = frameIndex,
-                    MaxCount = maxCount
+                    MaxCount = maxCount,
+                    ThreadId = threadId
                 },
                 cancellationToken),
             cancellationToken);
@@ -1246,6 +1276,7 @@ public sealed class BridgeService : IBridgeService
         int? frameIndex,
         int? instructionCount,
         int? instructionsBefore,
+        int? threadId,
         string? vsInstanceId,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
@@ -1257,6 +1288,7 @@ public sealed class BridgeService : IBridgeService
                     FrameIndex = frameIndex,
                     InstructionCount = instructionCount ?? 30,
                     InstructionsBefore = instructionsBefore ?? 10,
+                    ThreadId = threadId,
                     VsInstanceId = vsInstanceId
                 },
                 cancellationToken),
@@ -1353,6 +1385,61 @@ public sealed class BridgeService : IBridgeService
                 new DebuggerQueryMemoryRequest
                 {
                     Address = address,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerSwitchThreadResponse> DebuggerSwitchThreadAsync(
+        int threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerSwitchThreadAsync(
+                new DebuggerSwitchThreadRequest
+                {
+                    ThreadId = threadId,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerGetAllThreadsCallStacksResponse> DebuggerGetAllThreadsCallStacksAsync(
+        int? maxFramesPerThread,
+        bool? userCodeOnly,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerGetAllThreadsCallStacksAsync(
+                new DebuggerGetAllThreadsCallStacksRequest
+                {
+                    MaxFramesPerThread = maxFramesPerThread,
+                    UserCodeOnly = userCodeOnly,
+                    VsInstanceId = vsInstanceId
+                },
+                cancellationToken),
+            cancellationToken);
+
+    public Task<DebuggerReadMemoryTypedResponse> DebuggerReadMemoryTypedAsync(
+        string address,
+        string? type,
+        int? length,
+        int? pointerSize,
+        int? threadId,
+        string? vsInstanceId,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            _registry.Resolve(vsInstanceId),
+            client => client.DebuggerReadMemoryTypedAsync(
+                new DebuggerReadMemoryTypedRequest
+                {
+                    Address = address,
+                    Type = type ?? "ascii_string",
+                    Length = length,
+                    PointerSize = pointerSize,
+                    ThreadId = threadId,
                     VsInstanceId = vsInstanceId
                 },
                 cancellationToken),

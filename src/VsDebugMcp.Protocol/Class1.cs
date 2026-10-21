@@ -70,6 +70,9 @@ public static class BridgeMethods
 	public const string DebuggerOpenDump = "debuggerOpenDump";
 	public const string DebuggerDumpPointers = "debuggerDumpPointers";
 	public const string DebuggerQueryMemory = "debuggerQueryMemory";
+	public const string DebuggerSwitchThread = "debuggerSwitchThread";
+	public const string DebuggerGetAllThreadsCallStacks = "debuggerGetAllThreadsCallStacks";
+	public const string DebuggerReadMemoryTyped = "debuggerReadMemoryTyped";
 	public const string Shutdown = "shutdown";
 }
 

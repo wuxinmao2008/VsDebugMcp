@@ -315,6 +315,7 @@ public sealed class McpTools
         [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional evaluation timeout in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
         [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
+        [Description("Optional thread ID to evaluate expression in (defaults to current active thread).")] int? threadId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerEvaluateExprAsync(
@@ -322,6 +323,7 @@ public sealed class McpTools
             frameIndex,
             timeoutMs,
             allowSideEffects ?? false,
+            threadId,
             vsInstanceId,
             cancellationToken));
 
@@ -457,6 +459,7 @@ public sealed class McpTools
         [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional evaluation timeout per expression in milliseconds from 100 to 10000. Defaults to 2000.")] int? timeoutMs = null,
         [Description("Optional flag whether side effects are allowed during evaluation. Defaults to false.")] bool? allowSideEffects = null,
+        [Description("Optional thread ID to evaluate expressions in (defaults to current active thread).")] int? threadId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerEvaluateExpressionsAsync(
@@ -464,6 +467,7 @@ public sealed class McpTools
             frameIndex,
             timeoutMs,
             allowSideEffects ?? false,
+            threadId,
             vsInstanceId,
             cancellationToken));
 
@@ -477,11 +481,13 @@ public sealed class McpTools
     public Task<DebuggerGetLocalsResponse> DebuggerGetLocalsAsync(
         [Description("Optional stack frame index, where 0 is the top/current frame. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional maximum number of variables to retrieve from 1 to 200. Defaults to 50.")] int? maxCount = null,
+        [Description("Optional thread ID to inspect locals for (defaults to current active thread).")] int? threadId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerGetLocalsAsync(
             frameIndex,
             maxCount,
+            threadId,
             vsInstanceId,
             cancellationToken));
 
@@ -917,10 +923,11 @@ public sealed class McpTools
         UseStructuredContent = true)]
     [Description("Retrieves native assembly instructions around the current instruction pointer (RIP/EIP), a specified stack frame index, or a target memory address/expression while paused in break mode. Useful for post-mortem crash dump (.dmp) analysis and stripped modules without PDB symbols.")]
     public Task<DebuggerGetDisassemblyResponse> DebuggerGetDisassemblyAsync(
-        [Description("Optional target address (e.g. '0x00007FF92350DE4E') or expression/register (e.g. 'rip'). If omitted, uses the instruction pointer of the specified frameIndex (default top frame 0).")] string? address = null,
+        [Description("Optional target address (e.g. '0x00007FF92350DE4E') or expression/register (e.g. 'rip'). Supports WinDbg module offset syntax like 'Module!Func+offset' and 'Module+offset'. If omitted, uses the instruction pointer of the specified frameIndex (default top frame 0).")] string? address = null,
         [Description("Optional stack frame index (0 = top frame) to disassemble around when address is omitted. Defaults to 0.")] int? frameIndex = null,
         [Description("Optional total number of assembly instructions to return (1-200). Defaults to 30.")] int? instructionCount = null,
         [Description("Optional number of instructions before the target address to include for context (0-100). Defaults to 10.")] int? instructionsBefore = null,
+        [Description("Optional thread ID to inspect disassembly for (defaults to current active thread).")] int? threadId = null,
         [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerGetDisassemblyAsync(
@@ -928,6 +935,7 @@ public sealed class McpTools
             frameIndex,
             instructionCount,
             instructionsBefore,
+            threadId,
             vsInstanceId,
             cancellationToken));
 
@@ -1030,6 +1038,64 @@ public sealed class McpTools
         CancellationToken cancellationToken = default) =>
         InvokeAsync(() => _bridgeService.DebuggerQueryMemoryAsync(
             address,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_switch_thread",
+        ReadOnly = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Switches the current active thread in the Visual Studio debugger while paused in break mode. Subsequent tool calls (evaluations, locals, disassembly) will target this thread by default. Crucial for investigating deadlocks, hangs, and worker threads.")]
+    public Task<DebuggerSwitchThreadResponse> DebuggerSwitchThreadAsync(
+        [Description("The target thread ID to switch to (e.g. from vs_debugger_get_threads).")] int threadId,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerSwitchThreadAsync(
+            threadId,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_get_all_threads_call_stacks",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Retrieves call stack summaries and waiting heuristics for ALL threads in parallel (similar to WinDbg '~*k') while paused in break mode. Automatically detects lock contention (CriticalSection/SRWLock), kernel synchronization waits, and nested Qt/modal event loops to rapidly identify root causes of deadlocks and application freezes.")]
+    public Task<DebuggerGetAllThreadsCallStacksResponse> DebuggerGetAllThreadsCallStacksAsync(
+        [Description("Maximum number of frames to retrieve per thread (default 5, range 1..50).")] int? maxFramesPerThread = null,
+        [Description("Whether to filter out external system runtime frames and only return user code frames. Defaults to false.")] bool? userCodeOnly = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerGetAllThreadsCallStacksAsync(
+            maxFramesPerThread,
+            userCodeOnly,
+            vsInstanceId,
+            cancellationToken));
+
+    [McpServerTool(
+        Name = "vs_debugger_read_memory_typed",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Reads and formats process or dump memory as typed primitives, strings, or pointer chains while paused in break mode. Supports 'ascii_string' (da), 'unicode_string' (du / UTF-16), 'utf8_string', 'dword', 'qword', 'int32', 'int64', 'float', 'double', 'pointers' (dps), and pointer chains (e.g. '0x7ffa1234->+0x18->+0x8' or 'PrintConfigDll!g_ptr->+0x20').")]
+    public Task<DebuggerReadMemoryTypedResponse> DebuggerReadMemoryTypedAsync(
+        [Description("Target memory address expression, register, or pointer chain (e.g. '0x7FFA1234', 'PrintConfigDll!g_ptr->+0x18', 'rsp'). Supports WinDbg syntax like 'Module!Func+offset' and 'Module+offset'.")] string address,
+        [Description("Requested data type: 'ascii_string' (da), 'unicode_string' (du), 'utf8_string', 'dword', 'qword', 'int32', 'int64', 'float', 'double', 'pointers', or 'pointer_chain'. Defaults to 'ascii_string'.")] string? type = null,
+        [Description("Optional maximum length or element count. For strings, max characters (default 256). For pointers, number of pointers (default 16).")] int? length = null,
+        [Description("Optional pointer word size in bytes (4 or 8, defaults to 8 on 64-bit).")] int? pointerSize = null,
+        [Description("Optional thread ID for evaluating address context. Defaults to current active thread.")] int? threadId = null,
+        [Description("Optional target Visual Studio instance ID. It may be omitted when exactly one instance is registered.")] string? vsInstanceId = null,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(() => _bridgeService.DebuggerReadMemoryTypedAsync(
+            address,
+            type,
+            length,
+            pointerSize,
+            threadId,
             vsInstanceId,
             cancellationToken));
 

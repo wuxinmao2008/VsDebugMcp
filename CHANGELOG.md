@@ -5,6 +5,38 @@ All notable changes to the "VsDebugMcp" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.28.0] - 2026-10-21
+
+### Added
+- **复杂死锁与多线程挂起转储深度诊断体系 (Phase 8E / Issue #7 闭环与 OnePassSdkNew 实战演进)**:
+  - **活动线程自由切换 (`vs_debugger_switch_thread`, 工具 #59)**:
+    - 原生暴露活动线程切换接口，支持在中断模式下将当前调试焦点显式切换到指定线程（`debugger.CurrentThread = targetThread`）。
+    - 切换后后续所有未带显式线程参数的局部变量、表达式求值与反汇编自动面向目标线程，彻底打通非主线程上下文。
+    - 结构化返回 `previousThreadId`、`currentThreadId`、`threadName`、`isAlive`、`suspendCount` 与顶层栈帧摘要。
+  - **全线程死锁一键透视扫描 (`vs_debugger_get_all_threads_call_stacks`, 工具 #60，等效 WinDbg `~*k`)**:
+    - 单次调用批量遍历并返回目标进程中全部线程的调用栈骨架，支持 `maxFramesPerThread` 与 `userCodeOnly` 智能过滤。
+    - 自动化内置等待启发式诊断（Waiting Heuristics）：精准标识内核同步等待（`NtWaitForMultipleObjects` / `WaitForSingleObject`）、互斥锁竞争（`EnterCriticalSection` / `AcquireSRWLock`）、嵌套 Qt/模态事件循环（`QEventLoop::exec` / `QDialog::exec`）、UI 消息泵等待（`GetMessage`）及托管边界（`clr!CallDescr`）。
+    - 智能输出 `deadlockWarnings`：当检测到某线程处于模态事件循环（如 `QDialog::exec`）而其他线程处于同步锁等待时，自动提示跨框架死锁风险，解决 `OnePassSdkNew` 混合宿主（LabVIEW/CLR + Qt Native）死锁定位痛点。
+  - **WinDbg 风格与模块相对偏移地址自适应解析 (`TryResolveAddressExpression`)**:
+    - 在地址解析引擎中全面支持 WinDbg 语法 `Module!Func+0xOffset`、`Module+0xOffset` 与 `Module!Func`（如 `PrintConfigDll!print+0x4aa2a`、`PrintConfigDll.dll+0x4aa2a`）。
+    - 自动从目标进程模块表（`proc.Modules`）或 Minidump 模块流检索模块加载基址，动态换算为进程绝对虚拟地址，并在存在 PDB 时尝试自动转译为 VS C++ 上下文修饰语法 `{,,module.dll}symbol + offset`。
+    - 彻底解除无符号/缺失 PDB 边界跳转时反汇编与内存读取的地址解析障碍。
+  - **类型化与指针链内存透视 (`vs_debugger_read_memory_typed`, 工具 #61)**:
+    - 在基础十六进制内存读取之上，扩展原生类型直接解析能力：
+      - `ascii_string` / `da` (ANSI/GBK 字符串，自动根据 `\0` 截断)
+      - `unicode_string` / `du` (UTF-16 宽文本)
+      - `utf8_string`
+      - `dword` / `qword` / `int32` / `int64` / `float` / `double`
+      - `pointers` / `dps` (指针数组反查导出符号)
+    - 原生支持指针链解引用语法（如 `0x7ffb1234->+0x18->+0x8` 或 `PrintConfigDll!g_ptr->+0x20`），多级跟踪指针偏移，极速探查 Qt 内部复杂对象与全局单例。
+  - **核心单次检查工具的 `threadId` 瞬态上下文穿透**:
+    - `vs_debugger_get_locals`、`vs_debugger_evaluate_expr`、`vs_debugger_evaluate_expressions` 与 `vs_debugger_get_disassembly` 全部扩展可选 `threadId` 入参。
+    - 支持智能体直接指定目标线程进行单次变量提取、表达式求值或指令反汇编，执行完毕后安全自愈并恢复原线程上下文，免去重复全局切换的繁琐操作。
+  - **工具矩阵扩展与自动化测试**:
+    - MCP 工具总数扩充至 **61 项**。
+    - 新增 `Phase8eProtocolTests.cs`，涵盖线程切换、死锁全线程摘要、指针链解引用、WinDbg 正则偏移换算等用例。
+    - 全量单元测试（Host: 213 项，Protocol: 126 项）共 **339 项单元测试 100% PASS**。
+
 ## [0.1.27.0] - 2026-10-19
 
 ### Added
