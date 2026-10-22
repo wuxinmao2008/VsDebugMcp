@@ -55,9 +55,9 @@ MCP 客户端 (Cursor / Claude / VS Code)
 
 ---
 
-## MCP 工具全景清单 (58 个标准工具)
+## MCP 工具全景清单 (61 个标准工具)
 
-扩展向 AI Agent 完整暴露 **58 个标准 MCP 工具**（全量已实现并实测验证，无空壳）：
+扩展向 AI Agent 完整暴露 **61 个标准 MCP 工具**（全量已实现并实测验证，无空壳）：
 
 ### 1. 服务与多实例管理 (4 个工具)
 | 工具名称 | 只读 | 功能描述 |
@@ -107,11 +107,12 @@ MCP 客户端 (Cursor / Claude / VS Code)
 | `vs_debugger_auto_attach` | 否 | 一键免 PID 自动发现并批量附加属于当前解决方案的运行进程 |
 | `vs_debugger_detach` | 否 | 安全脱钩调试器，保留目标进程在操作系统中继续独立存活运行 |
 
-### 6. 调试状态、断点与异常现场 (13 个工具)
+### 6. 调试状态、断点与异常现场 (14 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
 | `vs_debugger_get_info` | 是 | 查询调试器模式（design/run/break）、活动 PID/TID 及断点总数 |
 | `vs_debugger_get_threads` | 是 | 捕获调试进程多线程快照（TID、线程名、存活状态及 `isFrozen` 标记） |
+| `vs_debugger_switch_thread` | 否 | **自由切换当前活动调试线程**（等效 WinDbg `~[tid]s`），联动更新 IDE 调用栈与局部变量视图 |
 | `vs_debugger_freeze_thread` | 否 | 挂起（冻结）指定线程，用于排查或隔离多线程竞态条件 |
 | `vs_debugger_thaw_thread` | 否 | 解冻并恢复指定工作线程的执行 |
 | `vs_debugger_get_call_stack` | 是 | 捕获活动线程调用栈，强类型提取源文件名、行号、列号与用户代码标记 |
@@ -124,20 +125,22 @@ MCP 客户端 (Cursor / Claude / VS Code)
 | `vs_debugger_get_modules` | 是 | 枚举目标进程已加载模块清单（基址、大小、版本、路径及 PDB 加载状态） |
 | `vs_debugger_load_symbols` | 否 | 动态添加本地 PDB 符号路径至调试器符号设置并触发符号重载 |
 
-### 7. 深度诊断、内存透视、底层逆向与表达式求值 (11 个工具)
+### 7. 深度诊断、内存透视、底层逆向、死锁排查与表达式求值 (13 个工具)
 | 工具名称 | 只读 | 功能描述 |
 |---|:---:|---|
 | `vs_debugger_get_snapshot` | 是 | **单次原子聚合调试诊断现场**（进程/线程/顶层帧/完整调用栈/局部变量/异常详情/最近日志） |
+| `vs_debugger_get_all_threads_call_stacks` | 是 | **全线程堆栈全景透视与死锁启发式诊断**（等效 WinDbg `~*k`），单次提取所有线程 TopFrame 并标注挂起特征与死锁可疑嫌疑 |
 | `vs_debugger_get_crash_summary` | 是 | **崩溃转储一键全景速报**（类似 WinDbg `!analyze -v`，提取异常代码、故障地址、原生反汇编及寄存器快照） |
 | `vs_debugger_open_dump` | 否 | **崩溃转储一键载入**，通过 DMP 物理路径直接初始化 Visual Studio 事后调试会话 |
 | `vs_debugger_get_registers` | 是 | **CPU 寄存器与上下文快照**，提取 RAX~R15、RIP、RSP、RBP、RFLAGS 及单位标志位 |
 | `vs_debugger_read_memory` | 是 | **多级虚拟内存与 DMP 内存流透视**，支持实时进程与 `.dmp` 文件，输出 HexDump、ASCII 及 UTF-16 预览 |
+| `vs_debugger_read_memory_typed` | 是 | **强类型内存透视与指针链解引用**（等效 WinDbg `dd`/`dq`/`da`/`du`/`dps`），支持 DWORD、QWORD、ASCII、Unicode 及 `->` 多级指针追踪 |
 | `vs_debugger_query_memory` | 是 | **虚拟内存属性与流范围探测**（类似 WinDbg `!address` / `VirtualQueryEx`），查询提交状态与保护属性 |
 | `vs_debugger_dump_pointers` | 是 | **指针格式化与模块反查**（类似 WinDbg `dps`/`dds`），按字长解析内存并反查模块符号偏移 |
-| `vs_debugger_get_disassembly` | 是 | **原生反汇编指令透视**，纯托管 Iced 引擎解码内存字节流（彻底解耦本地 PE 与 dumpbin） |
-| `vs_debugger_evaluate_expr` | 是 | 在指定栈帧安全求值单个表达式，支持 `char*`/`wchar_t*` 自动字符串预览与超时保护 |
-| `vs_debugger_evaluate_expressions` | 是 | 单次 RPC 批量求值多个表达式，支持单项错误隔离与字符串自动预览 |
-| `vs_debugger_get_locals` | 是 | 自动识别并提取当前栈帧所有形参（Arguments）与局部变量（Locals） |
+| `vs_debugger_get_disassembly` | 是 | **原生反汇编指令透视**，纯托管 Iced 引擎解码内存字节流，自适应支持 WinDbg 风格 `Module!Func+Offset` 符号重定位 |
+| `vs_debugger_evaluate_expr` | 是 | 在指定栈帧安全求值单个表达式，支持 `threadId` 瞬态指定、`char*`/`wchar_t*` 自动字符串预览与超时保护 |
+| `vs_debugger_evaluate_expressions` | 是 | 单次 RPC 批量求值多个表达式，支持 `threadId` 瞬态指定、单项错误隔离与字符串自动预览 |
+| `vs_debugger_get_locals` | 是 | 自动识别并提取当前栈帧所有形参（Arguments）与局部变量（Locals），支持 `threadId` 瞬态指定与自动自愈 |
 
 ### 8. 测试资源管理器与 CTest 测试体系 (5 个工具)
 | 工具名称 | 只读 | 功能描述 |
@@ -253,17 +256,17 @@ VsDebugMcp follows an enterprise-grade **Hybrid Architecture (OOP Host + VSIX Br
 
 ---
 
-## Available MCP Tools (58 Tools Total)
+## Available MCP Tools (61 Tools Total)
 
-The extension exposes **58 production-ready MCP tools** across 9 core domains:
+The extension exposes **61 production-ready MCP tools** across 9 core domains:
 
 1. **Service & Multi-Instance Routing (4 tools)**: `vs_health`, `vs_capabilities`, `vs_list_instances`, `vs_find_instances`.
 2. **Solution & Project Context (4 tools)**: `vs_get_projects_in_solution` (SLN & CMakeLists.txt), `vs_get_files_in_project` (filters & CMake trees), `vs_get_solution_configurations` (Debug/Release & CMakePresets), `vs_set_solution_configuration`.
 3. **Build Lifecycle & Logs (6 tools)**: `vs_run_build` (MSBuild & CMake/Ninja, single-project `projectName` & `action: build/rebuild/clean`), `vs_get_build_status`, `vs_cancel_build`, `vs_get_output_window_logs`, `vs_get_output_panes`, `vs_get_errors`.
 4. **Editor Collaboration & Navigation (2 tools)**: `vs_get_active_document`, `vs_navigate_to`.
 5. **Debugger Lifecycle & Process Attach (12 tools)**: `vs_debugger_start` (F5 & CMake target native launch), `vs_debugger_continue`, `vs_debugger_pause`, `vs_debugger_stop`, `vs_debugger_step_over`, `vs_debugger_step_into`, `vs_debugger_step_out`, `vs_debugger_get_processes`, `vs_debugger_find_solution_processes`, `vs_debugger_attach_process`, `vs_debugger_auto_attach`, `vs_debugger_detach`.
-6. **Debugger Diagnostics, Symbols & Breakpoints (13 tools)**: `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_get_call_stack`, `vs_debugger_set_next_statement`, `vs_debugger_set_breakpoints`, `vs_debugger_list_breakpoints`, `vs_debugger_clear_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_get_exception_info` (CLR/SEH/Minidump `ExceptionStream`), `vs_debugger_get_modules`, `vs_debugger_load_symbols`.
-7. **Deep Inspection, Reverse Engineering, Disassembly & Evaluation (11 tools)**: `vs_debugger_get_snapshot`, `vs_debugger_get_crash_summary` (WinDbg `!analyze -v` one-shot crash triage), `vs_debugger_open_dump` (direct DMP path loading), `vs_debugger_get_registers` (full CPU registers & flags), `vs_debugger_read_memory` (Win32 & Minidump memory streams + UTF-16 preview), `vs_debugger_query_memory` (WinDbg `!address` / VirtualQueryEx page attributes), `vs_debugger_dump_pointers` (WinDbg `dps`/`dds` pointer formatting & module reverse-mapping), `vs_debugger_get_disassembly` (pure managed `Iced` disassembly stream), `vs_debugger_evaluate_expr`, `vs_debugger_evaluate_expressions`, `vs_debugger_get_locals`.
+6. **Debugger Diagnostics, Symbols, Threads & Breakpoints (14 tools)**: `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_switch_thread` (WinDbg `~[tid]s` dynamic thread context switching), `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_get_call_stack`, `vs_debugger_set_next_statement`, `vs_debugger_set_breakpoints`, `vs_debugger_list_breakpoints`, `vs_debugger_clear_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_get_exception_info` (CLR/SEH/Minidump `ExceptionStream`), `vs_debugger_get_modules`, `vs_debugger_load_symbols`.
+7. **Deep Inspection, Reverse Engineering, Deadlock Triage & Evaluation (13 tools)**: `vs_debugger_get_snapshot`, `vs_debugger_get_all_threads_call_stacks` (WinDbg `~*k` full thread call stacks overview & deadlock heuristics), `vs_debugger_get_crash_summary` (WinDbg `!analyze -v` one-shot crash triage), `vs_debugger_open_dump` (direct DMP path loading), `vs_debugger_get_registers` (full CPU registers & flags), `vs_debugger_read_memory` (Win32 & Minidump memory streams + UTF-16 preview), `vs_debugger_read_memory_typed` (WinDbg `dd`/`dq`/`da`/`du`/`dps` typed memory & `->` pointer chain inspection), `vs_debugger_query_memory` (WinDbg `!address` / VirtualQueryEx page attributes), `vs_debugger_dump_pointers` (WinDbg `dps`/`dds` pointer formatting & module reverse-mapping), `vs_debugger_get_disassembly` (pure managed `Iced` disassembly stream with WinDbg `Module!Func+Offset` symbol resolution), `vs_debugger_evaluate_expr`, `vs_debugger_evaluate_expressions`, `vs_debugger_get_locals`.
 8. **Test Explorer & CTest Suite (5 tools)**: `vs_get_tests` (Test Window & CTest), `vs_run_tests` (JUnit report parsing), `vs_get_test_run_status`, `vs_cancel_test_run`, `vs_debug_test_by_id` (CTest native debugging).
 9. **Agent Feedback & Diagnostic Reporting (1 tool)**: `vs_report_mcp_issue`.
 

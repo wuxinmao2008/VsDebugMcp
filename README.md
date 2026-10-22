@@ -4,7 +4,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/wuxinmao2008/VsDebugMcp?color=blue&label=release)](https://github.com/wuxinmao2008/VsDebugMcp/releases)
 [![Visual Studio Support](https://img.shields.io/badge/Visual%20Studio-2017%20%7C%202019%20%7C%202022%20%7C%202026-purple.svg?logo=visualstudio)](https://github.com/wuxinmao2008/VsDebugMcp)
 [![.NET Supported](https://img.shields.io/badge/.NET-8.0%20%7C%20Framework%204.7.2-512BD4.svg?logo=dotnet)](https://github.com/wuxinmao2008/VsDebugMcp)
-[![Tests](https://img.shields.io/badge/tests-244%20passed-brightgreen.svg?logo=githubactions)](https://github.com/wuxinmao2008/VsDebugMcp/actions)
+[![Tests](https://img.shields.io/badge/tests-339%20passed-brightgreen.svg?logo=githubactions)](https://github.com/wuxinmao2008/VsDebugMcp/actions)
 [![License](https://img.shields.io/github/license/wuxinmao2008/VsDebugMcp?color=orange)](LICENSE.txt)
 
 Visual Studio (VS 2017 ~ VS 2026 / VS 15.x ~ 18.x) MCP integration using a shared out-of-process Host and an in-process VSIX Bridge.
@@ -93,6 +93,13 @@ Each Visual Studio process registers a session identity derived from its PID and
 - `vs_debugger_load_symbols` — Dynamic PDB symbol path registration via `IVsDebuggerSymbolSettingsManager120A` and live module symbol reload
 - `vs_run_build` — Solution-wide or targeted single-project (`projectName`) build with `action` (`build` / `rebuild` / `clean`) across MSBuild and CMake tracks
 
+### Multi-Thread Switching, Deadlock Triage & Typed Memory Inspection (Phase 8E)
+- `vs_debugger_get_all_threads_call_stacks` — Full thread call stack overview (WinDbg `~*k` equivalent) with built-in waiting heuristics and deadlock suspect detection (`isDeadlockSuspect`)
+- `vs_debugger_switch_thread` — Dynamic switching of current active debugger thread (WinDbg `~[tid]s` equivalent)
+- `vs_debugger_read_memory_typed` — High-level typed memory inspection supporting DWORD, QWORD, ASCII (`da`), Unicode (`du`), pointer chains (`->`), and multi-level dereferencing
+- WinDbg-style address resolution — Full support for `Module!Func+Offset` and `Module+Offset` expressions across disassembly and memory inspection tools
+- Transient thread context penetration — `threadId` parameter across `vs_debugger_get_locals`, `vs_debugger_evaluate_expr`, `vs_debugger_evaluate_expressions`, and `vs_debugger_get_disassembly` with automatic context restoration
+
 ### Agent Interactive Feedback & Diagnostic Reporting (Phase 5E)
 - `vs_report_mcp_issue` — Agent-driven tool friction and bug reporting with DLP privacy filtering, local audit markdown export, and prefilled GitHub Issue creation
 
@@ -163,10 +170,10 @@ All VSIX projects can be cross-compiled cleanly using the Visual Studio 2026 (VS
 
 ## Validation status
 
-- Automated unit tests: 244/244 PASS (100% across Protocol and Host test suites: 48 Protocol, 196 Host).
+- Automated unit tests: 339/339 PASS (100% across Protocol and Host test suites: 126 Protocol [63 net8.0 + 63 net472], 213 Host).
 - Multi-target packaging verification: Both `VsDebugMcp.Vsix.vsix` (64-bit, ~8.2MB) and `VsDebugMcp.Vsix.2019.vsix` (32-bit, ~7.8MB) package cleanly with embedded framework-dependent Host executables.
-- End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path across both traditional Solutions and modern CMake workspaces.
-- Verified capability domains: Solution & CMake workspace structure, file tree discovery, IDE build lifecycle & raw output capture, CMakePresets switching & CMake/Ninja dual-track builds, Debugger F5 launch / target binary launch / break detection / stepping / locals / multi-thread inspection / expression evaluation / memory reading, and Test Explorer & CTest discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
+- End-to-end online acceptance: Verified in Visual Studio 2026 (VS 18.x) Experimental Instance across the full MCP client → HTTP Host (`127.0.0.1:43260`) → instance router → Named Pipe → VSIX Bridge path across traditional Solutions, modern CMake workspaces, and 71-thread complex deadlock post-mortem crash dumps (`LabVIEW (2).DMP`).
+- Verified capability domains: Solution & CMake workspace structure, file tree discovery, IDE build lifecycle & raw output capture, CMakePresets switching & CMake/Ninja dual-track builds, Debugger F5 launch / target binary launch / break detection / stepping / locals / multi-thread inspection & thread switching / expression evaluation / typed memory reading / deadlock triage, and Test Explorer & CTest discovery / execution / status polling / cancellation / test-driven debugging with smart break landing.
 
 ## Security and Agent Guardrails
 
@@ -181,13 +188,13 @@ VsDebugMcp exposes low-level IDE control, build automation, and native debugger 
 - **Non-Destructive Port Handling**: The Host never forcibly terminates unknown third-party processes during port conflicts; it reports a graceful error instead.
 
 ### Tool Risk Classification & Guardrail Profiles
-For enterprise environments, autonomous multi-agent setups, or users pairing VsDebugMcp with runtime firewalls like **[HOL Guard](https://github.com/hashgraph-online/hol-guard)** or MCP proxy gateways, we categorize our 58 tools into three risk tiers:
+For enterprise environments, autonomous multi-agent setups, or users pairing VsDebugMcp with runtime firewalls like **[HOL Guard](https://github.com/hashgraph-online/hol-guard)** or MCP proxy gateways, we categorize our 61 tools into three risk tiers:
 
 | Tier | Policy Recommendation | Capabilities | Description |
 | :--- | :---: | :--- | :--- |
-| 🟢 **Safe / Read-Only** | **Allow** | `vs_health`, `vs_capabilities`, `vs_get_errors`, `vs_get_output_window_logs`, `vs_get_output_panes`, `vs_get_projects_in_solution`, `vs_get_files_in_project`, `vs_get_active_document`, `vs_get_solution_configurations`, `vs_get_tests`, `vs_get_test_run_status`, `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_get_call_stack`, `vs_debugger_get_locals`, `vs_debugger_get_exception_info`, `vs_debugger_get_modules`, `vs_debugger_get_processes`, `vs_debugger_get_snapshot`, `vs_debugger_list_breakpoints`, `vs_debugger_get_disassembly`, `vs_debugger_get_registers`, `vs_debugger_get_crash_summary`, `vs_debugger_dump_pointers`, `vs_debugger_query_memory` | Zero side-effects; pure inspection of source code, errors, compiler outputs, registers, and debugger states. |
-| 🟡 **Stateful / Safe-Write** | **Allow / Auto** | `vs_run_build`, `vs_cancel_build`, `vs_set_solution_configuration`, `vs_run_tests`, `vs_cancel_test_run`, `vs_navigate_to`, `vs_debugger_open_dump`, `vs_debugger_set_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_clear_breakpoints`, `vs_debugger_start`, `vs_debugger_continue`, `vs_debugger_pause`, `vs_debugger_stop`, `vs_debugger_step_over`, `vs_debugger_step_into`, `vs_debugger_step_out`, `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_load_symbols`, `vs_report_mcp_issue` | Alters IDE session state (builds, breakpoints, test runs, stepping, dump opening), but actions are standard development operations and easily inspectable. |
-| 🔴 **Sensitive / Risk-Control** | **Ask (Human Confirmation)** | `vs_debugger_evaluate_expr` (with `allowSideEffects: true`), `vs_debugger_evaluate_expressions`, `vs_debugger_attach_process`, `vs_debugger_auto_attach`, `vs_debugger_set_next_statement`, `vs_debugger_read_memory` | Capable of executing native code via evaluation side-effects, mutating execution flow, attaching to external OS processes, or dumping raw memory addresses. |
+| 🟢 **Safe / Read-Only** | **Allow** | `vs_health`, `vs_capabilities`, `vs_get_errors`, `vs_get_output_window_logs`, `vs_get_output_panes`, `vs_get_projects_in_solution`, `vs_get_files_in_project`, `vs_get_active_document`, `vs_get_solution_configurations`, `vs_get_tests`, `vs_get_test_run_status`, `vs_debugger_get_info`, `vs_debugger_get_threads`, `vs_debugger_get_call_stack`, `vs_debugger_get_all_threads_call_stacks`, `vs_debugger_get_locals`, `vs_debugger_get_exception_info`, `vs_debugger_get_modules`, `vs_debugger_get_processes`, `vs_debugger_get_snapshot`, `vs_debugger_list_breakpoints`, `vs_debugger_get_disassembly`, `vs_debugger_get_registers`, `vs_debugger_get_crash_summary`, `vs_debugger_dump_pointers`, `vs_debugger_query_memory` | Zero side-effects; pure inspection of source code, errors, compiler outputs, registers, threads, and debugger states. |
+| 🟡 **Stateful / Safe-Write** | **Allow / Auto** | `vs_run_build`, `vs_cancel_build`, `vs_set_solution_configuration`, `vs_run_tests`, `vs_cancel_test_run`, `vs_navigate_to`, `vs_debugger_open_dump`, `vs_debugger_set_breakpoints`, `vs_debugger_toggle_breakpoint`, `vs_debugger_clear_breakpoints`, `vs_debugger_switch_thread`, `vs_debugger_start`, `vs_debugger_continue`, `vs_debugger_pause`, `vs_debugger_stop`, `vs_debugger_step_over`, `vs_debugger_step_into`, `vs_debugger_step_out`, `vs_debugger_freeze_thread`, `vs_debugger_thaw_thread`, `vs_debugger_load_symbols`, `vs_report_mcp_issue` | Alters IDE session state (builds, breakpoints, test runs, stepping, dump opening, thread switching), but actions are standard development operations and easily inspectable. |
+| 🔴 **Sensitive / Risk-Control** | **Ask (Human Confirmation)** | `vs_debugger_evaluate_expr` (with `allowSideEffects: true`), `vs_debugger_evaluate_expressions`, `vs_debugger_attach_process`, `vs_debugger_auto_attach`, `vs_debugger_set_next_statement`, `vs_debugger_read_memory`, `vs_debugger_read_memory_typed` | Capable of executing native code via evaluation side-effects, mutating execution flow, attaching to external OS processes, or dumping raw memory addresses. |
 
 ### Using with HOL Guard / MCP Firewalls
 If you use [HOL Guard](https://github.com/hashgraph-online/hol-guard) or a similar agent security harness to supervise Claude Code, Cursor, or Gemini CLI, you can place it in front of `VsDebugMcp` and configure an `ask` policy for high-risk debugger actions:

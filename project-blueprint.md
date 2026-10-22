@@ -593,15 +593,15 @@ VS Code 使用固定 URL，不启动 Host，也不需要知道 Host 安装路径
 
 ### 自动化和部署状态
 
-- Protocol tests 最近一次完整运行：`12/12` PASS。
-- Host tests 最近一次完整运行：`101/101` PASS。
-- 全套测试通过率：`113/113` PASS (100%)。
-- 当前扩展与 Host 版本号：`0.1.12.0`。
-- VSIX 已使用 VS 18 MSBuild 成功编译与打包。
+- Protocol tests 最近一次完整运行：`126/126` PASS（63 net8.0 + 63 net472）。
+- Host tests 最近一次完整运行：`213/213` PASS。
+- 全套测试通过率：`339/339` PASS (100%)。
+- 当前扩展与 Host 版本号：`0.1.28.0`（61 个 MCP 工具）。
+- VSIX 已使用 VS 18 MSBuild 成功编译与双包打包（VS 2022~2026 64-bit 与 VS 2017~2019 32-bit）。
 - 部署流水线已完善：
   - `build: vsix`：编译 VSIX 包；
   - `deploy: vsix`：依赖 `build: vsix`，调用 `scripts/deploy-exp.ps1` 校验实验实例与 Host 状态并完成安全覆盖部署。
-- 已在 Visual Studio 2026 (VS 18.x) 实验实例完成全链路实测验收（含工程、构建、高级调试、测试资源管理器及 Phase 3A 单测联动调试与多线程巡检）。
+- 已在 Visual Studio 2026 (VS 18.x) 实测完成全链路验收（含传统工程、CMake 工作区、高级调试、测试资源管理器、崩溃转储一键速报以及 71 线程复杂死锁现场在线排查）。
 
 ## 核心依据
 
@@ -960,6 +960,16 @@ MCP 2026 新规范弱化 transport session，因此 VS 调试状态必须显式�
 - [phase5a-callstack-breakpoints-report.md](docs/phase5a-callstack-breakpoints-report.md)
 - [phase5b-configuration-output-panes-report.md](docs/phase5b-configuration-output-panes-report.md)
 - [phase5c-mixed-mode-auto-attach-report.md](docs/phase5c-mixed-mode-auto-attach-report.md)
+- [phase5d-snapshot-memory-read-report.md](docs/phase5d-snapshot-memory-read-report.md)
+- [phase5e-agent-feedback-reporting-report.md](docs/phase5e-agent-feedback-reporting-report.md)
+- [phase7a-cmake-workspace-report.md](docs/phase7a-cmake-workspace-report.md)
+- [phase7b-cmake-presets-and-build-report.md](docs/phase7b-cmake-presets-and-build-report.md)
+- [phase7c-cmake-debugging-and-ctest-report.md](docs/phase7c-cmake-debugging-and-ctest-report.md)
+- [phase8a-native-debugging-resilience-report.md](docs/phase8a-native-debugging-resilience-report.md)
+- [phase8b-minidump-and-disassembly-report.md](docs/phase8b-minidump-and-disassembly-report.md)
+- [phase8c-test-execution-resilience-report.md](docs/phase8c-test-execution-resilience-report.md)
+- [phase8d-low-level-debugging-and-dump-analysis-report.md](docs/phase8d-low-level-debugging-and-dump-analysis-report.md)
+- [phase8e-thread-context-and-deadlock-analysis-report.md](docs/phase8e-thread-context-and-deadlock-analysis-report.md)
 
 ## 下一步规划：Phase 5D 工控与 Qt 专项诊断拓展
 
